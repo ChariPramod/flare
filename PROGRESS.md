@@ -8,7 +8,7 @@ Updated: 2026-10-12, America/Los_Angeles.
 | --- | --- |
 | 0 — Scaffold, CI, Compose | Local checkpoint passed; container startup unverified |
 | 1 — Auth, RBAC, environments, keys | Local checkpoint passed; live OIDC/container tests pending |
-| 2 — Novu wrapper | Pending |
+| 2 — Novu wrapper | Core API/queue checkpoint; live engine validation pending |
 | 3 — Email pipeline | Pending |
 | 4 — Dashboard | Pending |
 | 5 — Webhooks, logs, metrics | Pending |
@@ -22,6 +22,8 @@ Updated: 2026-10-12, America/Los_Angeles.
 
 - 2026-10-12: Added password sessions, OIDC with PKCE/state/nonce, optional TOTP and single-use recovery codes, invitation acceptance, team roles, last-owner protection, encrypted environment credentials, immutable scoped API keys, audit records and repeatable identity seed. 13 tests pass, including PostgreSQL RLS tests using PGlite.
 
+- 2026-10-12: Added validated workflow CRUD, production guard and selected-workflow promotion, durable queued triggers and cancellation, subscriber upsert, preferences, exact-context topic subscriptions, integrations with encrypted credentials and an activity API. Lint/typecheck/build/gitleaks and 17 tests passed.
+
 ## Known issues and verification limits
 
 - This host has no Docker runtime. Full-stack startup, official image pulls and container integration tests cannot be validated here yet.
@@ -34,8 +36,10 @@ Updated: 2026-10-12, America/Los_Angeles.
 
 `68c47e9 chore(scaffold): initialize Flare monorepo and self-hosting stack` — pending GitHub authentication and private repository creation.
 
-`feat(auth): add tenant isolation, team roles and secure authentication` — pending the same GitHub setup.
+`90eaa36 feat(auth): add tenant isolation, team roles and secure authentication` — pending the same GitHub setup.
+
+`feat(workflows): add Novu control plane and durable trigger dispatch` — pending GitHub setup.
 
 ## Next
 
-Implement the Novu wrapper. Full Compose verification remains a prerequisite for production readiness.
+Implement the email pipeline. Full Compose verification remains a prerequisite for production readiness.

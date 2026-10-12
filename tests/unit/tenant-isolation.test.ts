@@ -26,6 +26,7 @@ async function scoped<T>(
 }
 beforeAll(async () => {
   await db.exec(readFileSync('packages/db/migrations/0001_identity.sql', 'utf8'));
+  await db.exec(readFileSync('packages/db/migrations/0002_workflows.sql', 'utf8'));
   await db.query('insert into organizations (id,name,slug) values ($1,$2,$3),($4,$5,$6)', [
     orgA,
     'A',

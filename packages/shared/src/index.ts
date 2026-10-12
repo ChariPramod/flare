@@ -2,6 +2,7 @@ import { z } from 'zod';
 import pino from 'pino';
 export * from './security.js';
 export * from './authorization.js';
+export * from './workflows.js';
 
 export const serviceName = z.enum(['api', 'worker', 'smtp-relay', 'web']);
 export const createLogger = (name: string) =>

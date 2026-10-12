@@ -22,7 +22,11 @@
     "helmet": "^8.1.0",
     "jose": "^6.1.0",
     "openid-client": "^6.8.1",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "@novu/api": "3.19.1",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "bullmq": "^5.61.2"
   },
   "devDependencies": {
     "@types/express": "^5.0.5"

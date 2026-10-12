@@ -6,6 +6,8 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import type { NextFunction, Request, Response } from 'express';
 import { AuthController, AuthGuard, Public } from './auth.js';
+import { WorkflowController } from './workflows.js';
+import { IntegrationController } from './integrations.js';
 import { IdentityController } from './identity.js';
 import { logger, redis, sql } from './context.js';
 
@@ -24,7 +26,13 @@ class HealthController {
   }
 }
 @Module({
-  controllers: [HealthController, AuthController, IdentityController],
+  controllers: [
+    HealthController,
+    AuthController,
+    IdentityController,
+    WorkflowController,
+    IntegrationController,
+  ],
   providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
 })
 class AppModule {}

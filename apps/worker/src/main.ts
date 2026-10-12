@@ -1,3 +1,4 @@
+import { startWorkflowWorker } from './workflows.js';
 import { createServer } from 'node:http';
 import { Redis } from 'ioredis';
 import { connectDatabase } from '@flare/db';
@@ -7,12 +8,34 @@ const logger = createLogger('worker');
 const { client } = connectDatabase(config.DATABASE_URL);
 const redis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null });
 redis.on('error', (err: Error) => logger.error({ err }, 'Redis connection failed'));
+const workflowWorker = startWorkflowWorker(client, redis, config.FLARE_ENCRYPTION_KEY);
+workflowWorker.worker.on('error', (err: Error) => logger.error({ err }, 'Workflow worker error'));
+const dispatch = setInterval(() => {
+  void workflowWorker
+    .dispatch()
+    .catch((err: unknown) => logger.error({ err }, 'Workflow dispatch failed'));
+}, 2000);
 const server = createServer((req, res) => {
-  if (req.url === '/health') { res.end('{"status":"ok","service":"worker"}'); return; }
-  if (req.url !== '/ready') { res.writeHead(404).end(); return; }
-  void Promise.all([client`select 1`, redis.ping()]).then(() => res.end('{"status":"ready"}'), () => res.writeHead(503).end('{"status":"unavailable"}'));
+  if (req.url === '/health') {
+    res.end('{"status":"ok","service":"worker"}');
+    return;
+  }
+  if (req.url !== '/ready') {
+    res.writeHead(404).end();
+    return;
+  }
+  void Promise.all([client`select 1`, redis.ping()]).then(
+    () => res.end('{"status":"ready"}'),
+    () => res.writeHead(503).end('{"status":"unavailable"}'),
+  );
 }).listen(4001, '0.0.0.0');
 logger.info('Worker health server listening');
-for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => {
-  server.close(); void Promise.all([client.end(), redis.quit()]).then(() => process.exit(0));
-});
+for (const signal of ['SIGTERM', 'SIGINT'])
+  process.once(signal, () => {
+    clearInterval(dispatch);
+    server.close();
+    void workflowWorker
+      .close()
+      .then(() => Promise.all([client.end(), redis.quit()]))
+      .then(() => process.exit(0));
+  });

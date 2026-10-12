@@ -9,3 +9,7 @@ Team limits, topics, layouts, translations and webhook availability require live
 Flare owns team authorization, org/environment isolation, API key scoping, suppression, idempotency, retries/failover, email tracking and signed webhooks. The workflow editor must describe channel failure as continuing execution and action failure as canceling remaining steps. Provider acceptance must never be labeled delivery.
 
 Reference: [Novu releases](https://github.com/novuhq/novu/releases/tag/v3.19.0), [Postal container processes](https://docs.postalserver.io/other/containers/).
+
+## Flare implementations
+
+Topics and subscription conditions are stored and expanded in Flare before trigger dispatch. This supplies exact context matching and actor exclusion independently of community topics availability. Only selected workflows are currently promoted; layouts/translations promotion belongs to their later phase. Novu transport acceptance is labeled `accepted`, not delivered. Step execution and engine-derived timelines still need tests against running 3.19.0 images.
