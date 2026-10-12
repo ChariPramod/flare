@@ -13,7 +13,6 @@ const values = {
   NOVU_MONGO_PASSWORD: secret(),
   S3_SECRET_KEY: secret(),
   POSTAL_DB_PASSWORD: secret(),
-  POSTAL_WEBHOOK_SECRET: secret(),
   SEED_OWNER_PASSWORD: secret(),
   SEED_API_KEY: `fl_${randomBytes(32).toString('base64url')}`,
 };
@@ -27,15 +26,16 @@ env = env.replace(
 if (process.argv.includes('--dev')) env = env.replace('TRANSPORT=postal', 'TRANSPORT=smtp');
 mkdirSync('ops/postal/config', { recursive: true, mode: 0o700 });
 mkdirSync('ops/certs', { recursive: true, mode: 0o700 });
-const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 writeFileSync(
   'ops/postal/config/signing.key',
   privateKey.export({ format: 'pem', type: 'pkcs1' }),
   { mode: 0o600 },
 );
+writeFileSync('ops/certs/postal-public.pem', publicKey.export({ format: 'pem', type: 'spki' }));
 writeFileSync(
   'ops/postal/config/postal.yml',
-  `version: 2\npostal:\n  web_hostname: postal.localhost\n  web_protocol: http\n  smtp_hostname: postal.localhost\nmain_db:\n  host: postal-mariadb\n  username: root\n  password: ${values.POSTAL_DB_PASSWORD}\n  database: postal\nmessage_db:\n  host: postal-mariadb\n  username: root\n  password: ${values.POSTAL_DB_PASSWORD}\n  prefix: postal\nrails:\n  secret_key: ${secret()}\ndns:\n  mx_records:\n    - postal.localhost\n  spf_include: spf.postal.localhost\n  return_path_domain: rp.postal.localhost\n  route_domain: routes.postal.localhost\n`,
+  `version: 2\npostal:\n  web_hostname: postal.localhost\n  web_protocol: http\n  smtp_hostname: postal.localhost\n  allowed_request_destinations:\n    - flare-api\nmain_db:\n  host: postal-mariadb\n  username: root\n  password: ${values.POSTAL_DB_PASSWORD}\n  database: postal\nmessage_db:\n  host: postal-mariadb\n  username: root\n  password: ${values.POSTAL_DB_PASSWORD}\n  prefix: postal\nrails:\n  secret_key: ${secret()}\ndns:\n  mx_records:\n    - postal.localhost\n  spf_include: spf.postal.localhost\n  return_path_domain: rp.postal.localhost\n  route_domain: routes.postal.localhost\n`,
   { mode: 0o600 },
 );
 execFileSync(

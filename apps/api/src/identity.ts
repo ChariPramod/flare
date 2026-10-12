@@ -108,6 +108,10 @@ export class IdentityController {
     );
     const key = createApiKey();
     return withTenant(sql, req.principal, async (tx) => {
+      if (input.domain_id) {
+        const [domain] = await tx`select id from domains where id=${input.domain_id}`;
+        if (!domain) throw new BadRequestException('Domain does not exist in this environment');
+      }
       const [row] =
         await tx`insert into api_keys (org_id, environment_id, name, token_hash, prefix, permission, domain_id, created_by) values (${req.principal.orgId}, ${req.principal.environmentId}, ${input.name}, ${key.hash}, ${key.prefix}, ${input.permission}, ${input.domain_id ?? null}, ${req.principal.actorId}) returning id, name, prefix, permission, domain_id, created_at`;
       await audit(tx, req.principal, 'api_key.created', String(row!.id));

@@ -1,7 +1,8 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 import { Controller, Get, Module, ServiceUnavailableException } from '@nestjs/common';
-import { APP_GUARD, NestFactory } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import type { NextFunction, Request, Response } from 'express';
@@ -10,6 +11,8 @@ import { WorkflowController } from './workflows.js';
 import { IntegrationController } from './integrations.js';
 import { IdentityController } from './identity.js';
 import { logger, redis, sql } from './context.js';
+import { MailController, MailExceptionFilter } from './mail.js';
+import { MailEventController } from './mail-events.js';
 
 @Controller()
 class HealthController {
@@ -32,13 +35,22 @@ class HealthController {
     IdentityController,
     WorkflowController,
     IntegrationController,
+    MailController,
+    MailEventController,
   ],
-  providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
+  providers: [
+    { provide: APP_GUARD, useClass: AuthGuard },
+    { provide: APP_FILTER, useClass: MailExceptionFilter },
+  ],
 })
 class AppModule {}
-const app = await NestFactory.create(AppModule, {
+const app = await NestFactory.create<NestExpressApplication>(AppModule, {
   logger: ['error', 'warn', 'log'],
   rawBody: true,
+});
+app.useBodyParser('json', {
+  limit: process.env.API_BODY_LIMIT ?? '40mb',
+  type: ['application/json', 'text/plain'],
 });
 app.use(helmet());
 app.use((req: Request, res: Response, next: NextFunction) => {

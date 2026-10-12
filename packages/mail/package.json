@@ -1,0 +1,32 @@
+{
+  "name": "@flare/mail",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "seed": "node dist/seed.js"
+  },
+  "dependencies": {
+    "@flare/shared": "workspace:*",
+    "@flare/db": "workspace:*",
+    "@aws-sdk/client-sesv2": "^3.922.0",
+    "@aws-sdk/client-s3": "^3.922.0",
+    "nodemailer": "^7.0.10",
+    "cheerio": "^1.1.2",
+    "chrono-node": "^2.8.5",
+    "ipaddr.js": "^2.2.0",
+    "undici": "^7.16.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^7.0.3"
+  }
+}

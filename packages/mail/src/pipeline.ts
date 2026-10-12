@@ -1,0 +1,244 @@
+import { randomUUID } from 'node:crypto';
+import { withTenant, toJson } from '@flare/db';
+import type { Sql, Transaction } from '@flare/db';
+import { canSend, decrypt, fingerprint } from '@flare/shared';
+import type { Principal, Tenant } from '@flare/shared';
+import { z } from 'zod';
+import { emailSchema, MailError, address, recipients, schedule } from './validation.js';
+import type { EmailInput } from './validation.js';
+import { buildMime } from './mime.js';
+import type { ObjectStore } from './storage.js';
+import type { TransportAdapter } from './transports.js';
+
+export interface PipelineOptions {
+  sql: Sql;
+  store: ObjectStore;
+  encryptionKey: string;
+  trackingKey: string;
+  transports: TransportAdapter[];
+}
+export async function outbox(tx: Transaction, tenant: Tenant, type: string, data: unknown) {
+  await tx`insert into event_outbox(org_id,environment_id,type,data) values(${tenant.orgId},${tenant.environmentId},${type},${tx.json(toJson(data))})`;
+}
+export async function requiredTls(transports: TransportAdapter[]) {
+  const checks = await Promise.all(
+    transports.map(async (t) => {
+      try {
+        return await t.supportsRequiredTls();
+      } catch {
+        return false;
+      }
+    }),
+  );
+  return checks.some(Boolean);
+}
+export async function submitEmails(
+  options: PipelineOptions,
+  p: Principal,
+  requests: unknown[],
+  settings: {
+    key?: string;
+    mode?: 'strict' | 'permissive';
+    batch?: boolean;
+    smtpHeaders?: { to: string[]; cc: string[] };
+  } = {},
+) {
+  if (requests.length < 1 || requests.length > 100)
+    throw new MailError(422, 'Supply between 1 and 100 emails');
+  if (p.role === 'viewer') throw new MailError(403, 'Sending is not permitted');
+  if (settings.key !== undefined && !z.string().min(1).max(256).safeParse(settings.key).success)
+    throw new MailError(422, 'Idempotency keys must be 1–256 characters');
+  const parsed = requests.map((value) => emailSchema.safeParse(value));
+  const invalid = parsed.findIndex((v) => !v.success);
+  if (invalid !== -1 && settings.mode !== 'permissive')
+    throw new MailError(422, `Email ${invalid}: ${parsed[invalid]!.error!.message}`);
+  // Hash validated input before interpreting relative dates or downloading URLs.
+  const hash = fingerprint({
+    emails: parsed.map((v, i) => (v.success ? v.data : requests[i])),
+    mode: settings.mode ?? 'strict',
+  });
+  const operation = settings.batch ? 'mail.batch' : 'mail.send';
+  const uploaded: string[] = [];
+  try {
+    return await withTenant(options.sql, p, async (tx) => {
+      if (settings.key) {
+        await tx`select pg_advisory_xact_lock(hashtextextended(${`${p.orgId}/${p.environmentId}/${operation}/${settings.key}`},0))`;
+        await tx`delete from idempotency where operation=${operation} and key=${settings.key} and expires_at<=now()`;
+        const [existing] =
+          await tx`select body_hash,response from idempotency where operation=${operation} and key=${settings.key}`;
+        if (existing) {
+          if (existing.body_hash !== hash)
+            throw new MailError(409, 'Idempotency key was used with a different request');
+          // A domain-scoped key cannot obtain another domain's cached response.
+          if (p.domainId)
+            for (const value of parsed)
+              if (value.success) {
+                const [domain] =
+                  await tx`select id from domains where name=${address(value.data.from).split('@')[1]!}`;
+                if (!domain || domain.id !== p.domainId)
+                  throw new MailError(403, 'API key is scoped to another domain');
+              }
+          return existing.response as {
+            data: { id: string }[];
+            errors: { index: number; message: string }[];
+          };
+        }
+      }
+      const data: { id: string }[] = [];
+      const errors: { index: number; message: string }[] = [];
+      const now = new Date();
+      // PostgreSQL savepoints keep permissive failures from poisoning the surrounding transaction.
+      for (const [index, value] of parsed.entries()) {
+        if (!value.success) {
+          errors.push({ index, message: value.error.message });
+          continue;
+        }
+        const accept = async (db: Transaction) => {
+          const input = value.data;
+          const domain = await sender(db, p, input, options.transports);
+          const at = schedule(input.scheduled_at, now);
+          const id = randomUUID();
+          const envelope = recipients(input);
+          const suppressed =
+            await db`select address from suppressions where address in ${db(envelope.map((v) => v.address))}`;
+          const blocked = new Set(suppressed.map((v) => String(v.address)));
+          const status = envelope.every((v) => blocked.has(v.address))
+            ? 'suppressed'
+            : input.scheduled_at
+              ? 'scheduled'
+              : 'queued';
+          let mimeKey: string | null = null;
+          const metadata: Record<string, unknown>[] = [];
+          if (status !== 'suppressed') {
+            const built = await buildMime(
+              settings.smtpHeaders
+                ? { ...input, to: settings.smtpHeaders.to, cc: settings.smtpHeaders.cc }
+                : input,
+              id,
+              {
+                name: String(domain.name),
+                dkim_selector: String(domain.dkim_selector),
+                privateKey: decrypt(
+                  String(domain.dkim_private_cipher),
+                  options.encryptionKey,
+                  `${p.orgId}/${p.environmentId}`,
+                ),
+                open_tracking: Boolean(domain.open_tracking),
+                click_tracking: Boolean(domain.click_tracking),
+                trackingUrl: `https://${domain.tracking_subdomain}.${domain.name}`,
+              },
+              options.trackingKey,
+            );
+            const prefix = `${p.orgId}/${p.environmentId}/${id}`;
+            for (const [fileIndex, file] of built.files.entries()) {
+              const objectKey = `${prefix}/attachments/${fileIndex}`;
+              uploaded.push(objectKey);
+              await options.store.put(
+                objectKey,
+                file.content,
+                file.contentType ?? 'application/octet-stream',
+              );
+              metadata.push({
+                filename: file.filename,
+                content_type: file.contentType,
+                size: file.content.length,
+                key: objectKey,
+              });
+            }
+            mimeKey = `${prefix}/message.eml`;
+            uploaded.push(mimeKey);
+            await options.store.put(mimeKey, built.raw, 'message/rfc822');
+          }
+          const stored = { ...input, attachments: metadata };
+          await db`insert into messages(id,org_id,environment_id,domain_id,request,mime_key,envelope_from,status,scheduled_at) values(${id},${p.orgId},${p.environmentId},${domain.id},${db.json(toJson(stored))},${mimeKey},${address(input.from)},${status},${at})`;
+          for (const recipient of envelope) {
+            const recipientStatus = blocked.has(recipient.address) ? 'suppressed' : 'queued';
+            await db`insert into message_recipients(org_id,environment_id,message_id,address,kind,status) values(${p.orgId},${p.environmentId},${id},${recipient.address},${recipient.kind},${recipientStatus})`;
+            if (recipientStatus === 'suppressed')
+              await outbox(db, p, 'email.suppressed', {
+                email_id: id,
+                recipient: recipient.address,
+              });
+          }
+          await outbox(db, p, status === 'scheduled' ? 'email.scheduled' : 'email.queued', {
+            email_id: id,
+            status,
+            scheduled_at: at.toISOString(),
+          });
+          return { id };
+        };
+        if (settings.mode === 'permissive') {
+          const start = uploaded.length;
+          try {
+            data.push((await tx.savepoint(accept)) as { id: string });
+          } catch (error) {
+            // Infrastructure failures abort the whole batch, preserving retry semantics.
+            if (!(error instanceof MailError)) throw error;
+            await Promise.all(
+              uploaded.splice(start).map((k) => options.store.remove(k).catch(() => undefined)),
+            );
+            errors.push({ index, message: error.message });
+          }
+        } else data.push(await accept(tx));
+      }
+      const response = { data, errors };
+      if (settings.key)
+        await tx`insert into idempotency(org_id,environment_id,operation,key,body_hash,response) values(${p.orgId},${p.environmentId},${operation},${settings.key},${hash},${tx.json(toJson(response))})`;
+      return response;
+    });
+  } catch (error) {
+    // A lost COMMIT response is ambiguous too. Retain objects unless PostgreSQL
+    // confirms they are unreferenced; an outage must never destroy accepted MIME.
+    try {
+      const persisted = uploaded.length
+        ? await options.sql`select mime_key from messages where mime_key in ${options.sql(uploaded)}`
+        : [];
+      const prefixes = persisted.map((v) => String(v.mime_key).replace(/\/message\.eml$/, ''));
+      await Promise.all(
+        uploaded
+          .filter((k) => !prefixes.some((prefix) => k.startsWith(`${prefix}/`)))
+          .map((k) => options.store.remove(k).catch(() => undefined)),
+      );
+    } catch {
+      /* Orphan cleanup can retry after storage/database recovery. */
+    }
+    throw error;
+  }
+}
+async function sender(
+  tx: Transaction,
+  p: Principal,
+  input: EmailInput,
+  transports: TransportAdapter[],
+) {
+  const name = address(input.from).split('@')[1]!;
+  const [domain] = await tx`select * from domains where name=${name} for share`;
+  if (!domain || domain.status !== 'verified' || !domain.sending)
+    throw new MailError(403, `Sender domain ${name} is not verified for sending`);
+  if (!canSend(p, String(domain.id)))
+    throw new MailError(403, 'API key is scoped to another domain');
+  if (!transports.length || (domain.enforce_tls && !(await requiredTls(transports))))
+    throw new MailError(
+      422,
+      'No configured transport can honor this domain’s delivery requirements',
+    );
+  return domain;
+}
+export async function changeSchedule(sql: Sql, p: Principal, id: string, value: string | null) {
+  return withTenant(sql, p, async (tx) => {
+    const [message] = await tx`select * from messages where id=${id} for update`;
+    if (!message || !canSend(p, String(message.domain_id)))
+      throw new MailError(404, 'Email not found');
+    if (!['queued', 'scheduled'].includes(String(message.status)) || message.delivery_started_at)
+      throw new MailError(409, 'Delivery has started or the email is terminal');
+    const at = value === null ? null : schedule(value);
+    await tx`update messages set status=${at ? 'scheduled' : 'canceled'},scheduled_at=coalesce(${at},scheduled_at),updated_at=now() where id=${id}`;
+    if (!at)
+      await tx`update message_recipients set status='canceled' where message_id=${id} and status='queued'`;
+    await outbox(tx, p, at ? 'email.scheduled' : 'email.canceled', {
+      email_id: id,
+      scheduled_at: at?.toISOString(),
+    });
+    return { id, status: at ? 'scheduled' : 'canceled' };
+  });
+}

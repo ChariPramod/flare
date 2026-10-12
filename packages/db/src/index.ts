@@ -1,15 +1,16 @@
 import postgres from 'postgres';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import * as schema from './schema.js';
 export * from './schema.js';
 export type Sql = postgres.Sql;
 export type Transaction = postgres.TransactionSql;
 export function toJson(value: unknown): postgres.JSONValue {
   return JSON.parse(JSON.stringify(value)) as postgres.JSONValue;
 }
-export function connectDatabase(url: string) {
-  const client = postgres(url, { max: 10, idle_timeout: 20, connect_timeout: 10 });
-  return { db: drizzle(client, { schema }), client };
+export function connectDatabase(url: string, options: { max?: number } = {}) {
+  const client = postgres(url, { max: options.max ?? 10, idle_timeout: 20, connect_timeout: 10 });
+  // The service transaction API uses postgres.js codecs. Initializing Drizzle on
+  // this client replaces JSON/date serializers and breaks raw tagged queries.
+  // Drizzle owns the schema definitions; a future ORM session needs its own client.
+  return { client };
 }
 export async function withTenant<T>(
   client: postgres.Sql,

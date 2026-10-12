@@ -1,4 +1,5 @@
 import { startWorkflowWorker } from './workflows.js';
+import { startMailWorker } from './mail.js';
 import { createServer } from 'node:http';
 import { Redis } from 'ioredis';
 import { connectDatabase } from '@flare/db';
@@ -9,6 +10,18 @@ const { client } = connectDatabase(config.DATABASE_URL);
 const redis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null });
 redis.on('error', (err: Error) => logger.error({ err }, 'Redis connection failed'));
 const workflowWorker = startWorkflowWorker(client, redis, config.FLARE_ENCRYPTION_KEY);
+const mailWorker = startMailWorker(client, redis, config.FLARE_ENCRYPTION_KEY, config.JWT_SECRET);
+mailWorker.worker.on('error', (err: Error) => logger.error({ err }, 'Email worker error'));
+const mailDispatch = setInterval(() => {
+  void mailWorker
+    .dispatch()
+    .catch((err: unknown) => logger.error({ err }, 'Email dispatch failed'));
+}, 2000);
+const domainPolling = setInterval(() => {
+  void mailWorker
+    .verifyDomains()
+    .catch((err: unknown) => logger.error({ err }, 'Domain verification failed'));
+}, 10000);
 workflowWorker.worker.on('error', (err: Error) => logger.error({ err }, 'Workflow worker error'));
 const dispatch = setInterval(() => {
   void workflowWorker
@@ -33,9 +46,10 @@ logger.info('Worker health server listening');
 for (const signal of ['SIGTERM', 'SIGINT'])
   process.once(signal, () => {
     clearInterval(dispatch);
+    clearInterval(mailDispatch);
+    clearInterval(domainPolling);
     server.close();
-    void workflowWorker
-      .close()
+    void Promise.all([workflowWorker.close(), mailWorker.close()])
       .then(() => Promise.all([client.end(), redis.quit()]))
       .then(() => process.exit(0));
   });

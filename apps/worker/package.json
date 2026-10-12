@@ -1,5 +1,19 @@
 {
-  "name": "@flare/worker", "version": "0.0.1", "private": true, "type": "module",
-  "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc -p tsconfig.json --noEmit", "start": "node dist/main.js", "dev": "tsx watch src/main.ts" },
-  "dependencies": { "@flare/shared": "workspace:*", "@flare/db": "workspace:*", "bullmq": "^5.61.2", "ioredis": "^5.8.2" }
+  "name": "@flare/worker",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/main.js",
+    "dev": "tsx watch src/main.ts"
+  },
+  "dependencies": {
+    "@flare/shared": "workspace:*",
+    "@flare/db": "workspace:*",
+    "bullmq": "^5.61.2",
+    "ioredis": "^5.8.2",
+    "@flare/mail": "workspace:*"
+  }
 }

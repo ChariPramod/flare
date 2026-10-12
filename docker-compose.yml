@@ -10,6 +10,7 @@ x-novu-env: &novu-env
   JWT_SECRET: ${NOVU_JWT_SECRET:?Run make setup}
   STORE_ENCRYPTION_KEY: ${STORE_ENCRYPTION_KEY:?Run make setup}
   NOVU_SECRET_KEY: ${NOVU_SECRET_KEY:?Run make setup}
+  NODE_EXTRA_CA_CERTS: /opt/flare/relay.crt
   API_ROOT_URL: http://novu-api:3000
   FRONT_BASE_URL: http://localhost:4200
   IS_SELF_HOSTED: 'true'
@@ -72,7 +73,12 @@ services:
     environment:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-flare}
       S3_SECRET_KEY: ${S3_SECRET_KEY:?Run make setup}
-    entrypoint: ['/bin/sh', '-ec', 'mc alias set local http://minio:9000 "$${S3_ACCESS_KEY}" "$${S3_SECRET_KEY}"; mc mb --ignore-existing local/flare; mc mb --ignore-existing local/novu']
+    entrypoint:
+      [
+        '/bin/sh',
+        '-ec',
+        'mc alias set local http://minio:9000 "$${S3_ACCESS_KEY}" "$${S3_SECRET_KEY}"; mc mb --ignore-existing local/flare; mc mb --ignore-existing local/novu',
+      ]
   postal-mariadb:
     image: mariadb:11.4.9
     environment:
@@ -126,7 +132,11 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${NOVU_MONGO_PASSWORD:?Run make setup}
     volumes: [novu-mongo-data:/data/db]
     healthcheck:
-      test: [CMD-SHELL, 'mongosh --quiet --username root --password "$${MONGO_INITDB_ROOT_PASSWORD}" --eval "db.adminCommand(\"ping\").ok"']
+      test:
+        [
+          CMD-SHELL,
+          'mongosh --quiet --username root --password "$${MONGO_INITDB_ROOT_PASSWORD}" --eval "db.adminCommand(\"ping\").ok"',
+        ]
       interval: 10s
       timeout: 10s
       retries: 12
@@ -140,6 +150,7 @@ services:
       timeout: 5s
       retries: 10
   novu-api:
+    volumes: ['./ops/certs/relay.crt:/opt/flare/relay.crt:ro']
     image: ghcr.io/novuhq/novu/api:3.19.0
     restart: unless-stopped
     environment:
@@ -153,6 +164,7 @@ services:
       test: [CMD-SHELL, 'wget -q --spider http://localhost:3000/v1/health-check']
       <<: *node-health
   novu-worker:
+    volumes: ['./ops/certs/relay.crt:/opt/flare/relay.crt:ro']
     image: ghcr.io/novuhq/novu/worker:3.19.0
     restart: unless-stopped
     environment:
@@ -164,6 +176,7 @@ services:
       test: [CMD-SHELL, 'wget -q --spider http://localhost:3004/v1/health-check']
       <<: *node-health
   novu-ws:
+    volumes: ['./ops/certs/relay.crt:/opt/flare/relay.crt:ro']
     image: ghcr.io/novuhq/novu/ws:3.19.0
     restart: unless-stopped
     environment:
@@ -183,17 +196,35 @@ services:
     # Deliberately no host port. Expose through an authenticated admin tunnel when needed.
     depends_on:
       novu-api: { condition: service_healthy }
+  flare-migrate:
+    <<: *flare
+    restart: 'no'
+    build:
+      context: .
+      args: { SERVICE: api }
+    command: [pnpm, --filter, '@flare/db', migrate]
+    depends_on:
+      postgres: { condition: service_healthy }
   flare-api:
     <<: *flare
+    volumes: ['./ops/certs/postal-public.pem:/app/ops/certs/postal-public.pem:ro']
     build:
       context: .
       args: { SERVICE: api }
     ports: ['127.0.0.1:4000:4000']
     depends_on:
+      flare-migrate: { condition: service_completed_successfully }
+      minio-init: { condition: service_completed_successfully }
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     healthcheck:
-      test: [CMD, node, -e, 'fetch("http://localhost:4000/ready").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          'fetch("http://localhost:4000/ready").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))',
+        ]
       <<: *node-health
   flare-worker:
     <<: *flare
@@ -203,7 +234,13 @@ services:
     depends_on:
       flare-api: { condition: service_healthy }
     healthcheck:
-      test: [CMD, node, -e, 'fetch("http://localhost:4001/ready").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          'fetch("http://localhost:4001/ready").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))',
+        ]
       <<: *node-health
   flare-smtp-relay:
     <<: *flare
@@ -215,7 +252,13 @@ services:
     depends_on:
       flare-api: { condition: service_healthy }
     healthcheck:
-      test: [CMD, node, -e, 'fetch("http://localhost:4002/health").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          'fetch("http://localhost:4002/health").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))',
+        ]
       <<: *node-health
   flare-web:
     <<: *flare
@@ -229,7 +272,13 @@ services:
     depends_on:
       flare-api: { condition: service_healthy }
     healthcheck:
-      test: [CMD, node, -e, 'fetch("http://localhost:3000").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          'fetch("http://localhost:3000").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))',
+        ]
       <<: *node-health
   mailpit:
     image: axllent/mailpit:v1.27.10
