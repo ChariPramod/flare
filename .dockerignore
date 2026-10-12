@@ -1,0 +1,10 @@
+.git
+.tools
+node_modules
+**/node_modules
+**/dist
+**/.next
+.env*
+coverage
+ops/postal/config
+ops/certs

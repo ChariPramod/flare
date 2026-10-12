@@ -1,0 +1,6 @@
+{
+  "name": "@flare/web", "version": "0.0.1", "private": true,
+  "scripts": { "build": "next build", "typecheck": "tsc --noEmit", "start": "next start -H 0.0.0.0", "dev": "next dev -H 0.0.0.0" },
+  "dependencies": { "next": "^16.0.10", "react": "^19.2.1", "react-dom": "^19.2.1", "lucide-react": "^0.468.0", "@tanstack/react-query": "^5.90.7" },
+  "devDependencies": { "@types/react": "^19.2.2", "@types/react-dom": "^19.2.2" }
+}

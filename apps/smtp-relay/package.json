@@ -1,0 +1,6 @@
+{
+  "name": "@flare/smtp-relay", "version": "0.0.1", "private": true, "type": "module",
+  "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc -p tsconfig.json --noEmit", "start": "node dist/main.js", "dev": "tsx watch src/main.ts" },
+  "dependencies": { "@flare/shared": "workspace:*", "smtp-server": "^3.16.1" },
+  "devDependencies": { "@types/smtp-server": "^3.5.12" }
+}

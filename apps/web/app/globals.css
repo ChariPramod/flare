@@ -1,0 +1,9 @@
+:root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #111214; color: #f5f5f5; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+.welcome { min-height: 100vh; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; }
+.welcome svg { color: #fb784f; }
+h1 { font-size: 64px; letter-spacing: -3px; margin: 0; }
+p { color: #a1a1aa; margin: 0; }
+.eyebrow { font-size: 11px; letter-spacing: 3px; }
+a { margin-top: 28px; color: #fb784f; }

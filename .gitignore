@@ -1,0 +1,17 @@
+node_modules/
+.pnpm-store/
+.tools/
+.env
+.env.*
+!.env.example
+.next/
+.turbo/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.log
+ops/postal/config/
+ops/certs/
+.DS_Store
+*.tsbuildinfo
