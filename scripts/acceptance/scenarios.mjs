@@ -135,6 +135,9 @@ try {
       ),
     'promoted automation execution in Production',
   );
+  console.log(
+    'Pinned Novu trigger, translated SMTP delivery, preferences, content publication and Production automation passed.',
+  );
   // Exercise the authenticated relay separately, including failed authentication and hidden envelope recipients.
   const transport = (password) =>
     nodemailer.createTransport({
@@ -147,7 +150,7 @@ try {
     });
   const valid = transport(process.env.SEED_API_KEY),
     invalid = transport('fl_invalid_acceptance');
-  await assert.rejects(invalid.verify(), /auth|credentials/i);
+  await assert.rejects(invalid.verify(), { code: 'EAUTH', responseCode: 535 });
   await valid.sendMail({
     from: 'sender@acceptance.test',
     to: 'visible@example.net',

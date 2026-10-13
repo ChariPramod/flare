@@ -18,13 +18,13 @@ Topics and subscription conditions are stored and expanded in Flare before trigg
 
 [CI run 38355107858](https://github.com/ChariPramod/flare/actions/runs/38355107858) started the pinned community images, created both engine environments, configured SMTP and the preinstalled Inbox, and ran the demo seed twice. Flare now adopts only the current environment’s Inbox singleton and uses the native email/SMS primary endpoint. A provider being configured is not evidence of notification delivery.
 
-| Channel or action                     | Verified boundary                                                   | Remaining runtime check                                             |
-| ------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Inbox                                 | Default provider adoption and repeatable workflow/subscriber seed   | Trigger, feed delivery and browser Inbox                            |
-| Email                                 | Relay configuration; Flare transport recovery in real-service tests | Novu → authenticated TLS relay → Mailpit and real provider delivery |
-| SMS                                   | Twilio/Plivo configuration exposed through Flare                    | Credentialed provider acceptance/delivery                           |
-| Push                                  | FCM/APNs configuration exposed through Flare                        | Credentialed device delivery                                        |
-| Chat                                  | Slack/Discord configuration exposed through Flare                   | Credentialed destination delivery                                   |
-| Delay, digest, throttle, HTTP request | Editor/API request support                                          | Execution, timing and failure behavior in the pinned engine         |
+| Channel or action                     | Verified boundary                                                   | Remaining runtime check                                                            |
+| ------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Inbox                                 | Default provider adoption and repeatable workflow/subscriber seed   | Trigger, feed delivery and browser Inbox                                           |
+| Email                                 | Relay configuration; Flare transport recovery in real-service tests | Real provider delivery; Novu → authenticated TLS relay → Mailpit passed on 9be9bc7 |
+| SMS                                   | Twilio/Plivo configuration exposed through Flare                    | Credentialed provider acceptance/delivery                                          |
+| Push                                  | FCM/APNs configuration exposed through Flare                        | Credentialed device delivery                                                       |
+| Chat                                  | Slack/Discord configuration exposed through Flare                   | Credentialed destination delivery                                                  |
+| Delay, digest, throttle, HTTP request | Editor/API request support                                          | Execution, timing and failure behavior in the pinned engine                        |
 
 Flare emits HTML explicitly for its email editor and precompiled templates/layouts. Native block content remains available only when explicitly selected in API control values. Workflow preference requests use complete `all` and `channels` objects; Novu returns the default layer as `preferences.default`. Subscriber preference updates instead use boolean channel values. SDK contract tests and publication reconciliation tests cover these distinctions; runtime acceptance is tracked separately in [the evidence ledger](acceptance.md).

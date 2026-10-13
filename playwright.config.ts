@@ -21,7 +21,7 @@ export default defineConfig({
       reuseExistingServer: false,
     },
     {
-      command: 'pnpm --filter @flare/web dev --port 4310',
+      command: 'pnpm --filter @flare/web build && pnpm --filter @flare/web start --port 4310',
       url: 'http://localhost:4310/login',
       env: { FLARE_API_URL: 'http://127.0.0.1:4311', WEB_ORIGIN: 'http://localhost:4310' },
       timeout: 120000,

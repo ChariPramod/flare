@@ -46,6 +46,8 @@ writeFileSync(envPath, env + '\nFLARE_ACCEPTANCE=true\nDOMAIN_DNS_SERVERS=172.29
   mode: 0o600,
 });
 mkdirSync(join(directory, 'acceptance/dns'), { recursive: true });
+// Keep this host-owned: the root container overwrites it, then host Playwright reads it.
+writeFileSync(join(directory, 'acceptance/fixtures.json'), '{}', { mode: 0o600 });
 // Deliberately empty until the API creates a domain and publishes its actual DKIM records.
 writeFileSync(
   join(directory, 'acceptance/dns/acceptance.test'),

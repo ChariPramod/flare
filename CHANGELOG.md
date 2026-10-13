@@ -104,3 +104,5 @@
 - Allow only Flare’s internal relay in Novu’s outbound policy and explicitly require STARTTLS in generated SMTP credentials.
 
 - Map Flare’s public SMTP provider name to Novu’s native `nodemailer` handler.
+
+- Run browser contract tests against the production build and assert SMTP authentication failures using protocol error codes. Live CI now verifies translated relay delivery and content/automation publication.
