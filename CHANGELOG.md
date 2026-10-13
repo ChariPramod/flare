@@ -115,3 +115,9 @@
 - Made the GitHub repository public at the owner's request and updated access instructions.
 - Added real-service coverage for four SMTP 421 rejections followed by one Mailpit submission, with ordered persisted attempts and provider acceptance kept separate from delivery.
 - All five live browser flows pass against the pinned stack. Use Compose's compatible `up --wait` restart path for the final queue-loss stage; the earlier `start --wait` flag was unsupported on the CI runner.
+
+## CI acceptance verified — 2026-10-13
+
+- CI `38442762577` passed all three jobs on `63c655d`: 136 unit/database tests, 11 browser contract flows, 12 real-service integration tests, package installation, build/types/lint/secrets and the full pinned Compose acceptance run.
+- All five live browser flows passed. All 54 accepted load messages recovered after Redis loss with one provider attempt each; 29 burst requests were correctly throttled and peak sampled API RSS was 184,688,640 bytes.
+- Updated the completion ledger and deployment handoff. Mac Docker, external providers/public DNS/OIDC, remaining native channel/action behavior and a restore drill are still separate acceptance gates.

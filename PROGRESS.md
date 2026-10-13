@@ -4,17 +4,17 @@ Updated: 2026-10-13, America/Los_Angeles.
 
 ## Phase status
 
-| Phase                                           | Status                                                           |
-| ----------------------------------------------- | ---------------------------------------------------------------- |
-| 0 — Scaffold, CI, Compose                       | CI full stack starts; local Docker verification pending          |
-| 1 — Auth, RBAC, environments, keys              | Local checkpoint passed; live OIDC/container tests pending       |
-| 2 — Novu wrapper                                | Core API/queue checkpoint; live engine validation pending        |
-| 3 — Email pipeline                              | Local checkpoint passed; container/provider verification pending |
-| 4 — Dashboard                                   | Local checkpoint; live-stack acceptance pending                  |
-| 5 — Webhooks, logs, metrics                     | Local checkpoint; live engine/container tests pending            |
-| 6 — Audience, broadcasts, templates             | Local checkpoint; live recovery/provider tests pending           |
-| 7 — Automations, inbound, translations, layouts | Local modules passed; pinned-engine acceptance pending           |
-| 8 — Hardening, SDK, CLI                         | Reliability/tooling local checks passed; acceptance pending      |
+| Phase                                           | Status                                                          |
+| ----------------------------------------------- | --------------------------------------------------------------- |
+| 0 — Scaffold, CI, Compose                       | CI startup/upgrade/seed passed; Mac Docker run pending          |
+| 1 — Auth, RBAC, environments, keys              | Unit and real HTTP/browser flows passed; external OIDC pending  |
+| 2 — Novu wrapper                                | Pinned core flows passed; additional channel/action checks open |
+| 3 — Email pipeline                              | CI SMTP/TLS/DKIM/recovery passed; external providers pending    |
+| 4 — Dashboard                                   | 11 contract flows and 5 full-stack browser flows passed         |
+| 5 — Webhooks, logs, metrics                     | Unit and real-service recovery passed; native callbacks pending |
+| 6 — Audience, broadcasts, templates             | Unit/browser and PostgreSQL/Redis recovery passed               |
+| 7 — Automations, inbound, translations, layouts | Implemented; pinned-stack content/inbound/publication passed    |
+| 8 — Hardening, SDK, CLI                         | Packages, load and CI recovery passed; deployment gates remain  |
 
 ## Checkpoint log
 
@@ -47,10 +47,9 @@ Updated: 2026-10-13, America/Los_Angeles.
 ## Known issues and verification limits
 
 - This host has no Docker runtime. Full-stack startup, official image pulls and container integration tests cannot be validated here yet.
-- Real PostgreSQL/Redis/MinIO/Mailpit integration passed all 11 tests in GitHub Actions on 6dbf291, including concurrency, queue-loss recovery, inbound deduplication, publication recovery and atomic limits. The equivalent local Docker run remains pending.
-- Postal/SES identities require provider-side authorization. Native callback interoperability, real DNS verification, and Novu → STARTTLS relay delivery need live verification.
-
-- OIDC provider interoperability and full HTTP session flows still require live integration verification; passing unit/database tests do not certify those deployments.
+- CI on `63c655d` passed all 12 PostgreSQL/Redis/MinIO/Mailpit tests and the full pinned-stack acceptance job. The equivalent local Docker runs remain pending.
+- Postal/SES identities require provider-side authorization. Native callback interoperability, public DNS and external deliverability remain unverified. Novu → authenticated STARTTLS relay → Mailpit delivery passed.
+- Password/session and tenant-aware HTTP/browser flows passed against the stack. External OIDC/MFA interoperability, the remaining native channel/action matrix in `docs/novu-gaps.md`, and an isolated backup/restore drill remain open.
 
 ## GitHub delivery
 
@@ -60,9 +59,11 @@ Updated: 2026-10-13, America/Los_Angeles.
 
 ## Next
 
-Continue Phase 8 with container acceptance, load tests and operational documentation. Inbound receiving, layouts, translations and selected content publication are implemented. Automation promotion is implemented with pinned template dependencies; live acceptance remains pending. Full Compose verification remains a prerequisite for production readiness.
+Run `scripts/integration.sh` and `scripts/acceptance.sh` on this Mac once Docker is available. Complete controlled provider/public-DNS/OIDC checks, the remaining native channel/action matrix and the restore drill before declaring deployment acceptance complete. The implementation, installable developer packages, operational documentation and CI acceptance runner are pushed to `main`; registry publication is outside scope.
 
-## Acceptance checkpoint in progress
+## Acceptance execution history
+
+Entries below record each checkpoint at its execution time; the latest result is authoritative.
 
 - Tooling checkpoint `4fd2267` is pushed. Its standard CI job passed all checks and 11 browser flows. Official pinned MinIO sources built successfully; integration startup then failed because Compose waited on the completed initializer. The runner now initializes the bucket separately.
 - Added a disposable full-stack CI/local runner with isolated secrets/data, baseline upgrade and repeatable seed assertions, local authoritative DNS, pinned Novu and SMTP flows, signed inbound simulation, content publication, browser recovery and bounded load/queue-loss checks. Added operational deployment and restore documentation.
@@ -97,3 +98,5 @@ Continue Phase 8 with container acceptance, load tests and operational documenta
 - Added a PostgreSQL/MinIO/Mailpit case for transient SMTP retry exhaustion followed by priority failover. The actual SMTP adapter classifies the fixture's 421 refusal as transient in a local protocol check; the complete real-service case awaits CI. Unit retry/failover and ambiguity coverage remains in place.
 
 - CI `38440930417` passed every API scenario and all five live browser flows. Burst/load acceptance recorded 54 distinct messages, 30 expected throttles and 177,049,600 bytes peak sampled API RSS. The runner's Compose version rejected `start --wait` before recovery could execute; use the already supported `up --wait` path with `--no-recreate --no-deps` to restart only the existing worker. CI `38441569491` passed the expanded 12-test integration suite; its equivalent failing acceptance rerun was canceled after identifying the incompatible flag.
+
+- 2026-10-13: [CI `38442762577`](https://github.com/ChariPramod/flare/actions/runs/38442762577) is fully green on `63c655d`: lint, types, 136 unit/database tests, OpenAPI drift, builds, package installation, gitleaks, 11 browser contract flows, 12 real-service tests, clean Compose startup, baseline upgrade, repeatable seed, all API scenarios and five live browser flows. The load stage accepted 54 logical sends with 29 expected throttles and 184,688,640 bytes peak sampled API RSS. Every accepted send recovered after worker stop and Redis loss with exactly one provider attempt and no duplicate logical submission. This verifies the local DNS/Mailpit/signed-callback simulation; full deployment acceptance remains open for the explicit gates above.

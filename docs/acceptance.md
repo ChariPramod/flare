@@ -14,18 +14,21 @@ The load stage stops the worker, submits at the default 10 requests/second plus 
 
 Do not call acceptance complete unless every required row has evidence for the candidate commit.
 
-| Check                                   | Evidence required                                         | Current boundary                                                                     |
-| --------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| lint/types/unit/build/secrets           | checkpoint and CI check job                               | Passed on 01b8b8b in CI                                                              |
-| browser contract tests                  | 11 Playwright flows                                       | Passed on 01b8b8b in CI                                                              |
-| real-service integration                | CI integration job and same script locally                | 11 tests passed in CI on 01b8b8b; local run pending                                  |
-| pinned full stack                       | CI acceptance job and same script locally                 | All API scenarios and 4/5 browser flows passed on 01b8b8b; workflow and load pending |
-| migration/seed/upgrade                  | acceptance scenario                                       | Baseline upgrade and repeated seed passed on 523ad87                                 |
-| load/queue-loss recovery                | acceptance scenario                                       | Pending                                                                              |
-| public DNS and DKIM delivery            | controlled external sending/receiving domain              | Credentials/infrastructure pending                                                   |
-| Postal routing/native delivery callback | real Postal server/domain routing                         | Pending; signed fixtures do not substitute                                           |
-| SES/SNS and SMS                         | verified identity/topic/provider account                  | Pending                                                                              |
-| OIDC/MFA provider login                 | actual configured issuer                                  | Pending                                                                              |
-| backup restore drill                    | isolated restore plus application/provider reconciliation | Pending                                                                              |
+[CI run 38442762577](https://github.com/ChariPramod/flare/actions/runs/38442762577) passed all three jobs on `63c655d` on 2026-10-13. It verified 136 unit/database tests, 11 browser contract flows, 12 real-service tests, package installation, and the complete pinned-stack script with all five live browser flows. The load stage accepted 54 distinct messages, observed 29 expected throttles and sampled peak API RSS of 184,688,640 bytes. All accepted messages recovered after Redis loss with exactly one provider attempt and no duplicate logical submission. Worker RSS remained below the configured 768 MiB ceiling.
+
+| Check                                   | Evidence required                                         | Current boundary                                                           |
+| --------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------- |
+| lint/types/unit/build/secrets           | checkpoint and CI check job                               | Passed on 63c655d in CI                                                    |
+| browser contract tests                  | 11 Playwright flows                                       | Passed on 63c655d in CI                                                    |
+| real-service integration                | CI integration job and same script locally                | 12 tests passed in CI on 63c655d; Mac run pending                          |
+| pinned full stack                       | CI acceptance job and same script locally                 | All API scenarios and 5/5 browser flows passed on 63c655d; Mac run pending |
+| migration/seed/upgrade                  | acceptance scenario                                       | Clean startup, baseline upgrade and repeated seed passed on 63c655d        |
+| load/queue-loss recovery                | acceptance scenario                                       | Passed on 63c655d in CI; Mac run pending                                   |
+| other native channel/action behavior    | runtime matrix in novu-gaps.md                            | Inbox feed, action timing/failure and credentialed channels remain open    |
+| public DNS and DKIM delivery            | controlled external sending/receiving domain              | Credentials/infrastructure pending                                         |
+| Postal routing/native delivery callback | real Postal server/domain routing                         | Pending; signed fixtures do not substitute                                 |
+| SES/SNS and SMS                         | verified identity/topic/provider account                  | Pending                                                                    |
+| OIDC/MFA provider login                 | actual configured issuer                                  | Pending                                                                    |
+| backup restore drill                    | isolated restore plus application/provider reconciliation | Pending                                                                    |
 
 Docker is unavailable on the current Mac. CI can proceed independently; its results do not waive the requested local container run. Automation publication/execution passed in the pinned full stack. Real provider delivery and public DNS remain separate from local simulations.

@@ -1,5 +1,7 @@
 # Flare: Codex Build Prompt for Pareto Labs' In-House Notification Platform
 
+This is the historical build brief. On 2026-10-13 the repository owner explicitly changed the visibility requirement to **public**. Current implementation and verification evidence are maintained in [PROGRESS.md](../PROGRESS.md) and [the acceptance ledger](acceptance.md); unverified research assumptions below are not runtime findings.
+
 Paste the prompt below into Codex. It tells Codex to build **Flare**: run self-hosted Novu, unmodified, as the multi-channel workflow engine, and wrap it in a Pareto-owned control plane. That control plane adds the Resend-style email product, team auth, delivery tracking and a single dashboard that looks like Novu's.
 
 ## TL;DR
