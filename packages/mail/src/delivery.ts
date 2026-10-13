@@ -61,6 +61,26 @@ export async function deliverEmail(options: PipelineOptions, id: string) {
           }
         }
         const to = await withTenant(sql, tenant, async (tx) => {
+          if (message.contact_id) {
+            const [eligibility] =
+              await tx`select c.unsubscribed,c.deleted_at,b.status as broadcast_status,coalesce(p.enabled,t.default_opt_in,true) as topic_enabled from contacts c left join broadcasts b on b.id=${message.broadcast_id} and b.org_id=c.org_id and b.environment_id=c.environment_id left join audience_topics t on t.id=${message.audience_topic_id} and t.org_id=c.org_id and t.environment_id=c.environment_id left join contact_topic_preferences p on p.contact_id=c.id and p.topic_id=t.id and p.org_id=c.org_id and p.environment_id=c.environment_id where c.id=${message.contact_id}`;
+            if (
+              !eligibility ||
+              eligibility.unsubscribed ||
+              eligibility.deleted_at ||
+              eligibility.broadcast_status === 'canceled' ||
+              !eligibility.topic_enabled
+            ) {
+              const skipped =
+                await tx`update message_recipients set status='suppressed' where message_id=${id} and status='queued' returning address`;
+              for (const row of skipped)
+                await outbox(tx, tenant, 'email.suppressed', {
+                  email_id: id,
+                  recipient: row.address,
+                  reason: 'Audience preference or campaign cancellation',
+                });
+            }
+          }
           const newlySuppressed =
             await tx`update message_recipients r set status='suppressed' where r.message_id=${id} and r.status='queued' and exists(select 1 from suppressions s where s.org_id=r.org_id and s.address=r.address) returning address`;
           for (const row of newlySuppressed)

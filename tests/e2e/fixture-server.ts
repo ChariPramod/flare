@@ -2,6 +2,7 @@
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { webhookSecret } from '../../packages/shared/src/webhooks.js';
+import { renderText, templateSchema } from '../../packages/shared/src/audience.js';
 import { workflowSchema } from '../../packages/shared/src/workflows.js';
 const org = '00000000-0000-4000-8000-000000000001',
   dev = '00000000-0000-4000-8000-000000000002',
@@ -30,6 +31,9 @@ const workflows = new Map<string, Record<string, unknown>>(),
   runs = new Map<string, Record<string, unknown>>();
 const endpoints = new Map<string, Record<string, unknown>>(),
   deliveries = new Map<string, Record<string, unknown>>();
+const contacts = new Map<string, Record<string, unknown>>(),
+  templates = new Map<string, Record<string, unknown>>(),
+  broadcasts = new Map<string, Record<string, unknown>>();
 const logId = '00000000-0000-4000-8000-000000000099';
 const server = createServer(async (req, res) => {
   const reply = (value: unknown, status = 200) => {
@@ -48,6 +52,9 @@ const server = createServer(async (req, res) => {
       runs.clear();
       endpoints.clear();
       deliveries.clear();
+      contacts.clear();
+      templates.clear();
+      broadcasts.clear();
       return reply({ reset: true });
     }
     let text = '';
@@ -58,6 +65,12 @@ const server = createServer(async (req, res) => {
       return body.email === user.email && body.password === 'browser-test-password'
         ? reply({ token, user, organizations })
         : reply({ message: 'Invalid credentials' }, 401);
+    if (path === 'preferences/browser-fixture-link') {
+      const contact = [...contacts.values()][0];
+      if (!contact) return reply({ message: 'Not found' }, 404);
+      if (method === 'PATCH') contact.unsubscribed = body.unsubscribed;
+      return reply({ email: contact.email, unsubscribed: contact.unsubscribed, topics: [] });
+    }
     if (req.headers.authorization !== `Bearer ${token}`)
       return reply({ message: 'Session expired' }, 401);
     if (
@@ -222,6 +235,87 @@ const server = createServer(async (req, res) => {
         });
       if (action === 'cancel') row.status = 'canceled';
       if (method === 'PATCH') row.scheduled_at = body.scheduled_at;
+      return reply(row);
+    }
+    if (['audience-segments', 'audience-topics', 'contact-properties'].includes(path))
+      return reply([]);
+    if (path === 'contacts' && method === 'POST') {
+      const row = {
+        id: randomUUID(),
+        ...body,
+        properties: {},
+        unsubscribed: false,
+        created_at: new Date().toISOString(),
+        topics: [],
+      };
+      contacts.set(row.id, row);
+      return reply(row);
+    }
+    if (path === 'contacts') return reply({ data: [...contacts.values()] });
+    if (path.startsWith('contacts/')) {
+      const [, id, action] = path.split('/'),
+        row = contacts.get(id!);
+      if (!row) return reply({ message: 'Not found' }, 404);
+      if (action === 'preference-link')
+        return reply({ url: 'http://localhost:4310/preferences/browser-fixture-link' });
+      if (method === 'PATCH') Object.assign(row, body);
+      return reply(row);
+    }
+    if (path === 'templates' && method === 'POST') {
+      const row = {
+        id: randomUUID(),
+        name: body.name,
+        identifier: body.identifier,
+        current_version: 1,
+        version: 1,
+        ...templateSchema.parse(body.content),
+        versions: [{ version: 1, created_at: new Date().toISOString() }],
+      };
+      templates.set(row.id, row);
+      return reply(row);
+    }
+    if (path === 'templates') return reply([...templates.values()]);
+    if (path === 'template-preview')
+      return reply({
+        subject: renderText(body.content.subject, body.variables),
+        html: renderText(body.content.html, body.variables, true),
+      });
+    if (path.startsWith('templates/')) {
+      const [, id, action] = path.split('/'),
+        row = templates.get(id!);
+      if (!row) return reply({ message: 'Not found' }, 404);
+      if (action === 'versions') {
+        Object.assign(row, body);
+        row.current_version = Number(row.current_version) + 1;
+        row.version = row.current_version;
+        (row.versions as unknown[]).push({
+          version: row.version,
+          created_at: new Date().toISOString(),
+        });
+      }
+      return reply(row);
+    }
+    if (path === 'broadcasts' && method === 'POST') {
+      const row = {
+        id: randomUUID(),
+        ...body,
+        status: 'draft',
+        error: null,
+        stats: { recipients: [], messages: [], events: [] },
+      };
+      broadcasts.set(row.id, row);
+      return reply(row);
+    }
+    if (path === 'broadcasts') return reply([...broadcasts.values()]);
+    if (path.startsWith('broadcasts/')) {
+      const [, id, action] = path.split('/'),
+        row = broadcasts.get(id!);
+      if (!row) return reply({ message: 'Not found' }, 404);
+      if (action === 'schedule') {
+        row.status = 'scheduled';
+        row.scheduled_at = new Date(Date.now() + 7200000).toISOString();
+      }
+      if (action === 'cancel') row.status = 'canceled';
       return reply(row);
     }
     if (path === 'operation-alerts') return reply([]);

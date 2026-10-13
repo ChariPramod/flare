@@ -12,6 +12,7 @@ import { logger, redis, sql } from './context.js';
 import { MailController, MailExceptionFilter } from './mail.js';
 import { MailEventController } from './mail-events.js';
 import { OperationsController } from './operations.js';
+import { AudienceController } from './audience.js';
 import { MetricsController } from './metrics.js';
 import { requestLogs, flushRequestLogs } from './request-logs.js';
 
@@ -40,6 +41,7 @@ class HealthController {
     MailEventController,
     OperationsController,
     MetricsController,
+    AudienceController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },

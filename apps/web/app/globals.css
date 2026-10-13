@@ -2035,3 +2035,68 @@ dd {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+.section-tabs {
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid var(--border);
+  margin: -8px 0 28px;
+}
+.section-tabs a {
+  padding: 12px 0;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+}
+.section-tabs a.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.mapping-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.template-code {
+  min-height: 300px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.preference-page {
+  min-height: 100vh;
+  padding: 72px 24px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.preference-page > .panel {
+  width: 100%;
+  max-width: 540px;
+  padding: 36px;
+}
+.preference-page .brand {
+  margin-bottom: 32px;
+}
+.preference-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.preference-row strong,
+.preference-row small {
+  display: block;
+}
+.preference-row small {
+  color: var(--muted);
+  margin-top: 5px;
+}
+@media (max-width: 720px) {
+  .mapping-grid {
+    grid-template-columns: 1fr;
+  }
+  .section-tabs {
+    gap: 16px;
+  }
+}

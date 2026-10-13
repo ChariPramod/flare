@@ -167,3 +167,63 @@ test('webhook creation, signed-event details, replay, redacted logs and metrics'
   await page.screenshot({ path: 'test-results/delivery-metrics.png', fullPage: true });
   expect(errors).toEqual([]);
 });
+
+test('audience preferences, template preview/version and scheduled broadcast cancellation', async ({
+  page,
+  browser,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await login(page);
+  await page.getByRole('link', { name: 'Audience', exact: true }).click();
+  await page.getByRole('button', { name: 'Add contact', exact: true }).click();
+  await page.getByLabel('Email address', { exact: true }).fill('alex@example.test');
+  await page.getByLabel('First name', { exact: true }).fill('Alex');
+  await page.getByRole('button', { name: 'Save contact', exact: true }).click();
+  await page.getByRole('link', { name: 'alex@example.test', exact: true }).click();
+  await page.getByRole('button', { name: 'Create preference link', exact: true }).click();
+  const preference = await page.getByLabel('Preference link', { exact: true }).inputValue();
+  const publicContext = await browser.newContext();
+  const publicPage = await publicContext.newPage();
+  await publicPage.goto(preference);
+  await expect(publicPage.getByRole('heading', { name: 'Email preferences' })).toBeVisible();
+  await publicPage.getByRole('checkbox', { name: /Unsubscribe from all broadcasts/ }).check();
+  await publicPage.getByRole('button', { name: 'Save preferences', exact: true }).click();
+  await expect(publicPage.getByRole('status')).toContainText('saved');
+  await publicPage.screenshot({ path: 'test-results/preference-page.png', fullPage: true });
+  await publicContext.close();
+  await page.getByRole('link', { name: 'Templates', exact: true }).click();
+  await page.getByRole('button', { name: 'Create template', exact: true }).click();
+  await page.getByLabel('Template name').fill('Monthly news');
+  await page.getByLabel('Template identifier').fill('monthly-news');
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Create template', exact: true })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Monthly news' })).toBeVisible();
+  await page
+    .getByRole('textbox', { name: 'HTML', exact: true })
+    .fill('<h1>Hello {{first_name}}</h1><a href="{{{FLARE_UNSUBSCRIBE_URL}}}">Preferences</a>');
+  await page.getByRole('button', { name: 'Preview draft', exact: true }).click();
+  await expect(
+    page.frameLocator('iframe[title="Email preview"]').getByRole('heading', { name: 'Hello Alex' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Save new version', exact: true }).click();
+  await expect(page.getByText('Version 2 · monthly-news', { exact: true })).toBeVisible();
+  await page.screenshot({ path: 'test-results/template-editor.png', fullPage: true });
+  await page.getByRole('link', { name: 'Broadcasts', exact: true }).click();
+  await page.getByRole('button', { name: 'Create broadcast', exact: true }).click();
+  await page.getByLabel('Broadcast name').fill('October news');
+  await page.getByLabel('From address').fill('news@example.test');
+  await page.getByLabel('Email template').selectOption({ label: 'Monthly news · v2' });
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'October news' })).toBeVisible();
+  await page.getByLabel('Send time').fill('in 2 hours');
+  await page.getByRole('button', { name: 'Schedule broadcast', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click();
+  await expect(page.locator('.inline-tags .badge').first()).toHaveText('scheduled');
+  await page.getByRole('button', { name: 'Cancel broadcast', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click();
+  await expect(page.locator('.inline-tags .badge').first()).toHaveText('canceled');
+  expect(errors).toEqual([]);
+});

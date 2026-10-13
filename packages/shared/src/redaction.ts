@@ -2,6 +2,7 @@ const sensitive =
   /^(authorization|cookie|set-cookie|password|pass|token|secret|credentials|code|mfa_code|.*api[_-]?key.*|.*cipher.*|.*secret.*|.*password.*|.*token.*|recovery[_-]?codes|private[_-]?key|dkim[_-]?private.*|uri|source|content)$/i;
 export function redactText(value: string) {
   return value
+    .replace(/(\/preferences\/)[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '$1[REDACTED]')
     .replace(/https?:\/\/[^\s"<>]+/gi, (raw) => {
       try {
         const url = new URL(raw);

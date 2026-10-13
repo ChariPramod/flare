@@ -36,9 +36,9 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
   if (org) headers['x-org-id'] = org;
   if (env) headers['x-environment-id'] = env;
   const joined = path.join('/');
-  const publicRoute = ['auth/config', 'auth/login', 'auth/exchange', 'auth/accept-invite'].includes(
-    joined,
-  );
+  const publicRoute =
+    ['auth/config', 'auth/login', 'auth/exchange', 'auth/accept-invite'].includes(joined) ||
+    (path.length === 2 && path[0] === 'preferences' && ['GET', 'PATCH'].includes(req.method));
   if (!publicRoute && !token)
     return NextResponse.json({ message: 'Sign in to continue' }, { status: 401 });
   let body: string | undefined;

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { parseDate } from 'chrono-node';
+import { propertyName, propertyValue } from '@flare/shared';
 
 export class MailError extends Error {
   constructor(
@@ -50,7 +51,15 @@ export const emailSchema = z
     cc: addresses.optional(),
     bcc: addresses.optional(),
     reply_to: addresses.optional(),
-    subject: line,
+    subject: line.optional(),
+    template: z
+      .object({
+        id: z.string().uuid(),
+        version: z.number().int().positive().optional(),
+        variables: z.record(propertyName, propertyValue).default({}),
+      })
+      .strict()
+      .optional(),
     html: z.string().max(2_000_000).optional(),
     text: z.string().max(2_000_000).optional(),
     headers: z
@@ -79,7 +88,18 @@ export const emailSchema = z
     scheduled_at: z.string().min(1).max(100).optional(),
   })
   .strict()
-  .refine((v) => v.html !== undefined || v.text !== undefined, 'Supply html or text')
+  .refine(
+    (v) => v.html !== undefined || v.text !== undefined || v.template !== undefined,
+    'Supply html, text or a template',
+  )
+  .refine(
+    (v) => v.subject !== undefined || v.template !== undefined,
+    'Supply a subject or template',
+  )
+  .refine(
+    (v) => !v.template || (v.html === undefined && v.text === undefined),
+    'Do not combine a template with HTML/text',
+  )
   .refine(
     (v) => v.to.length + (v.cc?.length ?? 0) + (v.bcc?.length ?? 0) <= 50,
     'Maximum 50 envelope recipients',

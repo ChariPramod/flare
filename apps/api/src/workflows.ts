@@ -32,6 +32,7 @@ import { z } from 'zod';
 import { Access } from './auth.js';
 import { parse, sql } from './context.js';
 import type { AuthRequest } from './context.js';
+import { expandWorkflowTemplates } from './template-workflows.js';
 import { outbox } from '@flare/mail';
 import { audit } from './identity.js';
 import { idempotent } from './idempotency.js';
@@ -120,7 +121,7 @@ export class WorkflowController {
   }
   @Post('workflows') async create(@Req() req: AuthRequest, @Body() body: unknown) {
     ensureDevelopment(req);
-    const workflow = parse(workflowSchema, body);
+    const workflow = await expandWorkflowTemplates(req.principal, parse(workflowSchema, body));
     await novu(
       req.principal,
       '/v2/workflows',
@@ -141,7 +142,7 @@ export class WorkflowController {
     @Body() body: unknown,
   ) {
     ensureDevelopment(req);
-    const workflow = parse(workflowSchema, body);
+    const workflow = await expandWorkflowTemplates(req.principal, parse(workflowSchema, body));
     if (workflow.workflowId !== id)
       throw new BadRequestException('Workflow identifier is immutable');
     await this.get(req, id);

@@ -20,3 +20,10 @@
 - Added tenant request logs with bounded credential redaction, search/status filters, CSV export and retention, plus recipient delivery and human engagement metrics.
 - Added dashboard endpoint/attempt/log/metric screens, authenticated engine-event ingestion and workflow lifecycle outbox events.
 - Expanded database, HTTP and browser coverage; real Redis/PostgreSQL recovery coverage awaits Docker.
+
+## Audience checkpoint — 2026-10-12
+
+- Added contacts, typed properties with fallbacks, atomic CSV import/deduplication, segments, topics and signed public preference pages.
+- Added immutable HTML template versions, safe variable rendering/previews, direct-email template references and saved workflow email expansion.
+- Added durable throttled broadcasts with frozen audiences, pinned content, sender scope checks, preference/suppression rechecks, cancellation, statistics and signed one-click unsubscribe headers.
+- Added audience/template/broadcast screens and database/browser regressions; real queue-loss recovery tests remain pending Docker.

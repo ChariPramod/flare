@@ -187,3 +187,49 @@ it('recovers accepted messages after queue loss, sends through Mailpit, and reco
     )[0]!.status,
   ).toBe('sent');
 });
+
+it('serializes campaign chunks across PostgreSQL connections and resumes after queue loss', async () => {
+  const { scheduleBroadcast, dispatchBroadcast } = await import('@flare/platform');
+  const { startBroadcastWorker } = await import('../src/broadcasts.js');
+  const template = randomUUID(),
+    broadcast = randomUUID();
+  await sql`insert into email_templates(id,org_id,environment_id,name,identifier) values(${template},${org},${env},'Campaign','campaign')`;
+  await sql`insert into template_versions(org_id,environment_id,template_id,version,subject,html) values(${org},${env},${template},1,'Campaign','<p>News</p><a href="{{{FLARE_UNSUBSCRIBE_URL}}}">Unsubscribe</a>')`;
+  await sql`insert into contacts(org_id,environment_id,email) values(${org},${env},'campaign-a@example.net'),(${org},${env},'campaign-b@example.net')`;
+  await sql`insert into broadcasts(id,org_id,environment_id,name,sender,template_id,template_version,rate_per_second) values(${broadcast},${org},${env},'Recovery','sender@example.com',${template},1,1)`;
+  await scheduleBroadcast(sql, principal, broadcast);
+  const options = {
+    sql,
+    store: objectStore(),
+    transports: configuredTransports(),
+    encryptionKey: key,
+    trackingKey: key,
+  };
+  await Promise.all(
+    Array.from({ length: 8 }, () => dispatchBroadcast(options, broadcast, 'http://localhost:3000')),
+  );
+  expect(await sql`select id from messages where broadcast_id=${broadcast}`).toHaveLength(1);
+  await worker?.close();
+  worker = undefined;
+  await redis.flushdb();
+  await sql`update broadcasts set next_dispatch_at=now() where id=${broadcast}`;
+  const campaigns = startBroadcastWorker(sql, redis, key, key);
+  try {
+    await campaigns.dispatch();
+    await expect
+      .poll(
+        async () =>
+          String((await sql`select status from broadcasts where id=${broadcast}`)[0]?.status),
+        { timeout: 15000 },
+      )
+      .toBe('sent');
+    expect(await sql`select id from messages where broadcast_id=${broadcast}`).toHaveLength(2);
+    expect(
+      (
+        await sql`select count(distinct message_id)::int as n from broadcast_recipients where broadcast_id=${broadcast}`
+      )[0]!.n,
+    ).toBe(2);
+  } finally {
+    await campaigns.close();
+  }
+});

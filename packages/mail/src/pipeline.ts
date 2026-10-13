@@ -6,6 +6,7 @@ import type { Principal, Tenant } from '@flare/shared';
 import { z } from 'zod';
 import { emailSchema, MailError, address, recipients, schedule } from './validation.js';
 import type { EmailInput } from './validation.js';
+import { resolveEmailTemplate } from './templates.js';
 import { buildMime } from './mime.js';
 import type { ObjectStore } from './storage.js';
 import type { TransportAdapter } from './transports.js';
@@ -40,6 +41,8 @@ export async function submitEmails(
     key?: string;
     mode?: 'strict' | 'permissive';
     batch?: boolean;
+    transaction?: Transaction;
+    campaign?: { broadcastId: string; contactId: string; topicId: string | null };
     smtpHeaders?: { to: string[]; cc: string[] };
   } = {},
 ) {
@@ -60,7 +63,7 @@ export async function submitEmails(
   const operation = settings.batch ? 'mail.batch' : 'mail.send';
   const uploaded: string[] = [];
   try {
-    return await withTenant(options.sql, p, async (tx) => {
+    const run = async (tx: Transaction) => {
       if (settings.key) {
         await tx`select pg_advisory_xact_lock(hashtextextended(${`${p.orgId}/${p.environmentId}/${operation}/${settings.key}`},0))`;
         await tx`delete from idempotency where operation=${operation} and key=${settings.key} and expires_at<=now()`;
@@ -94,7 +97,7 @@ export async function submitEmails(
           continue;
         }
         const accept = async (db: Transaction) => {
-          const input = value.data;
+          const input = await resolveEmailTemplate(db, value.data);
           const domain = await sender(db, p, input, options.transports);
           const at = schedule(input.scheduled_at, now);
           const id = randomUUID();
@@ -151,6 +154,8 @@ export async function submitEmails(
           }
           const stored = { ...input, attachments: metadata };
           await db`insert into messages(id,org_id,environment_id,domain_id,request,mime_key,envelope_from,status,scheduled_at) values(${id},${p.orgId},${p.environmentId},${domain.id},${db.json(toJson(stored))},${mimeKey},${address(input.from)},${status},${at})`;
+          if (settings.campaign)
+            await db`update messages set broadcast_id=${settings.campaign.broadcastId},contact_id=${settings.campaign.contactId},audience_topic_id=${settings.campaign.topicId} where id=${id}`;
           for (const recipient of envelope) {
             const recipientStatus = blocked.has(recipient.address) ? 'suppressed' : 'queued';
             await db`insert into message_recipients(org_id,environment_id,message_id,address,kind,status) values(${p.orgId},${p.environmentId},${id},${recipient.address},${recipient.kind},${recipientStatus})`;
@@ -185,8 +190,13 @@ export async function submitEmails(
       if (settings.key)
         await tx`insert into idempotency(org_id,environment_id,operation,key,body_hash,response) values(${p.orgId},${p.environmentId},${operation},${settings.key},${hash},${tx.json(toJson(response))})`;
       return response;
-    });
+    };
+    return await (settings.transaction
+      ? run(settings.transaction)
+      : withTenant(options.sql, p, run));
   } catch (error) {
+    // An outer transaction owns commit/rollback; preserve any objects for orphan cleanup.
+    if (settings.transaction) throw error;
     // A lost COMMIT response is ambiguous too. Retain objects unless PostgreSQL
     // confirms they are unreferenced; an outage must never destroy accepted MIME.
     try {

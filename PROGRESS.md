@@ -12,7 +12,7 @@ Updated: 2026-10-12, America/Los_Angeles.
 | 3 — Email pipeline                              | Local checkpoint passed; container/provider verification pending |
 | 4 — Dashboard                                   | Local checkpoint; live-stack acceptance pending                  |
 | 5 — Webhooks, logs, metrics                     | Local checkpoint; live engine/container tests pending            |
-| 6 — Audience, broadcasts, templates             | Pending                                                          |
+| 6 — Audience, broadcasts, templates             | Local checkpoint; live recovery/provider tests pending           |
 | 7 — Automations, inbound, translations, layouts | Pending                                                          |
 | 8 — Hardening, SDK, CLI                         | Pending                                                          |
 
@@ -29,6 +29,8 @@ Updated: 2026-10-12, America/Los_Angeles.
 - 2026-10-12: Added the authenticated Next.js dashboard, HttpOnly session proxy, SSO/invitation/MFA views, organization/environment switching, React Flow workflow editor/test trace, subscriber preferences/Novu Inbox, topics/integrations, publication, domain/email/suppression screens, raw signed MIME, team/keys/settings and responsive light/dark layouts. Lint/typecheck/build/gitleaks, 58 backend tests and three Playwright browser contract flows pass; screenshots inspected. Standard Monaco textarea input avoids experimental EditContext corruption. The Inbox-only proxy preserves internal Novu administration. Full live-stack acceptance is separately configured and remains unrun.
 
 - 2026-10-12: Added durable Svix-compatible webhook fanout, atomic delivery claims, retries/recovery/replay, rotating secrets, endpoint alerts, native engine callback verification, redacted request logs/search/CSV/retention, and delivery metrics with dashboard screens. Lint/typecheck/build/gitleaks and 77 tests pass, including official Svix interoperability and loopback HTTP checks. All four Playwright browser contract flows pass; screenshots inspected. Real PostgreSQL/Redis webhook recovery tests are added but unrun without Docker.
+
+- 2026-10-12: Added tenant contacts, typed properties, atomic CSV mapping/import, dynamic segments, audience topics and signed public preferences; immutable HTML template versions and safe previews; throttled, recoverable broadcasts with pinned content, preference/suppression rechecks, cancellation and DKIM-signed one-click unsubscribe headers. Lint/typecheck/build/gitleaks and 89 tests pass. All five Playwright browser contract flows pass; preference/template screenshots inspected, and template cache freshness fixed after browser testing. Real queue-loss recovery coverage is added but awaits Docker.
 
 ## Known issues and verification limits
 
@@ -51,8 +53,8 @@ Updated: 2026-10-12, America/Los_Angeles.
 
 `22f693a feat(dashboard): add authenticated notification and email control plane` — pending GitHub setup.
 
-`feat(operations): add durable webhooks, redacted logs and delivery metrics` — local checkpoint, pending GitHub setup.
+`6ac7592 feat(operations): add durable webhooks, redacted logs and delivery metrics` — local checkpoint, pending GitHub setup.
 
 ## Next
 
-Implement audience contacts/properties/segments/preferences, versioned templates and throttled broadcasts. Full Compose verification remains a prerequisite for production readiness.
+Implement durable automations, authenticated inbound receiving, translations/layouts and publication dependencies, then hardening and SDK/CLI. Full Compose verification remains a prerequisite for production readiness.

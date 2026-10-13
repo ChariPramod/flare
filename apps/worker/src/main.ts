@@ -1,3 +1,4 @@
+import { startBroadcastWorker } from './broadcasts.js';
 import { startWorkflowWorker } from './workflows.js';
 import { startWebhookWorker } from './webhooks.js';
 import { startMailWorker } from './mail.js';
@@ -12,6 +13,18 @@ const redis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null });
 redis.on('error', (err: Error) => logger.error({ err }, 'Redis connection failed'));
 const workflowWorker = startWorkflowWorker(client, redis, config.FLARE_ENCRYPTION_KEY);
 const mailWorker = startMailWorker(client, redis, config.FLARE_ENCRYPTION_KEY, config.JWT_SECRET);
+const broadcastWorker = startBroadcastWorker(
+  client,
+  redis,
+  config.FLARE_ENCRYPTION_KEY,
+  config.JWT_SECRET,
+);
+broadcastWorker.worker.on('error', (err: Error) => logger.error({ err }, 'Broadcast worker error'));
+const broadcastDispatch = setInterval(() => {
+  void broadcastWorker
+    .dispatch()
+    .catch((err: unknown) => logger.error({ err }, 'Broadcast dispatch failed'));
+}, 1000);
 const webhookWorker = startWebhookWorker(client, redis, config.FLARE_ENCRYPTION_KEY);
 webhookWorker.worker.on('error', (err: Error) => logger.error({ err }, 'Webhook worker error'));
 const webhookDispatch = setInterval(() => {
@@ -66,8 +79,14 @@ for (const signal of ['SIGTERM', 'SIGINT'])
     clearInterval(domainPolling);
     clearInterval(webhookDispatch);
     clearInterval(retention);
+    clearInterval(broadcastDispatch);
     server.close();
-    void Promise.all([workflowWorker.close(), mailWorker.close(), webhookWorker.close()])
+    void Promise.all([
+      workflowWorker.close(),
+      mailWorker.close(),
+      webhookWorker.close(),
+      broadcastWorker.close(),
+    ])
       .then(() => Promise.all([client.end(), redis.quit()]))
       .then(() => process.exit(0));
   });

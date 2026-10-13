@@ -48,6 +48,8 @@ export async function buildMime(input: EmailInput, id: string, domain: SigningDo
       privateKey: domain.privateKey,
       cacheDir: false,
       skipFields: 'message-id:date',
+      headerFieldNames:
+        'From:Sender:Reply-To:Subject:To:Cc:MIME-Version:Content-Type:Content-Transfer-Encoding:Content-ID:Content-Description:In-Reply-To:References:List-Id:List-Help:List-Unsubscribe:List-Unsubscribe-Post:List-Subscribe:List-Post:List-Owner:List-Archive',
     },
     disableFileAccess: true,
     disableUrlAccess: true,

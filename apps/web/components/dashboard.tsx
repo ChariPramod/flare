@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import {
   Flame,
+  Send,
   Workflow,
   Users,
   Layers,
@@ -47,6 +48,7 @@ import {
   Suppressions,
 } from './pages';
 import { WebhooksPage, LogsPage, MetricsPage } from './operations-pages';
+import { AudiencePage, TemplatesPage, BroadcastsPage } from './audience-pages';
 import { WorkflowEditor } from './workflow-editor';
 const groups: { name: string; items: [string, string, typeof Workflow][] }[] = [
   {
@@ -64,6 +66,9 @@ const groups: { name: string; items: [string, string, typeof Workflow][] }[] = [
     items: [
       ['emails', 'Emails', Mail],
       ['domains', 'Domains', Globe],
+      ['audience', 'Audience', Users],
+      ['broadcasts', 'Broadcasts', Send],
+      ['templates', 'Templates', Code2],
       ['suppressions', 'Suppressions', ShieldBan],
       ['webhooks', 'Webhooks', Webhook],
       ['logs', 'Logs', FileText],
@@ -159,6 +164,10 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
   else if (section === 'activity') content = <ActivityPage id={id} />;
   else if (section === 'domains') content = <Domains id={id} writable={writable} />;
   else if (section === 'emails') content = <Emails id={id} writable={writable} />;
+  else if (section === 'audience') content = <AudiencePage id={id} writable={writable} />;
+  else if (section === 'templates')
+    content = <TemplatesPage id={id} editable={writable && !data.principal.production} />;
+  else if (section === 'broadcasts') content = <BroadcastsPage id={id} writable={writable} />;
   else if (section === 'topics') content = <Topics writable={writable} />;
   else if (section === 'integrations') content = <Integrations writable={writable} />;
   else if (section === 'webhooks') content = <WebhooksPage id={id} writable={writable} />;
