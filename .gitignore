@@ -15,3 +15,5 @@ ops/postal/config/
 ops/certs/
 .DS_Store
 *.tsbuildinfo
+
+apps/web/public/monaco/

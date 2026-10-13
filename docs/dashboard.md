@@ -1,0 +1,19 @@
+# Dashboard
+
+The Next.js App Router dashboard uses a same-origin server route to reach Flare's API. The browser holds an HttpOnly, SameSite=Lax session cookie; tenant selection is verified by the API before changing the organization/environment cookies. Mutations require an exact Origin match. Set `WEB_ORIGIN` to the external dashboard origin; HTTPS origins use Secure cookies. The API URL (`FLARE_API_URL`) stays server-side. Passwords, API keys and the JWT are not saved to local storage.
+
+Password/TOTP, invitation acceptance, generic OIDC, organization/environment selection, production workflow read-only mode, workflow publication, team administration and MFA setup are available in the UI. OIDC callbacks exchange a one-time code; an invalid MFA attempt requires restarting SSO. Existing users sign in before accepting an invitation. Sign-out revokes the API session.
+
+The workflow canvas uses React Flow. Each step has configuration, JSON content/control values and a JSON Logic condition editor. Save changes before using Test workflow; its activity trace reflects queued/accepted engine runs, not downstream delivery. Channel failure and action failure semantics are explained in the editor. The Bridge badge reports configuration, not a health check. Monaco is served from the same host under `/monaco`, prepared from the pinned package during dev/build; no CDN is needed.
+
+Subscribers include preference explanations and the unmodified `@novu/react` Inbox. Configure the environment application identifier plus `NOVU_PUBLIC_API_URL` and `NOVU_PUBLIC_WS_URL` with browser-reachable self-hosted endpoints. The subscriber hash is generated server-side from the encrypted environment key. The dashboard proxies only Novu’s `/v1/inbox/*` API through `/novu`; its administrative API stays internal. Local Compose exposes WebSocket on loopback port 3002. Configure your reverse proxy and Novu's CORS for HTTPS deployment; never point these values at Novu Cloud.
+
+Email screens cover DNS verification, domain capabilities, tracking/TLS settings, compose/attachments/scheduling, suppression, delivery attempts and raw DKIM-signed MIME. Submission retries reuse an idempotency key while the request is unchanged. Provider acceptance and delivery remain separate states. Destructive remote operations ask for confirmation. Tables have searchable/sortable loaded results, 25-row pages and URL-persisted query/page state. List endpoints currently load at most 100 items; this dashboard checkpoint is not an unlimited data explorer.
+
+## Verification
+
+`pnpm test:e2e` launches a **test-only API contract fixture** and the real Next app on ports 4311/4310. It verifies session cookie handling, login → workflow canvas → trigger/activity, domain → email/source, production controls, CSRF Origin checking, tenant switch denial and tablet layout. DNS verification and delivery in this suite are fixtures. This does **not** validate Novu, DNS, providers, Redis or PostgreSQL interoperability. The fixture is never imported by or deployed with the app.
+
+Install Chromium with `pnpm exec playwright install chromium`, or set `E2E_BROWSER_CHANNEL=chrome` to use installed Chrome. CI installs Chromium. Screenshots and failure traces are written to ignored `test-results`.
+
+`pnpm test:e2e:live` uses the actual deployed stack with no API mocks. Set `E2E_BASE_URL`, `E2E_EMAIL`, `E2E_PASSWORD`, `E2E_FROM`, `E2E_TO`, and optionally `E2E_SUBSCRIBER`. Use a disposable development organization with a working Novu integration, seed subscriber and a sender domain whose real DNS records are verified. This suite creates workflows, creates an intentionally unverified example domain, and sends email; use an address you control or a configured Mailpit sink. It fails when required setup is absent. Full Compose and live acceptance remain pending until Docker is available.

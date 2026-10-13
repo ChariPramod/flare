@@ -405,7 +405,21 @@ export class WorkflowController {
   ) {
     await this.getSubscriber(req, id);
     const key = await novuKey(req.principal);
-    return { subscriberId: id, subscriberHash: createHmac('sha256', key).update(id).digest('hex') };
+    const [environment] = await withTenant(
+      sql,
+      req.principal,
+      (tx) =>
+        tx`select novu_application_id from environments where id=${req.principal.environmentId}`,
+    );
+    return {
+      subscriberId: id,
+      subscriberHash: createHmac('sha256', key).update(id).digest('hex'),
+      applicationIdentifier: environment?.novu_application_id,
+      backendUrl:
+        process.env.NOVU_PUBLIC_API_URL ||
+        `${process.env.WEB_ORIGIN ?? 'http://localhost:3000'}/novu`,
+      socketUrl: process.env.NOVU_PUBLIC_WS_URL ?? 'http://localhost:3002',
+    };
   }
   @Get('topics') async topics(@Req() req: AuthRequest) {
     return withTenant(sql, req.principal, async (tx) => ({
@@ -458,7 +472,10 @@ export class WorkflowController {
   ) {
     const input = parse(
       z
-        .object({ subscribers: z.array(z.string()).min(1).max(1000), context: contextSchema.default({}) })
+        .object({
+          subscribers: z.array(z.string()).min(1).max(1000),
+          context: contextSchema.default({}),
+        })
         .strict(),
       body,
     );

@@ -18,7 +18,8 @@
     "format:check": "prettier --check .",
     "db:migrate": "pnpm --filter @flare/db migrate",
     "seed": "pnpm --filter @flare/db seed && pnpm --filter @flare/mail seed",
-    "checkpoint": "bash scripts/checkpoint.sh"
+    "checkpoint": "bash scripts/checkpoint.sh",
+    "test:e2e:live": "playwright test --config playwright.live.config.ts"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.15",

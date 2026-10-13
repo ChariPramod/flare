@@ -4,17 +4,17 @@ Updated: 2026-10-12, America/Los_Angeles.
 
 ## Phase status
 
-| Phase | Status |
-| --- | --- |
-| 0 — Scaffold, CI, Compose | Local checkpoint passed; container startup unverified |
-| 1 — Auth, RBAC, environments, keys | Local checkpoint passed; live OIDC/container tests pending |
-| 2 — Novu wrapper | Core API/queue checkpoint; live engine validation pending |
-| 3 — Email pipeline | Local checkpoint passed; container/provider verification pending |
-| 4 — Dashboard | Pending |
-| 5 — Webhooks, logs, metrics | Pending |
-| 6 — Audience, broadcasts, templates | Pending |
-| 7 — Automations, inbound, translations, layouts | Pending |
-| 8 — Hardening, SDK, CLI | Pending |
+| Phase                                           | Status                                                           |
+| ----------------------------------------------- | ---------------------------------------------------------------- |
+| 0 — Scaffold, CI, Compose                       | Local checkpoint passed; container startup unverified            |
+| 1 — Auth, RBAC, environments, keys              | Local checkpoint passed; live OIDC/container tests pending       |
+| 2 — Novu wrapper                                | Core API/queue checkpoint; live engine validation pending        |
+| 3 — Email pipeline                              | Local checkpoint passed; container/provider verification pending |
+| 4 — Dashboard                                   | Local checkpoint; live-stack acceptance pending                  |
+| 5 — Webhooks, logs, metrics                     | Pending                                                          |
+| 6 — Audience, broadcasts, templates             | Pending                                                          |
+| 7 — Automations, inbound, translations, layouts | Pending                                                          |
+| 8 — Hardening, SDK, CLI                         | Pending                                                          |
 
 ## Checkpoint log
 
@@ -25,6 +25,8 @@ Updated: 2026-10-12, America/Los_Angeles.
 - 2026-10-12: Added validated workflow CRUD, production guard and selected-workflow promotion, durable queued triggers and cancellation, subscriber upsert, preferences, exact-context topic subscriptions, integrations with encrypted credentials and an activity API. Lint/typecheck/build/gitleaks and 17 tests passed.
 
 - 2026-10-12: Implemented the shared API/SMTP email pipeline, scoped domain/key constraints, durable delivery claims, schedules, batch/idempotency, encrypted DKIM, MinIO attachments, SSRF-safe downloads, Postal/SES/SMTP transports, DNS polling/drift, signed tracking, native Postal/SNS verification, suppression, event outbox, and STARTTLS relay. Fixed a shared postgres.js codec conflict exposed by protocol tests. Lint/typecheck/build/gitleaks and 58 tests passed. Added a disposable container integration harness and provider setup guide.
+
+- 2026-10-12: Added the authenticated Next.js dashboard, HttpOnly session proxy, SSO/invitation/MFA views, organization/environment switching, React Flow workflow editor/test trace, subscriber preferences/Novu Inbox, topics/integrations, publication, domain/email/suppression screens, raw signed MIME, team/keys/settings and responsive light/dark layouts. Lint/typecheck/build/gitleaks, 58 backend tests and three Playwright browser contract flows pass; screenshots inspected. Standard Monaco textarea input avoids experimental EditContext corruption. The Inbox-only proxy preserves internal Novu administration. Full live-stack acceptance is separately configured and remains unrun.
 
 ## Known issues and verification limits
 
@@ -43,8 +45,10 @@ Updated: 2026-10-12, America/Los_Angeles.
 
 `e3a3d75 feat(workflows): add Novu control plane and durable trigger dispatch` — pending GitHub setup.
 
-`feat(mail): add durable shared email pipeline and authenticated relay` — pending GitHub setup.
+`e4fda65 feat(mail): add durable shared email pipeline and authenticated relay` — pending GitHub setup.
+
+`feat(dashboard): add authenticated notification and email control plane` — pending GitHub setup.
 
 ## Next
 
-Build the authenticated dashboard, environment selection, workflow canvas, subscribers/preferences, activity timelines, and email/domain screens. Full Compose verification remains a prerequisite for production readiness.
+Implement durable outbound webhooks, redacted request logs, and metrics. Full Compose verification remains a prerequisite for production readiness.

@@ -1,0 +1,82 @@
+'use client';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Flame } from 'lucide-react';
+import { api, useApi } from '../../lib/api';
+import { Button, ErrorBox, Field } from '../../components/ui';
+export default function Invite() {
+  const session = useApi('session');
+  const router = useRouter();
+  const [token, setToken] = useState(''),
+    [error, setError] = useState<unknown>(),
+    [busy, setBusy] = useState(false);
+  useEffect(() => {
+    setToken(new URLSearchParams(location.search).get('token') ?? '');
+  }, []);
+  return (
+    <main className="invite-page">
+      <section className="panel invite-panel">
+        <span className="brand">
+          <span className="brand-mark">
+            <Flame />
+          </span>
+          flare
+        </span>
+        <h1>Join your team</h1>
+        <p className="muted">Accept your invitation to a Flare workspace.</p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            setBusy(true);
+            const data = Object.fromEntries(new FormData(e.currentTarget));
+            void api(session.data ? 'team/accept-invite' : 'auth/accept-invite', 'POST', {
+              ...data,
+              token,
+            })
+              .then(() => {
+                router.replace('/workflows');
+                router.refresh();
+              })
+              .catch(setError)
+              .finally(() => setBusy(false));
+          }}
+        >
+          {!session.data && (
+            <>
+              <Field label="Your name">
+                <input name="name" required maxLength={120} autoComplete="name" />
+              </Field>
+              <Field label="Create password" hint="At least 12 characters.">
+                <input
+                  name="password"
+                  type="password"
+                  required
+                  minLength={12}
+                  maxLength={256}
+                  autoComplete="new-password"
+                />
+              </Field>
+            </>
+          )}
+          <ErrorBox error={error} />
+          <Button className="primary full" disabled={!token || busy || session.isPending}>
+            {busy ? 'Joining…' : 'Accept invitation'}
+          </Button>
+        </form>
+        {!session.data && (
+          <p className="small muted">
+            Already have an account?{' '}
+            <Link
+              className="strong"
+              href={`/login?next=${encodeURIComponent(`/invite?token=${token}`)}`}
+            >
+              Sign in first
+            </Link>
+            .
+          </p>
+        )}
+      </section>
+    </main>
+  );
+}

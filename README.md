@@ -43,3 +43,7 @@ Create a Postal admin with `docker compose run --rm postal postal make-user`, th
 For SES, configure `AWS_REGION`, credentials with minimal send permissions, and an SES configuration set with event publishing. Verify identities in that region and obtain production access if the account is sandboxed. SES remains optional. Never expose Postal/SNS ingestion without authenticating the provider event source.
 
 See [email pipeline operations and API behavior](docs/email-pipeline.md) for transport priority, TLS enforcement, DNS, attachments, native provider signatures, and ambiguous delivery outcomes. Run `bash scripts/integration.sh` for the disposable PostgreSQL/Redis/MinIO/Mailpit acceptance suite. Compose now runs migrations before starting Flare services.
+
+### Dashboard
+
+See [dashboard setup and browser tests](docs/dashboard.md) for authentication, Inbox endpoints, the workflow canvas and live acceptance configuration. Local browser contract tests run with `pnpm test:e2e`; `pnpm test:e2e:live` requires the real stack and a verified sender.

@@ -3,7 +3,7 @@ import ts from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
 
 export default ts.config(
-  { ignores: ['**/dist/**', '**/.next/**', '**/node_modules/**', '.tools/**', 'coverage/**', '**/next-env.d.ts'] },
+  { ignores: ['**/dist/**', '**/.next/**', '**/public/monaco/**', '**/node_modules/**', '.tools/**', 'coverage/**', '**/next-env.d.ts'] },
   js.configs.recommended,
   ...ts.configs.recommended,
   prettier,

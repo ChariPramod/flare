@@ -2,4 +2,4 @@
 useDefault = true
 [[allowlists]]
 description = "Generated dependencies and build artifacts"
-paths = ['''(^|/)node_modules/''', '''^\.tools/''', '''(^|/)dist/''', '''(^|/)\.next/''', '''^pnpm-lock\.yaml$''']
+paths = ['''(^|/)node_modules/''', '''^\.tools/''', '''(^|/)dist/''', '''(^|/)\.next/''', '''^pnpm-lock\.yaml$''', '''^apps/web/public/monaco/''', '''^test-results/''']

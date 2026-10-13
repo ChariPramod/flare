@@ -14,6 +14,7 @@ import {
   generateDomain,
   requiredTls,
   outbox,
+  mailLimits,
 } from '@flare/mail';
 import { Access } from './auth.js';
 import { config, parse, sql } from './context.js';
@@ -98,6 +99,18 @@ export class MailController {
           await tx`select provider,ordinal,status,error,started_at,finished_at from transport_attempts where message_id=${id} order by ordinal`,
       };
     });
+  }
+  @Get('emails/:id/source') async source(@Req() req: AuthRequest, @Param('id') id: string) {
+    await this.get(req, id);
+    const [message] = await withTenant(
+      sql,
+      req.principal,
+      (tx) => tx`select mime_key from messages where id=${id}`,
+    );
+    if (!message?.mime_key) throw new MailError(404, 'This message has no MIME source');
+    return {
+      source: (await store.get(String(message.mime_key), mailLimits().mime)).toString('utf8'),
+    };
   }
   @Access('send') @Patch('emails/:id') async reschedule(
     @Req() req: AuthRequest,

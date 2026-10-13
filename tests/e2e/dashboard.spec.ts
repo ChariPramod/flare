@@ -1,0 +1,114 @@
+import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
+async function login(page: Page) {
+  await page.goto('/login');
+  await page.getByLabel('Work email').fill('tester@example.test');
+  await page.getByLabel('Password', { exact: true }).fill('browser-test-password');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+}
+test.beforeEach(async ({ request }) => {
+  await request.post('http://127.0.0.1:4311/reset');
+});
+test('sign in, create and edit a workflow, trigger it, and inspect activity', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await login(page);
+  const cookie = (await page.context().cookies()).find((c) => c.name === 'flare_session');
+  expect(cookie?.httpOnly).toBe(true);
+  expect(cookie?.sameSite).toBe('Lax');
+  expect(await page.evaluate(() => document.cookie)).not.toContain('flare_session');
+  await page.getByRole('button', { name: 'Create workflow', exact: true }).click();
+  await page.getByLabel('Workflow name').fill('Welcome customers');
+  await page.getByRole('dialog').getByRole('button', { name: 'Create workflow' }).click();
+  await expect(page.getByRole('heading', { name: 'Welcome customers' })).toBeVisible();
+  await page.getByRole('button', { name: 'Add first step' }).click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: /^Email / })
+    .click();
+  await page.getByRole('tab', { name: 'Content', exact: true }).click();
+  const editor = page.getByRole('textbox', { name: 'Editor content', exact: true });
+  await editor.focus();
+  await page.keyboard.press('ControlOrMeta+A');
+  await page.keyboard.press('Backspace');
+  await page.keyboard.type('broken');
+  await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
+  await page.keyboard.press('ControlOrMeta+A');
+  await page.keyboard.press('Backspace');
+  await page.keyboard.insertText(
+    JSON.stringify({ subject: 'Welcome', body: '<p>Welcome aboard.</p>' }),
+  );
+  await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByText('Revision 2')).toBeVisible();
+  await page.screenshot({ path: 'test-results/workflow-canvas.png', fullPage: true });
+  await page.getByRole('button', { name: 'Test workflow' }).click();
+  await page.getByRole('button', { name: 'Run test' }).click();
+  await expect(page.getByRole('heading', { name: 'Trigger accepted' })).toBeVisible();
+  await page.getByRole('link', { name: 'accepted · 1 attempts' }).click();
+  await expect(page.getByRole('heading', { name: 'Run timeline' })).toBeVisible();
+  await expect(page.getByText('accepted', { exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+test('domain DNS records, verification contract, email submission and raw source', async ({
+  page,
+}) => {
+  await login(page);
+  await page.getByRole('link', { name: 'Domains', exact: true }).click();
+  await page.getByRole('button', { name: 'Add domain', exact: true }).click();
+  await page.getByLabel('Domain name').fill('notifications.example.test');
+  await page.getByRole('dialog').getByRole('button', { name: 'Add domain', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'DNS records' })).toBeVisible();
+  await expect(
+    page.getByText('flare._domainkey.notifications.example.test', { exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Verify DNS records' }).click();
+  await expect(page.locator('.page-heading').getByText('verified', { exact: true })).toBeVisible();
+  await page.screenshot({ path: 'test-results/domain-records.png', fullPage: true });
+  await page.getByRole('link', { name: 'Emails', exact: true }).click();
+  await page.getByRole('button', { name: 'Send email', exact: true }).click();
+  await page.getByLabel('From', { exact: true }).fill('hello@notifications.example.test');
+  await page.getByRole('textbox', { name: /^To / }).fill('recipient@example.test');
+  await page.getByLabel('Subject', { exact: true }).fill('Browser contract email');
+  await page.locator('textarea[name="body"]').fill('Hello from the browser contract test.');
+  await page.getByRole('dialog').getByRole('button', { name: 'Send email', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Browser contract email' })).toBeVisible();
+  await expect(page.getByText('smtp · accepted')).toBeVisible();
+  await page.getByRole('button', { name: 'Raw MIME' }).click();
+  await expect(page.getByText('Browser fixture MIME', { exact: false })).toBeVisible();
+});
+test('production guard, origin validation, tenant switch denial, responsive shell', async ({
+  page,
+}) => {
+  await login(page);
+  await page.getByLabel('Environment', { exact: true }).selectOption({ label: 'Production' });
+  await expect(page.getByRole('button', { name: 'Create workflow', exact: true })).toBeDisabled();
+  const forbidden = await page.request.post('/api/emails', {
+    headers: { Origin: 'https://untrusted.example' },
+    data: {},
+  });
+  expect(forbidden.status()).toBe(403);
+  expect((await page.request.get('/novu/v1/workflows')).status()).toBe(404);
+  expect(
+    (
+      await page.request.post('/novu/v1/inbox/session', {
+        headers: { Origin: 'http://localhost:4310' },
+        data: { applicationIdentifier: 'test', subscriber: { subscriberId: 'demo' } },
+      })
+    ).status(),
+  ).toBe(401);
+  const wrongTenant = await page.request.post('/api/session/switch', {
+    headers: { Origin: 'http://localhost:4310' },
+    data: {
+      orgId: '00000000-0000-4000-8000-000000000099',
+      environmentId: '00000000-0000-4000-8000-000000000003',
+    },
+  });
+  expect(wrongTenant.status()).toBe(403);
+  await page.setViewportSize({ width: 820, height: 1180 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: 'test-results/tablet-shell.png', fullPage: true });
+  await page.getByRole('button', { name: 'Toggle color theme' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+});

@@ -186,6 +186,14 @@ function getOidc() {
 
 @Controller('v1/auth')
 export class AuthController {
+  @Public() @Get('config') configuration() {
+    return {
+      oidc_url:
+        process.env.OIDC_ISSUER && process.env.OIDC_CLIENT_ID
+          ? `${process.env.PUBLIC_API_URL}/v1/auth/oidc`
+          : null,
+    };
+  }
   @Public() @Post('login') async login(@Body() body: unknown, @Req() req: Request) {
     await loginThrottle(req);
     const input = parse(loginSchema, body);
@@ -210,7 +218,9 @@ export class AuthController {
     sessionOnly(req);
     const [user] =
       await sql`select id, email, name, mfa_secret is not null as mfa_enabled from users where id = ${req.principal.actorId}`;
-    return { user, principal: req.principal };
+    const organizations =
+      await sql`select o.id,o.name,m.role,json_agg(json_build_object('id',e.id,'name',e.name) order by e.name) as environments from memberships m join organizations o on o.id=m.org_id join environments e on e.org_id=o.id where m.user_id=${req.principal.actorId} group by o.id,m.role order by o.created_at`;
+    return { user, principal: req.principal, organizations };
   }
   @Access('read') @Post('mfa/setup') async mfaSetup(
     @Req() req: AuthRequest,
