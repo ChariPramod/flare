@@ -230,7 +230,11 @@ it('reconciles native engine state after an ambiguous update response without re
     vi.fn(async (_url: string, init: RequestInit) => {
       if (init.method === 'POST' || init.method === 'PUT') {
         writes++;
-        remote = JSON.parse(String(init.body));
+        const written = JSON.parse(String(init.body));
+        remote = {
+          ...written,
+          preferences: { default: written.preferences.workflow, user: written.preferences.user },
+        };
         return new Response(JSON.stringify({ data: remote }), { status: 201 });
       }
       if (remote && failVerification) {

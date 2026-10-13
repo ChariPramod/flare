@@ -21,7 +21,6 @@ import { CreateWorkflowDto$outboundSchema } from '@novu/api/models/components/cr
 import { withTenant, toJson } from '@flare/db';
 import {
   canEditWorkflow,
-  channels,
   conditionMatches,
   contextMatches,
   contextSchema,
@@ -32,7 +31,7 @@ import {
 } from '@flare/shared';
 import type { Preferences, Workflow } from '@flare/shared';
 import { z } from 'zod';
-import { enginePayloadSchema, translationPayload, emptyDependencies } from '@flare/platform';
+import { publicationEngineBody, translationPayload, emptyDependencies } from '@flare/platform';
 import type { ContentDependencies } from '@flare/platform';
 import { Access } from './auth.js';
 import { parse, sql } from './context.js';
@@ -60,28 +59,7 @@ function engineDefinition(workflow: Workflow, deps: ContentDependencies = emptyD
   } catch {
     throw new BadRequestException('Invalid payload JSON Schema');
   }
-  return parse(CreateWorkflowDto$outboundSchema, {
-    name: workflow.name,
-    workflowId: workflow.workflowId,
-    description: workflow.description,
-    tags: workflow.tags,
-    severity: workflow.severity,
-    active: workflow.active,
-    steps: workflow.steps,
-    payloadSchema: enginePayloadSchema(workflow.payloadSchema, deps),
-    validatePayload: true,
-    preferences: {
-      workflow: {
-        channels: Object.fromEntries(
-          channels.map((channel) => [
-            channel,
-            { enabled: workflow.preferences[channel] ?? workflow.defaults[channel] ?? true },
-          ]),
-        ),
-      },
-      user: { all: { enabled: true, readOnly: workflow.critical } },
-    },
-  });
+  return parse(CreateWorkflowDto$outboundSchema, publicationEngineBody(workflow, deps));
 }
 const recipient = z.union([
   z.string().min(1).max(128),
@@ -410,9 +388,7 @@ export class WorkflowController {
     }
     await novu(req.principal, `/v2/subscribers/${encodeURIComponent(id)}/preferences`, 'PATCH', {
       workflowId: input.workflowId,
-      channels: Object.fromEntries(
-        Object.entries(input.channels).map(([key, enabled]) => [key, { enabled }]),
-      ),
+      channels: input.channels,
     });
     const preferences = {
       ...(subscriber.preferences as Record<string, Preferences>),

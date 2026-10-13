@@ -335,6 +335,7 @@ export function publicationEngineBody(workflow: Workflow, deps: ContentDependenc
     validatePayload: true,
     preferences: {
       workflow: {
+        all: { enabled: true, readOnly: workflow.critical },
         channels: Object.fromEntries(
           channels.map((c) => [
             c,
@@ -342,7 +343,7 @@ export function publicationEngineBody(workflow: Workflow, deps: ContentDependenc
           ]),
         ),
       },
-      user: { all: { enabled: true, readOnly: workflow.critical } },
+      user: { all: { enabled: true, readOnly: workflow.critical }, channels: {} },
     },
   };
 }
@@ -386,7 +387,14 @@ export async function syncPublicationWorkflow(
       );
     if (response.status === 204) return {};
     const result = (await response.json()) as { data?: unknown };
-    return result.data ?? result;
+    const value = (result.data ?? result) as Record<string, unknown>;
+    // Novu accepts preferences.workflow but returns that layer as preferences.default.
+    if (value.preferences && typeof value.preferences === 'object') {
+      const preferences = value.preferences as Record<string, unknown>;
+      if (Object.hasOwn(preferences, 'default'))
+        return { ...value, preferences: { ...preferences, workflow: preferences.default } };
+    }
+    return value;
   };
   const expected = publicationEngineBody(workflow, deps),
     before = await request(path, 'GET');
