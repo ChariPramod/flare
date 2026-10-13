@@ -654,13 +654,26 @@ const server = createServer(async (req, res) => {
           production: null,
         })),
         translations: [],
+        automations: [...automations.values()].map((a) => ({
+          identifier: a.identifier,
+          development: a,
+          production: null,
+          dependencies: { layouts: [], templates: [], translations: [] },
+        })),
       });
     if (path === 'publish') {
       const id = randomUUID(),
-        items = ['workflows', 'layouts', 'translations'].flatMap((kind) =>
+        items = ['workflows', 'layouts', 'translations', 'automations'].flatMap((kind) =>
           (body[kind] ?? []).map((identifier: string) => ({
             id: randomUUID(),
-            kind: kind === 'workflows' ? 'workflow' : kind === 'layouts' ? 'layout' : 'translation',
+            kind:
+              kind === 'workflows'
+                ? 'workflow'
+                : kind === 'layouts'
+                  ? 'layout'
+                  : kind === 'automations'
+                    ? 'automation'
+                    : 'translation',
             identifier,
             status: 'completed',
             attempts: 1,

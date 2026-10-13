@@ -42,7 +42,7 @@ beforeAll(async () => {
   sql.options.onnotice = () => undefined;
 }, 30000);
 beforeEach(async () => {
-  await sql`truncate publication_operations,workflows,layouts,email_templates cascade`;
+  await sql`truncate publication_operations,workflows,layouts,email_templates,automations,domains cascade`;
 });
 afterAll(async () => {
   await sql?.end();
@@ -314,4 +314,94 @@ it('accepts explicitly delegated publication keys while ordinary keys remain for
   await expect(sql`update api_keys set allow_publish=true where id=${key}`).rejects.toThrow(
     'immutable',
   );
+});
+
+it('publishes automation snapshots with pinned template versions and stable identifiers', async () => {
+  const template = randomUUID();
+  await sql`insert into email_templates(id,org_id,environment_id,identifier,name,current_version) values(${template},${org},${env},'sequence-email','Sequence email',2)`;
+  for (const version of [1, 2])
+    await sql`insert into template_versions(org_id,environment_id,template_id,version,subject,html) values(${org},${env},${template},${version},${`Version ${version}`},'<p>Sequence</p>{{{FLARE_UNSUBSCRIBE_URL}}}')`;
+  await sql`insert into domains(org_id,environment_id,name,status,dkim_selector,dkim_public,dkim_private_cipher) values(${org},${otherEnv},'sequence.test','verified','selector','public','cipher')`;
+  const definition = {
+    trigger: 'signup',
+    entry: 'first',
+    steps: [
+      {
+        id: 'first',
+        name: 'First',
+        type: 'send_email',
+        from: 'sender@sequence.test',
+        template_id: template,
+        template_version: 1,
+        next: 'second',
+      },
+      {
+        id: 'second',
+        name: 'Second',
+        type: 'send_email',
+        from: 'sender@sequence.test',
+        template_id: template,
+        template_version: 2,
+        next: null,
+      },
+    ],
+  };
+  await sql`insert into automations(org_id,environment_id,identifier,name,definition,enabled,revision) values(${org},${env},'sequence','Sequence',${sql.json(definition)},true,3)`;
+  const diff = await publicationDiff(sql, principal);
+  expect(diff.automations[0]!.dependencies.templates.map((v) => v.version)).toEqual([1, 2]);
+  const operation = await createPublication(sql, principal, {
+    automations: ['sequence'],
+    diff_token: diff.diff_token,
+  });
+  const [item] =
+    await sql`select snapshot from publication_items where operation_id=${operation.id}`;
+  expect(JSON.stringify(item!.snapshot)).not.toContain(template);
+  await sql`update automations set name='Changed after acceptance',revision=4 where environment_id=${env}`;
+  const engine = vi.fn();
+  await advancePublication(sql, operation.id, engine);
+  expect(engine).not.toHaveBeenCalled();
+  const [target] = await withTenant(
+    sql,
+    { ...principal, environmentId: otherEnv },
+    (tx) => tx`select * from automations where identifier='sequence'`,
+  );
+  expect(target).toMatchObject({ name: 'Sequence', revision: 3, enabled: true });
+  expect(target!.definition.steps[0].template_id).not.toBe(template);
+  expect(target!.definition.steps[1].template_id).toBe(target!.definition.steps[0].template_id);
+  expect(
+    target!.definition.steps.map((v: { template_version: number }) => v.template_version),
+  ).toEqual([1, 2]);
+  expect(
+    (await sql`select status from publication_operations where id=${operation.id}`)[0]!.status,
+  ).toBe('completed');
+  const again = await publicationDiff(sql, principal);
+  expect(again.automations[0]!.production!.templates).toHaveLength(2);
+});
+
+it('rolls back automation content when the Production sender domain is absent', async () => {
+  const template = randomUUID();
+  await sql`insert into email_templates(id,org_id,environment_id,identifier,name) values(${template},${org},${env},'missing-domain-email','Missing domain')`;
+  await sql`insert into template_versions(org_id,environment_id,template_id,version,subject,html) values(${org},${env},${template},1,'Subject','{{{FLARE_UNSUBSCRIBE_URL}}}')`;
+  await sql`insert into automations(org_id,environment_id,identifier,name,definition) values(${org},${env},'missing-domain','Missing domain',${sql.json({ trigger: 'signup', entry: 'send', steps: [{ id: 'send', name: 'Send', type: 'send_email', from: 'sender@absent.test', template_id: template, template_version: 1, next: null }] })})`;
+  const operation = await createPublication(sql, principal, { automations: ['missing-domain'] });
+  await expect(advancePublication(sql, operation.id, vi.fn())).rejects.toMatchObject({
+    status: 403,
+  });
+  expect(
+    await withTenant(
+      sql,
+      { ...principal, environmentId: otherEnv },
+      (tx) => tx`select * from automations`,
+    ),
+  ).toHaveLength(0);
+  expect(
+    await withTenant(
+      sql,
+      { ...principal, environmentId: otherEnv },
+      (tx) => tx`select * from email_templates`,
+    ),
+  ).toHaveLength(0);
+  expect(
+    (await sql`select status from publication_operations where id=${operation.id}`)[0]!.status,
+  ).toBe('failed');
 });

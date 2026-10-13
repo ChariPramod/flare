@@ -33148,6 +33148,13 @@
                         "additionalProperties": true
                       }
                     },
+                    "automations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
                     "layouts": {
                       "type": "array",
                       "items": {
@@ -33166,6 +33173,7 @@
                   "required": [
                     "diff_token",
                     "workflows",
+                    "automations",
                     "layouts",
                     "translations"
                   ],
@@ -33415,6 +33423,14 @@
                 "type": "object",
                 "properties": {
                   "workflows": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_-]{1,99}$"
+                    },
+                    "maxItems": 100
+                  },
+                  "automations": {
                     "type": "array",
                     "items": {
                       "type": "string",

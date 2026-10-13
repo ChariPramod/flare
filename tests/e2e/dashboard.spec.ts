@@ -253,6 +253,17 @@ test('automation sequence editor, test event, wait timeline and cancellation', a
   await page.getByRole('button', { name: 'Cancel run', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click();
   await expect(page.locator('.inline-tags .badge').first()).toHaveText('canceled');
+  await page.goto('/workflows');
+  await page.getByRole('button', { name: 'Publish changes', exact: true }).click();
+  await page
+    .getByRole('dialog')
+    .getByRole('checkbox', { name: /welcome-sequence/ })
+    .check();
+  await page.getByRole('button', { name: 'Publish 1 selected', exact: true }).click();
+  await expect(page.getByText('automation · welcome-sequence', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('All selected resources and engine updates are verified.', { exact: true }),
+  ).toBeVisible();
   expect(errors).toEqual([]);
 });
 

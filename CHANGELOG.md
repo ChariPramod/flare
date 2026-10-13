@@ -72,3 +72,8 @@
 - Added a separate pinned Compose CI job, disposable secrets/volumes, upgrade-from-62aaa57 and repeatable seed checks, local authoritative DNS verification, real Novu/SMTP/API scenarios, live browser flows and rate/burst/queue-loss load verification.
 - Fixed integration startup waiting on the completed MinIO initializer, relay private-key UID/GID access, and seed reconciliation of editable workflow source and the Novu demo subscriber.
 - Added deployment, consistent backup/restore, upgrade, recovery and evidence-ledger documentation. Container acceptance and external provider checks remain pending until their runs pass.
+
+### Automation publication
+
+- Added selected automation promotion to the existing durable publication operation, with stable template identifiers, immutable version snapshots, Production sender validation, atomic activation and preservation of existing runs.
+- Added migration, typed contract updates, snapshot/remapping/rollback tests and browser selection coverage. Automation execution remains in Flare; notification workflow publication still verifies Novu.

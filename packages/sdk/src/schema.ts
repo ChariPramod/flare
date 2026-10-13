@@ -18876,6 +18876,9 @@ export interface operations {
                         workflows: {
                             [key: string]: unknown;
                         }[];
+                        automations: {
+                            [key: string]: unknown;
+                        }[];
                         layouts: {
                             [key: string]: unknown;
                         }[];
@@ -19005,6 +19008,7 @@ export interface operations {
             content: {
                 "application/json": {
                     workflows?: string[];
+                    automations?: string[];
                     layouts?: string[];
                     translations?: string[];
                     diff_token?: string;

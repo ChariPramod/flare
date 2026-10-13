@@ -17,6 +17,7 @@ type DiffItem = {
 type Diff = {
   diff_token: string;
   workflows: DiffItem[];
+  automations: DiffItem[];
   layouts: DiffItem[];
   translations: DiffItem[];
 };
@@ -25,6 +26,7 @@ export function PublicationPanel({ open, close }: { open: boolean; close: () => 
     recent = useApi<{ id: string; status: string; created_at: string }[]>('publications', 5000);
   const [selected, setSelected] = useState<Record<string, string[]>>({
       workflows: [],
+      automations: [],
       layouts: [],
       translations: [],
     }),
@@ -52,7 +54,7 @@ export function PublicationPanel({ open, close }: { open: boolean; close: () => 
       ) : (
         <>
           <div className="stack">
-            {(['workflows', 'layouts', 'translations'] as const).map((kind) => (
+            {(['workflows', 'layouts', 'translations', 'automations'] as const).map((kind) => (
               <section key={kind}>
                 <h3>{kind[0]!.toUpperCase() + kind.slice(1)}</h3>
                 {(diff.data?.[kind] ?? [])

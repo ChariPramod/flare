@@ -110,6 +110,7 @@ const mappings = {
   PublicationController_diff: obj({
     diff_token: str,
     workflows: arr(json),
+    automations: arr(json),
     layouts: arr(json),
     translations: arr(json),
   }),

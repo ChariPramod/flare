@@ -5,6 +5,12 @@ import type { Tenant, Principal, Workflow } from '@flare/shared';
 import { MailError } from '@flare/mail';
 import { z } from 'zod';
 import {
+  automationSnapshot,
+  putAutomation,
+  putPublicationTemplate,
+} from './publication-automations.js';
+import type { AutomationContent } from './publication-automations.js';
+import {
   contentInput,
   emptyDependencies,
   enginePayloadSchema,
@@ -25,23 +31,30 @@ type WorkflowContent = {
   content_dependencies: ContentDependencies;
   revision: number;
 };
-type Snapshot = { workflows: WorkflowContent[]; layouts: Layout[]; translations: Dictionary[] };
+type Snapshot = {
+  workflows: WorkflowContent[];
+  layouts: Layout[];
+  translations: Dictionary[];
+  automations: AutomationContent[];
+};
 type WorkflowItem = WorkflowContent & { dictionaries: Dictionary[] };
 const name = z.string().regex(/^[a-z][a-z0-9_-]{1,99}$/);
 export const publicationSchema = z
   .object({
     workflows: z.array(name).max(100).default([]),
+    automations: z.array(name).max(100).default([]),
     layouts: z.array(name).max(100).default([]),
     translations: z.array(name).max(100).default([]),
     diff_token: z.string().length(64).optional(),
   })
   .strict()
   .refine(
-    (v) => v.workflows.length + v.layouts.length + v.translations.length > 0,
+    (v) => v.workflows.length + v.layouts.length + v.translations.length + v.automations.length > 0,
     'Select resources to publish',
   );
 async function snapshot(sql: Sql, tenant: Tenant): Promise<Snapshot> {
   return withTenant(sql, tenant, async (tx) => ({
+    automations: await automationSnapshot(tx),
     workflows:
       (await tx`select identifier,definition,coalesce(source_definition,definition) as source_definition,content_dependencies,revision from workflows order by identifier`) as unknown as WorkflowContent[],
     layouts:
@@ -91,6 +104,13 @@ export async function publicationDiff(sql: Sql, tenant: Tenant) {
         production: production.translations.filter((v) => v.workflow_identifier === identifier),
       }),
     ),
+    automations: development.automations.map((automation) => ({
+      identifier: automation.identifier,
+      development: automation,
+      production:
+        production.automations.find((v) => v.identifier === automation.identifier) ?? null,
+      dependencies: { layouts: [], translations: [], templates: automation.templates },
+    })),
     excluded: ['subscribers', 'integrations', 'topics', 'contacts', 'credentials'],
   };
 }
@@ -107,10 +127,15 @@ export async function createPublication(sql: Sql, principal: Principal, raw: unk
   for (const id of input.translations)
     if (!diff.production.workflows.some((v) => v.identifier === id)) workflowIds.add(id);
   const items: {
-    kind: 'layout' | 'workflow' | 'translation';
+    kind: 'layout' | 'workflow' | 'translation' | 'automation';
     identifier: string;
     snapshot: unknown;
   }[] = [];
+  for (const id of new Set(input.automations)) {
+    const automation = diff.development.automations.find((v) => v.identifier === id);
+    if (!automation) throw new MailError(404, `Automation ${id} not found`);
+    items.push({ kind: 'automation', identifier: id, snapshot: automation });
+  }
   for (const id of new Set(input.layouts)) {
     const layout = diff.development.layouts.find((v) => v.identifier === id);
     if (!layout) throw new MailError(404, `Layout ${id} not found`);
@@ -253,7 +278,9 @@ export async function advancePublication(sql: Sql, id: string, publish: PublishE
       )
         return;
       await tx`select set_config('flare.environment_id',${target.environmentId},true)`;
-      if (current.kind === 'layout') await putLayout(tx, target, current.snapshot as Layout);
+      if (current.kind === 'automation')
+        await putAutomation(tx, target, current.snapshot as AutomationContent);
+      else if (current.kind === 'layout') await putLayout(tx, target, current.snapshot as Layout);
       else if (current.kind === 'translation')
         await putDictionaries(tx, target, current.snapshot as Dictionary[]);
       else {
@@ -262,26 +289,10 @@ export async function advancePublication(sql: Sql, id: string, publish: PublishE
         for (const layout of deps.layouts) await putLayout(tx, target, layout);
         const source = structuredClone(snapshot.source_definition);
         for (const template of deps.templates) {
-          const [row] =
-            await tx`insert into email_templates(org_id,environment_id,name,identifier,current_version) values(${target.orgId},${target.environmentId},${template.name},${template.identifier},${template.version}) on conflict(org_id,environment_id,identifier) do update set current_version=greatest(email_templates.current_version,excluded.current_version) returning id`;
-          const [existing] =
-            await tx`select subject,html,text_body as text,variables from template_versions where template_id=${row!.id} and version=${template.version}`;
-          if (
-            existing &&
-            fingerprint(existing) !==
-              fingerprint({
-                subject: template.subject,
-                html: template.html,
-                text: template.text,
-                variables: template.variables ?? {},
-              })
-          )
-            throw new MailError(409, `Template version conflict: ${template.identifier}`);
-          if (!existing)
-            await tx`insert into template_versions(org_id,environment_id,template_id,version,subject,html,text_body,variables) values(${target.orgId},${target.environmentId},${row!.id},${template.version},${template.subject},${template.html},${template.text},${tx.json(toJson(template.variables ?? {}))})`;
+          const templateId = await putPublicationTemplate(tx, target, template);
           for (const step of source.steps)
             if (step.controlValues.templateIdentifier === template.identifier) {
-              step.controlValues.templateId = String(row!.id);
+              step.controlValues.templateId = templateId;
               delete step.controlValues.templateIdentifier;
             }
         }

@@ -28,4 +28,4 @@ Do not call acceptance complete unless every required row has evidence for the c
 | OIDC/MFA provider login                 | actual configured issuer                                  | Pending                                    |
 | backup restore drill                    | isolated restore plus application/provider reconciliation | Pending                                    |
 
-Docker is unavailable on the current Mac. CI can proceed independently; its results do not waive the requested local container run. Production automation promotion is still an implementation gap, tracked in PROGRESS.md.
+Docker is unavailable on the current Mac. CI can proceed independently; its results do not waive the requested local container run. Automation publication now has local snapshot/remapping/rollback tests; full-stack verification remains pending.
