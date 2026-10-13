@@ -89,7 +89,9 @@ export class IntegrationController {
           port: '2525',
           user: 'flare',
           password: relayKey.token,
-          secure: 'false',
+          secure: false,
+          requireTls: true,
+          ignoreTls: false,
           from: input.credentials.from ?? '',
           senderName: 'Flare',
         }

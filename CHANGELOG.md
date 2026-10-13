@@ -100,3 +100,5 @@
 - Fix workflow and subscriber preference contracts against the pinned Novu API; compare publication preferences using Novu’s native response field names.
 
 - Omit empty native trigger context without mutating accepted request snapshots or logical transaction identity; improve metadata-only acceptance failure diagnostics.
+
+- Allow only Flare’s internal relay in Novu’s outbound policy and explicitly require STARTTLS in generated SMTP credentials.

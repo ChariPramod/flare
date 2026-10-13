@@ -11,6 +11,8 @@ x-novu-env: &novu-env
   STORE_ENCRYPTION_KEY: ${STORE_ENCRYPTION_KEY:?Run make setup}
   NOVU_SECRET_KEY: ${NOVU_SECRET_KEY:?Run make setup}
   NODE_EXTRA_CA_CERTS: /opt/flare/relay.crt
+  # Exact trusted service name; keep the default private-network protections elsewhere.
+  NOVU_SAFE_OUTBOUND_ALLOW: flare-smtp-relay
   API_ROOT_URL: http://novu-api:3000
   FRONT_BASE_URL: http://localhost:4200
   IS_SELF_HOSTED: 'true'

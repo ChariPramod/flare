@@ -32,4 +32,10 @@ describe('deployment boundaries', () => {
     expect(compose.services['novu-redis']?.command).toContain('--appendonly');
     expect(compose.services['novu-api']?.environment?.REDIS_HOST).toBe('novu-redis');
   });
+  it('allows only the internal relay through the native outbound guard', () => {
+    for (const component of ['novu-api', 'novu-worker'])
+      expect(compose.services[component]?.environment?.NOVU_SAFE_OUTBOUND_ALLOW).toBe(
+        'flare-smtp-relay',
+      );
+  });
 });
