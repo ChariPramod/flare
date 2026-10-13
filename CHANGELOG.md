@@ -77,3 +77,8 @@
 
 - Added selected automation promotion to the existing durable publication operation, with stable template identifiers, immutable version snapshots, Production sender validation, atomic activation and preservation of existing runs.
 - Added migration, typed contract updates, snapshot/remapping/rollback tests and browser selection coverage. Automation execution remains in Flare; notification workflow publication still verifies Novu.
+
+### CI acceptance capacity
+
+- Real-service integration now passes all 11 PostgreSQL/Redis/MinIO/Mailpit tests in GitHub Actions.
+- Full-stack CI exhausted runner disk; free unused hosted-runner toolchains and remove only ephemeral CI build cache after images are created. Local Docker caches remain untouched.

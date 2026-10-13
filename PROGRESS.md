@@ -47,7 +47,7 @@ Updated: 2026-10-12, America/Los_Angeles.
 ## Known issues and verification limits
 
 - This host has no Docker runtime. Full-stack startup, official image pulls and container integration tests cannot be validated here yet.
-- Real PostgreSQL/Redis/MinIO/Mailpit integration harness is committed but unrun without Docker. Local PGlite tests use a single connection; real concurrency verification remains pending.
+- Real PostgreSQL/Redis/MinIO/Mailpit integration passed all 11 tests in GitHub Actions on 6dbf291, including concurrency, queue-loss recovery, inbound deduplication, publication recovery and atomic limits. The equivalent local Docker run remains pending.
 - Postal/SES identities require provider-side authorization. Native callback interoperability, real DNS verification, and Novu → STARTTLS relay delivery need live verification.
 
 - OIDC provider interoperability and full HTTP session flows still require live integration verification; passing unit/database tests do not certify those deployments.
@@ -68,3 +68,5 @@ Continue Phase 8 with container acceptance, load tests and operational documenta
 - First execution of the new full-stack harness is pending. The Mac still has no Docker. Real providers, public DNS, and OIDC remain open; full acceptance is not complete.
 
 - Closed the automation publication implementation gap: selected promotion now includes pinned template dependencies, remaps Production IDs, validates the Production sender and preserves existing runs. Two new database tests and the updated automation browser flow pass. Full-stack CI is running for the acceptance harness; no live-provider completion is claimed.
+
+- CI run `38350216440` passed standard checks and all 11 real PostgreSQL/Redis/MinIO/Mailpit integration tests. Full-stack acceptance exhausted runner disk before producing archived logs; CI now frees unused preinstalled toolchains and prunes only its ephemeral build cache after image creation. Retry pending.

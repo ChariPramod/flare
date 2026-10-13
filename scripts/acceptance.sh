@@ -19,7 +19,10 @@ cleanup() {
   exit "$result"
 }
 trap cleanup EXIT
-"${compose[@]}" up -d --build --wait --wait-timeout 600
+"${compose[@]}" build
+# This job owns an ephemeral GitHub-hosted Docker daemon. Never prune a local user's cache.
+if [[ "${GITHUB_ACTIONS:-false}" == true ]]; then docker builder prune --force; fi
+"${compose[@]}" up -d --wait --wait-timeout 600
 "${compose[@]}" exec -T flare-api node scripts/acceptance/upgrade.mjs
 "${compose[@]}" exec -T flare-api pnpm --filter @flare/db seed
 "${compose[@]}" exec -T flare-api node scripts/acceptance/bootstrap.mjs

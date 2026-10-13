@@ -46,9 +46,13 @@ jobs:
       - name: PostgreSQL, Redis, MinIO and Mailpit integration
         run: bash scripts/integration.sh
   acceptance:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
+      - name: Free unused toolchains on the disposable runner
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /usr/local/.ghcup /opt/ghc
+          df -h /
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
