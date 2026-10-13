@@ -34,7 +34,7 @@ import {
   Code2,
 } from 'lucide-react';
 import { api, useApi } from '../lib/api';
-import type { Session, WorkflowRow } from '../lib/api';
+import type { Session } from '../lib/api';
 import { Button, Badge, Modal, ErrorBox, Loading } from './ui';
 import {
   Workflows,
@@ -49,6 +49,7 @@ import {
 } from './pages';
 import { WebhooksPage, LogsPage, MetricsPage } from './operations-pages';
 import { AudiencePage, TemplatesPage, BroadcastsPage } from './audience-pages';
+import { PublicationPanel } from './publication-panel';
 import { LayoutsPage, TranslationsPage } from './content-pages';
 import { InboundPage } from './inbound-pages';
 import { AutomationsPage } from './automation-pages';
@@ -412,79 +413,7 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
             ))}
         </div>
       </Modal>
-      {publishing && <Publish open={publishing} close={() => setPublishing(false)} />}
+      {publishing && <PublicationPanel open={publishing} close={() => setPublishing(false)} />}
     </div>
-  );
-}
-function Publish({ open, close }: { open: boolean; close: () => void }) {
-  const diff = useApi<{
-    workflows: {
-      identifier: string;
-      development: WorkflowRow['definition'];
-      production: WorkflowRow['definition'] | null;
-    }[];
-  }>('publish/diff');
-  const [selected, setSelected] = useState<string[]>([]),
-    [error, setError] = useState<unknown>(),
-    [busy, setBusy] = useState(false);
-  const client = useQueryClient();
-  const changed =
-    diff.data?.workflows.filter(
-      (v) => JSON.stringify(v.development) !== JSON.stringify(v.production),
-    ) ?? [];
-  return (
-    <Modal
-      open={open}
-      onOpenChange={(v) => !v && close()}
-      title="Publish to Production"
-      description="Review and select the workflows to promote. Subscribers and integrations stay in their environment."
-    >
-      <ErrorBox error={error || diff.error} />
-      <div className="stack">
-        {changed.map((w) => (
-          <label className="selection-row" key={w.identifier}>
-            <input
-              type="checkbox"
-              checked={selected.includes(w.identifier)}
-              onChange={(e) =>
-                setSelected(
-                  e.target.checked
-                    ? [...selected, w.identifier]
-                    : selected.filter((v) => v !== w.identifier),
-                )
-              }
-            />
-            <span>
-              <strong>{w.development.name}</strong>
-              <small>{w.identifier}</small>
-            </span>
-            <Badge>{w.production ? 'updated' : 'new'}</Badge>
-          </label>
-        ))}
-        {!changed.length && !diff.isPending && (
-          <p className="muted">All workflows are up to date.</p>
-        )}
-      </div>
-      <div className="dialog-actions">
-        <Button onClick={close}>Cancel</Button>
-        <Button
-          className="primary"
-          disabled={!selected.length || busy}
-          onClick={() => {
-            setBusy(true);
-            void api('publish', 'POST', { workflows: selected })
-              .then(() => {
-                void client.invalidateQueries();
-                close();
-              }, setError)
-              .finally(() => setBusy(false));
-          }}
-        >
-          {busy
-            ? 'Publishing…'
-            : `Publish ${selected.length} workflow${selected.length === 1 ? '' : 's'}`}
-        </Button>
-      </div>
-    </Modal>
   );
 }

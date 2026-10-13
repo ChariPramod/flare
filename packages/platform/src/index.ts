@@ -9,3 +9,5 @@ export * from './automations.js';
 export * from './inbound.js';
 
 export * from './content.js';
+
+export * from './publication.js';

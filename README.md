@@ -57,3 +57,5 @@ See [contact automations](docs/automations.md) for durable sequence definitions,
 See [inbound receiving and forwarding](docs/inbound.md) for Postal routing, signature verification, MIME limits and retrieval.
 
 See [layouts and translations](docs/content.md) for version pinning, locale fallback, preview and workflow source compatibility.
+
+See [durable publication](docs/publication.md) for content dependencies, Production promotion and interrupted-operation recovery.

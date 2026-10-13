@@ -1,3 +1,4 @@
+import { PublicationController } from './publication.js';
 import { ContentController } from './content.js';
 import { InboundController } from './inbound.js';
 import 'reflect-metadata';
@@ -48,6 +49,7 @@ class HealthController {
     AutomationController,
     InboundController,
     ContentController,
+    PublicationController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },

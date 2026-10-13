@@ -37,6 +37,7 @@ const contacts = new Map<string, Record<string, unknown>>(),
   broadcasts = new Map<string, Record<string, unknown>>();
 const automations = new Map<string, Record<string, unknown>>(),
   automationRuns = new Map<string, Record<string, unknown>>();
+const publications = new Map<string, Record<string, unknown>>();
 const layouts = new Map<string, Record<string, unknown>>(),
   dictionaries = new Map<string, Record<string, string>>();
 const logId = '00000000-0000-4000-8000-000000000099';
@@ -53,6 +54,7 @@ const server = createServer(async (req, res) => {
     if (path === '/reset') {
       workflows.clear();
       layouts.clear();
+      publications.clear();
       dictionaries.clear();
       domains.clear();
       emails.clear();
@@ -609,7 +611,49 @@ const server = createServer(async (req, res) => {
         engine: [],
         basis: 'Browser contract fixture; production computes from stored delivery events.',
       });
-    if (path === 'publish/diff') return reply({ workflows: [] });
+    if (path === 'publish/diff')
+      return reply({
+        diff_token: 'a'.repeat(64),
+        workflows: [...workflows.values()].map((w) => ({
+          identifier: w.identifier,
+          development: w.definition,
+          production: null,
+          dependencies: { layouts: [], templates: [], translations: [] },
+        })),
+        layouts: [...layouts.values()].map((l) => ({
+          identifier: l.identifier,
+          development: l,
+          production: null,
+        })),
+        translations: [],
+      });
+    if (path === 'publish') {
+      const id = randomUUID(),
+        items = ['workflows', 'layouts', 'translations'].flatMap((kind) =>
+          (body[kind] ?? []).map((identifier: string) => ({
+            id: randomUUID(),
+            kind: kind === 'workflows' ? 'workflow' : kind === 'layouts' ? 'layout' : 'translation',
+            identifier,
+            status: 'completed',
+            attempts: 1,
+            error: null,
+          })),
+        );
+      publications.set(id, {
+        id,
+        status: 'completed',
+        items,
+        created_at: new Date().toISOString(),
+        error: null,
+      });
+      return reply({ id, status: 'pending' });
+    }
+    if (path === 'publications') return reply([...publications.values()]);
+    if (path.startsWith('publications/'))
+      return reply(
+        publications.get(path.split('/')[1]!) ?? {},
+        publications.has(path.split('/')[1]!) ? 200 : 404,
+      );
     return reply({ message: `No browser fixture for ${method} ${path}` }, 404);
   } catch (error) {
     reply({ message: error instanceof Error ? error.message : String(error) }, 400);

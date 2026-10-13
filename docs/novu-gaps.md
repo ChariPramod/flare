@@ -12,4 +12,4 @@ Reference: [Novu releases](https://github.com/novuhq/novu/releases/tag/v3.19.0),
 
 ## Flare implementations
 
-Topics and subscription conditions are stored and expanded in Flare before trigger dispatch. This supplies exact context matching and actor exclusion independently of community topics availability. Only selected workflows are currently promoted; layouts/translations promotion belongs to their later phase. Novu transport acceptance is labeled `accepted`, not delivered. Step execution and engine-derived timelines still need tests against running 3.19.0 images.
+Topics and subscription conditions are stored and expanded in Flare before trigger dispatch. This supplies exact context matching and actor exclusion independently of community topics availability. Flare promotes selected workflows, layouts and translations through durable publication operations with pinned dependencies and engine reconciliation. Novu transport acceptance is labeled `accepted`, not delivered. Step execution and engine-derived timelines still need tests against running 3.19.0 images.

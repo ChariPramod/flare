@@ -333,3 +333,22 @@ test('layout versions and translation dictionary import/export', async ({ page }
   await page.getByRole('button', { name: 'Export JSON', exact: true }).click();
   expect((await downloaded).suggestedFilename()).toBe('localized-welcome.fr_FR.json');
 });
+
+test('publication selection, durable status and completed resource timeline', async ({ page }) => {
+  await login(page);
+  await page.getByRole('button', { name: 'Create workflow', exact: true }).click();
+  await page.getByLabel('Workflow name').fill('Publish example');
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Create workflow', exact: true })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Publish example', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Publish changes', exact: true }).click();
+  await page.getByRole('dialog').getByRole('checkbox').first().check();
+  await page.getByRole('button', { name: 'Publish 1 selected', exact: true }).click();
+  await expect(
+    page.getByText('All selected resources and engine updates are verified.', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText('workflow · publish-example', { exact: true })).toBeVisible();
+  await page.screenshot({ path: 'test-results/publication-status.png', fullPage: true });
+});

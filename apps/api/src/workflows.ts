@@ -10,6 +10,7 @@ import {
   Query,
   Req,
   BadRequestException,
+  ServiceUnavailableException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
@@ -190,8 +191,10 @@ export class WorkflowController {
       input,
       async (tx) => {
         const [row] =
-          await tx`select definition,content_dependencies from workflows where identifier = ${input.name}`;
+          await tx`select definition,content_dependencies,publication_blocked from workflows where identifier = ${input.name} for share`;
         if (!row) throw new NotFoundException('Workflow not found');
+        if (row.publication_blocked)
+          throw new ServiceUnavailableException('Workflow publication is being reconciled');
         const workflow = row.definition as Workflow;
         if (!workflow.active) throw new BadRequestException('Workflow is inactive');
         const validator = ajv.compile(workflow.payloadSchema);

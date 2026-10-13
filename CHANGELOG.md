@@ -45,3 +45,9 @@
 - Added immutable layout wrappers and workflow locale dictionaries with source preservation, pinned dependencies, per-key default fallback and durable translated trigger payloads.
 - Added content editing/import/export, workflow layout/version selection and locale previews.
 - Hardened inbound/layout previews by rebuilding resource-free HTML before sandboxing; fixed dynamic iframe rendering and dictionary draft refresh behavior.
+
+## Publication checkpoint — 2026-10-12
+
+- Added resumable workflow/layout/translation promotion, automatic pinned dependencies, stale-diff detection and immutable-version conflict handling.
+- Added durable operation history and retry/replacement controls; Production triggers pause while an existing workflow is being reconciled with Novu.
+- Added publication recovery and browser coverage; actual pinned Novu interoperability remains a live acceptance requirement.

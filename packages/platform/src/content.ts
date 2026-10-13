@@ -65,6 +65,7 @@ export type ContentDependencies = {
     subject: string;
     html: string;
     text: string | null;
+    variables?: Record<string, unknown>;
   }[];
   translations: { key: string; slot: string; html: boolean }[];
 };
@@ -100,7 +101,8 @@ export async function compileWorkflowContent(tx: Transaction, _tenant: Tenant, i
         version: Number(template.version),
         subject: String(template.subject),
         html: String(template.html),
-        text: template.text === null ? null : String(template.text),
+        text: template.text_body === null ? null : String(template.text_body),
+        variables: template.variables,
       });
       delete controls.templateId;
       delete controls.templateVersion;

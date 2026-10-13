@@ -352,3 +352,78 @@ it('deduplicates concurrent inbound receipts and recovers parsing and forwarding
     await incoming.close();
   }
 });
+
+it('reconciles a publication after engine acceptance and Redis loss on real PostgreSQL', async () => {
+  const { createServer } = await import('node:http');
+  const { once } = await import('node:events');
+  const { encrypt, workflowSchema } = await import('@flare/shared');
+  const { createPublication, advancePublication, syncPublicationWorkflow, emptyDependencies } =
+    await import('@flare/platform');
+  const { startPublicationWorker } = await import('../src/publication.js');
+  const production = randomUUID(),
+    definition = workflowSchema.parse({
+      workflowId: 'publish-recovery',
+      name: 'Publish recovery',
+      steps: [],
+    });
+  await sql`insert into environments(id,org_id,name,novu_key_cipher) values(${production},${org},'Production',${encrypt('integration-novu-key', key, `${org}/${production}`)})`;
+  await sql`insert into workflows(org_id,environment_id,identifier,definition,source_definition) values(${org},${env},${definition.workflowId},${sql.json(definition)},${sql.json(definition)})`;
+  let remote: unknown = null,
+    writes = 0;
+  const server = createServer(async (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.method === 'GET') {
+      res.statusCode = remote ? 200 : 404;
+      res.end(JSON.stringify({ data: remote }));
+      return;
+    }
+    let body = '';
+    for await (const chunk of req) body += String(chunk);
+    remote = JSON.parse(body);
+    writes++;
+    res.end(JSON.stringify({ data: remote }));
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing listener');
+  const url = `http://127.0.0.1:${address.port}`,
+    oldUrl = process.env.NOVU_API_URL;
+  process.env.NOVU_API_URL = url;
+  const operation = await createPublication(
+    sql,
+    { ...principal, kind: 'session', role: 'owner' },
+    { workflows: [definition.workflowId] },
+  );
+  await expect(
+    advancePublication(sql, operation.id, async () => {
+      await syncPublicationWorkflow(url, 'integration-novu-key', definition, emptyDependencies());
+      throw new Error('simulated response loss');
+    }),
+  ).rejects.toThrow('simulated');
+  await sql`update publication_items set next_attempt_at=now() where operation_id=${operation.id}`;
+  await worker?.close();
+  worker = undefined;
+  await redis.flushdb();
+  const publications = startPublicationWorker(sql, redis, key);
+  try {
+    await publications.dispatch();
+    await expect
+      .poll(
+        async () =>
+          String(
+            (await sql`select status from publication_operations where id=${operation.id}`)[0]
+              ?.status,
+          ),
+        { timeout: 15000 },
+      )
+      .toBe('completed');
+    expect(writes).toBe(1);
+  } finally {
+    await publications.close();
+    server.close();
+    await once(server, 'close');
+    if (oldUrl === undefined) delete process.env.NOVU_API_URL;
+    else process.env.NOVU_API_URL = oldUrl;
+  }
+});

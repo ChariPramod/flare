@@ -18,4 +18,4 @@ POST `/v1/content/preview` accepts `{workflow,locale}` and returns compiled cont
 
 ## Verification
 
-Database tests cover immutable pins, source preservation, per-key/locale fallback, HTML escaping, reserved fields, strict user payload schemas and tenant isolation. Browser coverage exercises wrapper versions and dictionary import/export. Pinned Novu runtime interpolation is still a live acceptance requirement. Expanded content publication is the next checkpoint; the original workflow-only publisher does not yet promote dictionaries or layout resources.
+Database tests cover immutable pins, source preservation, per-key/locale fallback, HTML escaping, reserved fields, strict user payload schemas and tenant isolation. Browser coverage exercises wrapper versions and dictionary import/export. Pinned Novu runtime interpolation is still a live acceptance requirement. See [durable publication](publication.md) for selected-resource promotion, required dependencies, recovery and Production guards.

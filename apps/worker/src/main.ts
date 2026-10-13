@@ -1,3 +1,4 @@
+import { startPublicationWorker } from './publication.js';
 import { startInboundWorker } from './inbound.js';
 import { startAutomationWorker } from './automations.js';
 import { startBroadcastWorker } from './broadcasts.js';
@@ -13,6 +14,15 @@ const logger = createLogger('worker');
 const { client } = connectDatabase(config.DATABASE_URL);
 const redis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null });
 redis.on('error', (err: Error) => logger.error({ err }, 'Redis connection failed'));
+const publicationWorker = startPublicationWorker(client, redis, config.FLARE_ENCRYPTION_KEY);
+publicationWorker.worker.on('error', (err: Error) =>
+  logger.error({ err }, 'Publication worker error'),
+);
+const publicationDispatch = setInterval(() => {
+  void publicationWorker
+    .dispatch()
+    .catch((err: unknown) => logger.error({ err }, 'Publication dispatch failed'));
+}, 1000);
 const inboundWorker = startInboundWorker(
   client,
   redis,
@@ -104,6 +114,7 @@ for (const signal of ['SIGTERM', 'SIGINT'])
   process.once(signal, () => {
     clearInterval(dispatch);
     clearInterval(inboundDispatch);
+    clearInterval(publicationDispatch);
     clearInterval(mailDispatch);
     clearInterval(domainPolling);
     clearInterval(webhookDispatch);
@@ -114,6 +125,7 @@ for (const signal of ['SIGTERM', 'SIGINT'])
     void Promise.all([
       workflowWorker.close(),
       inboundWorker.close(),
+      publicationWorker.close(),
       mailWorker.close(),
       webhookWorker.close(),
       broadcastWorker.close(),
