@@ -32,6 +32,7 @@ import { z } from 'zod';
 import { Access } from './auth.js';
 import { parse, sql } from './context.js';
 import type { AuthRequest } from './context.js';
+import { outbox } from '@flare/mail';
 import { audit } from './identity.js';
 import { idempotent } from './idempotency.js';
 import { novu, novuKey } from './novu.js';
@@ -238,6 +239,11 @@ export class WorkflowController {
           const [run] =
             await tx`insert into workflow_runs (org_id,environment_id,workflow_id,transaction_id,parent_transaction_id,payload) values (${req.principal.orgId},${req.principal.environmentId},${input.name},${chunkTransaction},${transactionId},${tx.json(JSON.parse(JSON.stringify(payload)))}) returning id`;
           ids.push(String(run!.id));
+          await outbox(tx, req.principal, 'workflow.queued', {
+            id: run!.id,
+            workflowId: input.name,
+            transactionId: chunkTransaction,
+          });
         }
         return { ids, transactionId, status: 'queued', recipients: filtered.length };
       },
@@ -265,12 +271,17 @@ export class WorkflowController {
     @Req() req: AuthRequest,
     @Param('transactionId') id: string,
   ) {
-    const runs = await withTenant(
-      sql,
-      req.principal,
-      (tx) =>
-        tx`update workflow_runs set status='canceled',updated_at=now() where parent_transaction_id=${safeId(id)} and status in ('queued','accepted') returning transaction_id`,
-    );
+    const runs = await withTenant(sql, req.principal, async (tx) => {
+      const rows =
+        await tx`update workflow_runs set status='canceled',updated_at=now() where parent_transaction_id=${safeId(id)} and status in ('queued','accepted') returning id,workflow_id,transaction_id`;
+      for (const row of rows)
+        await outbox(tx, req.principal, 'workflow.canceled', {
+          id: row.id,
+          workflowId: row.workflow_id,
+          transactionId: row.transaction_id,
+        });
+      return rows;
+    });
     for (const run of runs)
       await novu(
         req.principal,

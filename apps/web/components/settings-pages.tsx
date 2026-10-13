@@ -254,6 +254,17 @@ function Environments({ bridgeOnly, canManage }: { bridgeOnly: boolean; canManag
               .finally(() => setBusy(false));
           }}
         >
+          <Field
+            label="Novu webhook signing secret"
+            hint="Optional. Verifies native engine callbacks; existing secret is retained when left blank."
+          >
+            <input
+              name="novu_webhook_secret"
+              type="password"
+              autoComplete="new-password"
+              placeholder="whsec_…"
+            />
+          </Field>
           <Field label="Novu API key">
             <input
               name="novu_api_key"

@@ -30,3 +30,5 @@ export const infrastructureConfig = z.object({
     .string()
     .refine((value) => Buffer.from(value, 'base64').length === 32, 'Must encode 32 bytes'),
 });
+export * from './webhooks.js';
+export * from './redaction.js';

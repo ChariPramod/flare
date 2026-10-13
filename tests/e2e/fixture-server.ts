@@ -1,6 +1,7 @@
 /** Isolated browser-contract fixture. Never imported by or deployed with a Flare service. */
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { webhookSecret } from '../../packages/shared/src/webhooks.js';
 import { workflowSchema } from '../../packages/shared/src/workflows.js';
 const org = '00000000-0000-4000-8000-000000000001',
   dev = '00000000-0000-4000-8000-000000000002',
@@ -27,6 +28,9 @@ const workflows = new Map<string, Record<string, unknown>>(),
   domains = new Map<string, Record<string, unknown>>(),
   emails = new Map<string, Record<string, unknown>>(),
   runs = new Map<string, Record<string, unknown>>();
+const endpoints = new Map<string, Record<string, unknown>>(),
+  deliveries = new Map<string, Record<string, unknown>>();
+const logId = '00000000-0000-4000-8000-000000000099';
 const server = createServer(async (req, res) => {
   const reply = (value: unknown, status = 200) => {
     res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -42,6 +46,8 @@ const server = createServer(async (req, res) => {
       domains.clear();
       emails.clear();
       runs.clear();
+      endpoints.clear();
+      deliveries.clear();
       return reply({ reset: true });
     }
     let text = '';
@@ -218,6 +224,101 @@ const server = createServer(async (req, res) => {
       if (method === 'PATCH') row.scheduled_at = body.scheduled_at;
       return reply(row);
     }
+    if (path === 'operation-alerts') return reply([]);
+    if (path === 'webhooks' && method === 'POST') {
+      const row = { id: randomUUID(), ...body, disabled_reason: null };
+      endpoints.set(row.id, row);
+      return reply({ ...row, secret: webhookSecret() }, 201);
+    }
+    if (path === 'webhooks') return reply([...endpoints.values()]);
+    if (path.startsWith('webhooks/')) {
+      const [, id, action] = path.split('/'),
+        row = endpoints.get(id!);
+      if (!row) return reply({ message: 'Not found' }, 404);
+      if (method === 'PATCH') Object.assign(row, body);
+      if (action === 'rotate') return reply({ secret: webhookSecret() });
+      if (action === 'test') {
+        const event = randomUUID(),
+          delivery = randomUUID(),
+          created_at = new Date().toISOString();
+        deliveries.set(delivery, {
+          id: delivery,
+          endpoint_id: id,
+          endpoint_name: row.name,
+          event_id: event,
+          type: 'webhook.test',
+          status: 'delivered',
+          attempts: 1,
+          replays: 0,
+          created_at,
+          payload: JSON.stringify({
+            id: event,
+            type: 'webhook.test',
+            data: { message: 'Browser fixture delivery' },
+          }),
+          history: [
+            {
+              ordinal: 1,
+              url: row.url,
+              status_code: 204,
+              response_excerpt: '',
+              latency_ms: 12,
+              started_at: created_at,
+            },
+          ],
+        });
+        return reply({ id: event });
+      }
+      return reply(row);
+    }
+    if (path === 'webhook-deliveries') return reply({ data: [...deliveries.values()] });
+    if (path.startsWith('webhook-deliveries/')) {
+      const [, id, action] = path.split('/'),
+        row = deliveries.get(id!);
+      if (!row) return reply({ message: 'Not found' }, 404);
+      if (action === 'replay') {
+        row.replays = Number(row.replays) + 1;
+        return reply({ id, replayed: true });
+      }
+      return reply({ ...row, attempts: row.history });
+    }
+    const log = {
+      id: logId,
+      method: 'POST',
+      path: '/v1/webhooks',
+      status: 201,
+      latency_ms: 9,
+      key_id: null,
+      created_at: new Date().toISOString(),
+      request_body: { body: { name: 'Production receiver' } },
+      response_body: { secret: '[REDACTED]' },
+    };
+    if (path === 'logs/export') {
+      res.writeHead(200, { 'Content-Type': 'text/csv' });
+      return res.end('id,method,path,status\r\n' + logId + ',POST,/v1/webhooks,201');
+    }
+    if (path === 'logs')
+      return reply({
+        data:
+          (!url.searchParams.get('status') || url.searchParams.get('status') === '201') &&
+          (!url.searchParams.get('q') || log.path.includes(url.searchParams.get('q')!))
+            ? [log]
+            : [],
+      });
+    if (path.startsWith('logs/')) return reply(log);
+    if (path === 'metrics')
+      return reply({
+        totals: { sent: 12, delivered: 11 },
+        rates: { bounce: 1 / 12, complaint: 0, open: 0.5, click: 0.25 },
+        alerts: ['Bounce rate exceeds 4%.'],
+        series: [
+          { day: '2026-10-11', sent: 5, delivered: 5 },
+          { day: '2026-10-12', sent: 7, delivered: 6 },
+        ],
+        workflows: [],
+        engine: [],
+        basis: 'Browser contract fixture; production computes from stored delivery events.',
+      });
     if (path === 'publish/diff') return reply({ workflows: [] });
     return reply({ message: `No browser fixture for ${method} ${path}` }, 404);
   } catch (error) {

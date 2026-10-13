@@ -14,6 +14,9 @@ import {
   Mail,
   Globe,
   ShieldBan,
+  Webhook,
+  FileText,
+  BarChart3,
   KeyRound,
   Settings,
   ChevronsUpDown,
@@ -43,6 +46,7 @@ import {
   Integrations,
   Suppressions,
 } from './pages';
+import { WebhooksPage, LogsPage, MetricsPage } from './operations-pages';
 import { WorkflowEditor } from './workflow-editor';
 const groups: { name: string; items: [string, string, typeof Workflow][] }[] = [
   {
@@ -61,6 +65,9 @@ const groups: { name: string; items: [string, string, typeof Workflow][] }[] = [
       ['emails', 'Emails', Mail],
       ['domains', 'Domains', Globe],
       ['suppressions', 'Suppressions', ShieldBan],
+      ['webhooks', 'Webhooks', Webhook],
+      ['logs', 'Logs', FileText],
+      ['metrics', 'Metrics', BarChart3],
     ],
   },
   {
@@ -154,6 +161,9 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
   else if (section === 'emails') content = <Emails id={id} writable={writable} />;
   else if (section === 'topics') content = <Topics writable={writable} />;
   else if (section === 'integrations') content = <Integrations writable={writable} />;
+  else if (section === 'webhooks') content = <WebhooksPage id={id} writable={writable} />;
+  else if (section === 'logs') content = <LogsPage id={id} />;
+  else if (section === 'metrics' || section === 'analytics') content = <MetricsPage />;
   else if (section === 'suppressions') content = <Suppressions writable={writable} />;
   else content = <SettingsPages section={section} session={data} />;
   return (

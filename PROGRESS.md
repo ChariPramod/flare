@@ -11,7 +11,7 @@ Updated: 2026-10-12, America/Los_Angeles.
 | 2 — Novu wrapper                                | Core API/queue checkpoint; live engine validation pending        |
 | 3 — Email pipeline                              | Local checkpoint passed; container/provider verification pending |
 | 4 — Dashboard                                   | Local checkpoint; live-stack acceptance pending                  |
-| 5 — Webhooks, logs, metrics                     | Pending                                                          |
+| 5 — Webhooks, logs, metrics                     | Local checkpoint; live engine/container tests pending            |
 | 6 — Audience, broadcasts, templates             | Pending                                                          |
 | 7 — Automations, inbound, translations, layouts | Pending                                                          |
 | 8 — Hardening, SDK, CLI                         | Pending                                                          |
@@ -27,6 +27,8 @@ Updated: 2026-10-12, America/Los_Angeles.
 - 2026-10-12: Implemented the shared API/SMTP email pipeline, scoped domain/key constraints, durable delivery claims, schedules, batch/idempotency, encrypted DKIM, MinIO attachments, SSRF-safe downloads, Postal/SES/SMTP transports, DNS polling/drift, signed tracking, native Postal/SNS verification, suppression, event outbox, and STARTTLS relay. Fixed a shared postgres.js codec conflict exposed by protocol tests. Lint/typecheck/build/gitleaks and 58 tests passed. Added a disposable container integration harness and provider setup guide.
 
 - 2026-10-12: Added the authenticated Next.js dashboard, HttpOnly session proxy, SSO/invitation/MFA views, organization/environment switching, React Flow workflow editor/test trace, subscriber preferences/Novu Inbox, topics/integrations, publication, domain/email/suppression screens, raw signed MIME, team/keys/settings and responsive light/dark layouts. Lint/typecheck/build/gitleaks, 58 backend tests and three Playwright browser contract flows pass; screenshots inspected. Standard Monaco textarea input avoids experimental EditContext corruption. The Inbox-only proxy preserves internal Novu administration. Full live-stack acceptance is separately configured and remains unrun.
+
+- 2026-10-12: Added durable Svix-compatible webhook fanout, atomic delivery claims, retries/recovery/replay, rotating secrets, endpoint alerts, native engine callback verification, redacted request logs/search/CSV/retention, and delivery metrics with dashboard screens. Lint/typecheck/build/gitleaks and 77 tests pass, including official Svix interoperability and loopback HTTP checks. All four Playwright browser contract flows pass; screenshots inspected. Real PostgreSQL/Redis webhook recovery tests are added but unrun without Docker.
 
 ## Known issues and verification limits
 
@@ -47,8 +49,10 @@ Updated: 2026-10-12, America/Los_Angeles.
 
 `e4fda65 feat(mail): add durable shared email pipeline and authenticated relay` — pending GitHub setup.
 
-`feat(dashboard): add authenticated notification and email control plane` — pending GitHub setup.
+`22f693a feat(dashboard): add authenticated notification and email control plane` — pending GitHub setup.
+
+`feat(operations): add durable webhooks, redacted logs and delivery metrics` — local checkpoint, pending GitHub setup.
 
 ## Next
 
-Implement durable outbound webhooks, redacted request logs, and metrics. Full Compose verification remains a prerequisite for production readiness.
+Implement audience contacts/properties/segments/preferences, versioned templates and throttled broadcasts. Full Compose verification remains a prerequisite for production readiness.

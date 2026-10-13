@@ -132,14 +132,17 @@ export function DataTable<T>({
   data,
   columns,
   searchPlaceholder = 'Search…',
+  paginate = true,
 }: {
   data: T[];
   columns: ColumnDef<T>[];
   searchPlaceholder?: string;
+  paginate?: boolean;
 }) {
   const [filter, setFilter] = useState('');
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
   useEffect(() => {
+    if (!paginate) return;
     const read = () => {
       const params = new URLSearchParams(location.search);
       setFilter(params.get('q') ?? '');
@@ -154,6 +157,7 @@ export function DataTable<T>({
     return () => window.removeEventListener('popstate', read);
   }, []);
   const syncUrl = (q: string, page: number) => {
+    if (!paginate) return;
     const url = new URL(location.href);
     if (q) url.searchParams.set('q', q);
     else url.searchParams.delete('q');
@@ -170,7 +174,7 @@ export function DataTable<T>({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    getPaginationRowModel: paginate ? getPaginationRowModel() : undefined,
   });
   return (
     <div className="table-panel">
@@ -225,31 +229,33 @@ export function DataTable<T>({
       {!table.getRowModel().rows.length && (
         <Empty title="Nothing here yet">Create your first item or adjust your search.</Empty>
       )}
-      <div className="table-pagination">
-        <span className="small muted">
-          Page {pagination.pageIndex + 1} of {Math.max(1, table.getPageCount())}
-        </span>
-        <Button
-          className="compact"
-          disabled={!table.getCanPreviousPage()}
-          onClick={() => {
-            table.previousPage();
-            syncUrl(filter, pagination.pageIndex - 1);
-          }}
-        >
-          Previous
-        </Button>
-        <Button
-          className="compact"
-          disabled={!table.getCanNextPage()}
-          onClick={() => {
-            table.nextPage();
-            syncUrl(filter, pagination.pageIndex + 1);
-          }}
-        >
-          Next
-        </Button>
-      </div>
+      {paginate && (
+        <div className="table-pagination">
+          <span className="small muted">
+            Page {pagination.pageIndex + 1} of {Math.max(1, table.getPageCount())}
+          </span>
+          <Button
+            className="compact"
+            disabled={!table.getCanPreviousPage()}
+            onClick={() => {
+              table.previousPage();
+              syncUrl(filter, pagination.pageIndex - 1);
+            }}
+          >
+            Previous
+          </Button>
+          <Button
+            className="compact"
+            disabled={!table.getCanNextPage()}
+            onClick={() => {
+              table.nextPage();
+              syncUrl(filter, pagination.pageIndex + 1);
+            }}
+          >
+            Next
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

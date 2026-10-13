@@ -47,3 +47,5 @@ See [email pipeline operations and API behavior](docs/email-pipeline.md) for tra
 ### Dashboard
 
 See [dashboard setup and browser tests](docs/dashboard.md) for authentication, Inbox endpoints, the workflow canvas and live acceptance configuration. Local browser contract tests run with `pnpm test:e2e`; `pnpm test:e2e:live` requires the real stack and a verified sender.
+
+See [webhooks, logs and metrics operations](docs/operations.md) for receiver signatures, retries and replay, internal destination policy, request-log retention and metric definitions.

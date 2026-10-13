@@ -1,5 +1,6 @@
 import { Queue, UnrecoverableError, Worker } from 'bullmq';
 import type { Sql } from '@flare/db';
+import { outbox } from '@flare/mail';
 import { decrypt } from '@flare/shared';
 import type { Redis } from 'ioredis';
 
@@ -42,8 +43,18 @@ export function startWorkflowWorker(sql: Sql, connection: Redis, encryptionKey: 
         throw new Error(`Novu unavailable (${response.status})`);
       }
       const result = await response.json();
-      const updated =
-        await sql`update workflow_runs set status='accepted',response=${sql.json(JSON.parse(JSON.stringify(result)))},updated_at=now() where id=${run.id} and status='queued' returning id`;
+      const updated = await sql.begin(async (tx) => {
+        const rows =
+          await tx`update workflow_runs set status='accepted',response=${tx.json(JSON.parse(JSON.stringify(result)))},updated_at=now() where id=${run.id} and status='queued' returning id`;
+        if (rows.length)
+          await outbox(
+            tx,
+            { orgId: String(run.org_id), environmentId: String(run.environment_id) },
+            'workflow.accepted',
+            { id: run.id, workflowId: run.workflow_id, transactionId: run.transaction_id },
+          );
+        return rows;
+      });
       if (!updated.length)
         await fetch(
           `${process.env.NOVU_API_URL ?? 'http://novu-api:3000'}/v1/events/trigger/${encodeURIComponent(String(run.transaction_id))}`,
@@ -62,9 +73,19 @@ export function startWorkflowWorker(sql: Sql, connection: Redis, encryptionKey: 
       job &&
       (job.attemptsMade >= Number(job.opts.attempts ?? 1) || error instanceof UnrecoverableError)
     )
-      void sql`update workflow_runs set status='failed',error=${error.message.slice(0, 500)},updated_at=now() where id=${job.data.id} and status='queued'`.catch(
-        () => undefined,
-      );
+      void sql
+        .begin(async (tx) => {
+          const [run] =
+            await tx`update workflow_runs set status='failed',error=${error.message.slice(0, 500)},updated_at=now() where id=${job.data.id} and status='queued' returning *`;
+          if (run)
+            await outbox(
+              tx,
+              { orgId: String(run.org_id), environmentId: String(run.environment_id) },
+              'workflow.failed',
+              { id: run.id, workflowId: run.workflow_id, error: run.error },
+            );
+        })
+        .catch(() => undefined);
   });
   let polling = false;
   const dispatch = async () => {

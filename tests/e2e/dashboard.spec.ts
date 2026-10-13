@@ -112,3 +112,58 @@ test('production guard, origin validation, tenant switch denial, responsive shel
   await page.getByRole('button', { name: 'Toggle color theme' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 });
+
+test('webhook creation, signed-event details, replay, redacted logs and metrics', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await login(page);
+  await page.getByRole('link', { name: 'Webhooks', exact: true }).click();
+  await page.getByRole('button', { name: 'Add endpoint' }).click();
+  await page.getByLabel('Endpoint name').fill('Production receiver');
+  await page.getByLabel('URL', { exact: true }).fill('https://receiver.example.test/events');
+  await page.getByRole('button', { name: 'Save endpoint' }).click();
+  await expect(page.getByRole('heading', { name: 'Save your signing secret' })).toBeVisible();
+  await expect(page.locator('.secret-box code')).toContainText('whsec_');
+  await page.getByRole('button', { name: 'I’ve saved it' }).click();
+  await page.getByRole('button', { name: 'Test', exact: true }).click();
+  await page.getByRole('link', { name: 'webhook.test', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Attempt history' })).toBeVisible();
+  await expect(page.getByText('Attempt 1 · 204')).toBeVisible();
+  await page.getByRole('button', { name: 'Replay', exact: true }).click();
+  const replayResponse = page.waitForResponse(
+    (r) => r.url().includes('/replay') && r.request().method() === 'POST',
+  );
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click();
+  expect((await replayResponse).ok()).toBe(true);
+  await expect(page.getByRole('dialog')).toBeHidden();
+  await page.screenshot({ path: 'test-results/webhook-delivery.png', fullPage: true });
+  await page.getByRole('link', { name: 'Logs', exact: true }).click();
+  await page.getByLabel('HTTP status code').fill('201');
+  await page.getByRole('button', { name: 'Apply filters', exact: true }).click();
+  await page.getByRole('link', { name: /\/v1\/webhooks/ }).click();
+  await expect(page.getByRole('heading', { name: 'Response body' })).toBeVisible();
+  await expect(page.locator('pre').filter({ hasText: 'REDACTED' })).toBeVisible();
+  await page.getByRole('link', { name: 'Logs', exact: true }).click();
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export CSV' }).click();
+  expect((await downloaded).suggestedFilename()).toBe('flare-requests.csv');
+  const initialMetrics = page.waitForResponse((r) => r.url().includes('/api/metrics?'));
+  await page.getByRole('link', { name: 'Metrics', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Delivery metrics' })).toBeVisible();
+  await expect(page.getByText('Bounce rate exceeds 4%.')).toBeVisible();
+  await expect(
+    page.locator('.metric-card').filter({ hasText: 'Accepted messages' }).locator('strong'),
+  ).toHaveText('12');
+  const first = await initialMetrics;
+  const firstTo = new URL(first.url()).searchParams.get('to');
+  const refreshed = page.waitForResponse(
+    (r) => r.url().includes('/api/metrics?') && new URL(r.url()).searchParams.get('to') !== firstTo,
+  );
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  expect((await refreshed).ok()).toBe(true);
+  await expect(page.locator('.recharts-area-curve').first()).toHaveAttribute('d', /^M/);
+  await page.screenshot({ path: 'test-results/delivery-metrics.png', fullPage: true });
+  expect(errors).toEqual([]);
+});

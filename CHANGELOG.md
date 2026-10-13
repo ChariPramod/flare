@@ -13,3 +13,10 @@
 - Added the authenticated responsive dashboard, workflow canvas, subscriber preferences and self-hosted Inbox, activity, domains and email composer/timelines/source, integrations, publishing, and account/team/key settings.
 - Added password/SSO/invitation flows using HttpOnly cookies and server-validated tenant switching. Monaco assets stay local.
 - Added browser contract tests and a separate live acceptance suite; container acceptance remains pending.
+
+## Operations checkpoint — 2026-10-12
+
+- Added durable webhook fanout/delivery, retry exhaustion alerts, replay, secret rotation, targeted test events, DNS-pinned HTTP dispatch and official Svix signature compatibility.
+- Added tenant request logs with bounded credential redaction, search/status filters, CSV export and retention, plus recipient delivery and human engagement metrics.
+- Added dashboard endpoint/attempt/log/metric screens, authenticated engine-event ingestion and workflow lifecycle outbox events.
+- Expanded database, HTTP and browser coverage; real Redis/PostgreSQL recovery coverage awaits Docker.

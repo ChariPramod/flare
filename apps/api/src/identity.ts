@@ -42,7 +42,7 @@ export class IdentityController {
       sql,
       req.principal,
       (tx) =>
-        tx`select id, name, novu_key_cipher is not null as novu_configured, novu_application_id, bridge_url from environments order by name`,
+        tx`select id, name, novu_key_cipher is not null as novu_configured, novu_application_id, bridge_url, novu_webhook_secret_cipher is not null as novu_webhook_configured from environments order by name`,
     );
   }
   @Access('manage_integrations') @Patch('environments/:id') async updateEnvironment(
@@ -56,6 +56,12 @@ export class IdentityController {
       z
         .object({
           novu_api_key: z.string().min(1).max(1024).optional(),
+          novu_webhook_secret: z
+            .string()
+            .regex(/^whsec_[A-Za-z0-9+/]+={0,2}$/)
+            .min(38)
+            .max(512)
+            .optional(),
           novu_application_id: z.string().min(1).max(128).optional(),
           bridge_url: z
             .string()
@@ -72,6 +78,8 @@ export class IdentityController {
       if (!environment) throw new NotFoundException();
       if (input.novu_api_key)
         await tx`update environments set novu_key_cipher = ${encrypt(input.novu_api_key, config.FLARE_ENCRYPTION_KEY, `${req.principal.orgId}/${id}`)} where id = ${id}`;
+      if (input.novu_webhook_secret)
+        await tx`update environments set novu_webhook_secret_cipher=${encrypt(input.novu_webhook_secret, config.FLARE_ENCRYPTION_KEY, `${req.principal.orgId}/${id}/novu-webhook`)} where id=${id}`;
       if (input.novu_application_id)
         await tx`update environments set novu_application_id = ${input.novu_application_id} where id = ${id}`;
       if (input.bridge_url !== undefined)

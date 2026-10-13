@@ -10,26 +10,28 @@
     "dev": "tsx watch src/main.ts"
   },
   "dependencies": {
-    "@flare/shared": "workspace:*",
     "@flare/db": "workspace:*",
+    "@flare/mail": "workspace:*",
+    "@flare/platform": "workspace:*",
+    "@flare/shared": "workspace:*",
     "@nestjs/common": "^11.1.8",
     "@nestjs/core": "^11.1.8",
     "@nestjs/platform-express": "^11.1.8",
     "@nestjs/swagger": "^11.2.1",
-    "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2",
-    "ioredis": "^5.8.2",
-    "helmet": "^8.1.0",
-    "jose": "^6.1.0",
-    "openid-client": "^6.8.1",
-    "zod": "^3.25.76",
     "@novu/api": "3.19.1",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "bullmq": "^5.61.2",
-    "@flare/mail": "workspace:*"
+    "helmet": "^8.1.0",
+    "ioredis": "^5.8.2",
+    "jose": "^6.1.0",
+    "openid-client": "^6.8.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/express": "^5.0.5"
+    "@types/express": "^5.0.5",
+    "express": "5.2.1"
   }
 }
