@@ -51,3 +51,5 @@ See [dashboard setup and browser tests](docs/dashboard.md) for authentication, I
 See [webhooks, logs and metrics operations](docs/operations.md) for receiver signatures, retries and replay, internal destination policy, request-log retention and metric definitions.
 
 See [audience, templates and broadcasts](docs/audience.md) for CSV mapping, preferences, immutable template versions, throttling and cancellation semantics.
+
+See [contact automations](docs/automations.md) for durable sequence definitions, event correlation, waits and recovery.

@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { webhookSecret } from '../../packages/shared/src/webhooks.js';
 import { renderText, templateSchema } from '../../packages/shared/src/audience.js';
+import { automationSchema } from '../../packages/shared/src/automations.js';
 import { workflowSchema } from '../../packages/shared/src/workflows.js';
 const org = '00000000-0000-4000-8000-000000000001',
   dev = '00000000-0000-4000-8000-000000000002',
@@ -34,6 +35,8 @@ const endpoints = new Map<string, Record<string, unknown>>(),
 const contacts = new Map<string, Record<string, unknown>>(),
   templates = new Map<string, Record<string, unknown>>(),
   broadcasts = new Map<string, Record<string, unknown>>();
+const automations = new Map<string, Record<string, unknown>>(),
+  automationRuns = new Map<string, Record<string, unknown>>();
 const logId = '00000000-0000-4000-8000-000000000099';
 const server = createServer(async (req, res) => {
   const reply = (value: unknown, status = 200) => {
@@ -55,6 +58,8 @@ const server = createServer(async (req, res) => {
       contacts.clear();
       templates.clear();
       broadcasts.clear();
+      automations.clear();
+      automationRuns.clear();
       return reply({ reset: true });
     }
     let text = '';
@@ -315,6 +320,70 @@ const server = createServer(async (req, res) => {
         row.status = 'scheduled';
         row.scheduled_at = new Date(Date.now() + 7200000).toISOString();
       }
+      if (action === 'cancel') row.status = 'canceled';
+      return reply(row);
+    }
+    if (path === 'automations' && method === 'POST') {
+      const row = {
+        id: randomUUID(),
+        ...body,
+        definition: automationSchema.parse(body.definition),
+        revision: 1,
+      };
+      automations.set(row.id, row);
+      return reply(row);
+    }
+    if (path === 'automations') return reply([...automations.values()]);
+    if (path.startsWith('automations/')) {
+      const row = automations.get(path.split('/')[1]!);
+      if (!row) return reply({ message: 'Not found' }, 404);
+      if (method === 'PUT')
+        Object.assign(row, body, {
+          definition: automationSchema.parse(body.definition),
+          revision: Number(row.revision) + 1,
+        });
+      return reply(row);
+    }
+    if (path === 'automation-events') {
+      for (const a of automations.values()) {
+        const definition = automationSchema.parse(a.definition);
+        if (!a.enabled || definition.trigger !== body.name) continue;
+        const step = definition.steps.find((s) => s.id === definition.entry)!;
+        const row = {
+          id: randomUUID(),
+          automation_id: a.id,
+          contact_id: body.contact_id,
+          email: 'test@example.test',
+          revision: a.revision,
+          current_step: step.id,
+          status: 'waiting',
+          next_step_at: new Date(Date.now() + 60000).toISOString(),
+          steps: [
+            {
+              step_id: step.id,
+              type: step.type,
+              status: 'waiting',
+              started_at: new Date().toISOString(),
+              wake_at: new Date(Date.now() + 60000).toISOString(),
+            },
+          ],
+        };
+        automationRuns.set(row.id, row);
+      }
+      return reply({ id: randomUUID() });
+    }
+    if (path === 'automation-runs')
+      return reply(
+        [...automationRuns.values()].filter(
+          (r) =>
+            !url.searchParams.get('automation_id') ||
+            r.automation_id === url.searchParams.get('automation_id'),
+        ),
+      );
+    if (path.startsWith('automation-runs/')) {
+      const [, id, action] = path.split('/'),
+        row = automationRuns.get(id!);
+      if (!row) return reply({ message: 'Not found' }, 404);
       if (action === 'cancel') row.status = 'canceled';
       return reply(row);
     }

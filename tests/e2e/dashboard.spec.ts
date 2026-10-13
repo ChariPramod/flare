@@ -227,3 +227,31 @@ test('audience preferences, template preview/version and scheduled broadcast can
   await expect(page.locator('.inline-tags .badge').first()).toHaveText('canceled');
   expect(errors).toEqual([]);
 });
+
+test('automation sequence editor, test event, wait timeline and cancellation', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await login(page);
+  await page.getByRole('link', { name: 'Automations', exact: true }).click();
+  await page.getByRole('button', { name: 'Create automation', exact: true }).click();
+  await page.getByLabel('Automation name', { exact: true }).fill('Welcome sequence');
+  await page.getByLabel('Automation identifier', { exact: true }).fill('welcome-sequence');
+  await page.getByRole('button', { name: 'Create sequence', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Welcome sequence' })).toBeVisible();
+  await page.getByLabel('Trigger event', { exact: true }).fill('signed_up');
+  await page.getByLabel('Wait seconds', { exact: true }).fill('120');
+  await page.getByRole('checkbox', { name: 'Enable for new events' }).check();
+  await page.getByRole('button', { name: 'Save sequence', exact: true }).click();
+  await expect(page.getByText(/Revision 2 · running sequences/)).toBeVisible();
+  await page.screenshot({ path: 'test-results/automation-editor.png', fullPage: true });
+  await page.getByRole('button', { name: 'Send test event', exact: true }).click();
+  await page.getByLabel('Contact ID', { exact: true }).fill('00000000-0000-4000-8000-000000000077');
+  await page.getByRole('button', { name: 'Submit event', exact: true }).click();
+  await page.getByRole('link', { name: 'test@example.test', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Automation run', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'waiting', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel run', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click();
+  await expect(page.locator('.inline-tags .badge').first()).toHaveText('canceled');
+  expect(errors).toEqual([]);
+});

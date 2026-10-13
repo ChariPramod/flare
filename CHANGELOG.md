@@ -27,3 +27,9 @@
 - Added immutable HTML template versions, safe variable rendering/previews, direct-email template references and saved workflow email expansion.
 - Added durable throttled broadcasts with frozen audiences, pinned content, sender scope checks, preference/suppression rechecks, cancellation, statistics and signed one-click unsubscribe headers.
 - Added audience/template/broadcast screens and database/browser regressions; real queue-loss recovery tests remain pending Docker.
+
+## Automations checkpoint — 2026-10-12
+
+- Added durable event-triggered contact sequences with immutable run snapshots, pinned email templates, wait/event/condition steps, retry history and cancellation.
+- Added a sequence canvas, per-step settings, real test-event submission and run/email timelines.
+- Added database and browser regressions plus a container recovery test; inbound, layouts, translations and publication remain in progress.

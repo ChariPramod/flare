@@ -233,3 +233,69 @@ it('serializes campaign chunks across PostgreSQL connections and resumes after q
     await campaigns.close();
   }
 });
+
+it('resumes an automation wait after Redis loss without duplicating its prior email', async () => {
+  const { createAutomationEvent, fanOutAutomationEvents, advanceAutomation } =
+    await import('@flare/platform');
+  const { startAutomationWorker } = await import('../src/automations.js');
+  const template = randomUUID(),
+    automation = randomUUID(),
+    contact = randomUUID();
+  await sql`insert into contacts(id,org_id,environment_id,email) values(${contact},${org},${env},'automation@example.net')`;
+  await sql`insert into email_templates(id,org_id,environment_id,name,identifier) values(${template},${org},${env},'Automation','automation')`;
+  await sql`insert into template_versions(org_id,environment_id,template_id,version,subject,html) values(${org},${env},${template},1,'Automation','<p>Welcome</p><a href="{{{FLARE_UNSUBSCRIBE_URL}}}">Preferences</a>')`;
+  const definition = {
+    trigger: 'signup',
+    entry: 'send',
+    steps: [
+      {
+        id: 'send',
+        name: 'Send',
+        type: 'send_email',
+        from: 'sender@example.com',
+        template_id: template,
+        template_version: 1,
+        next: 'wait',
+      },
+      { id: 'wait', name: 'Wait', type: 'wait', seconds: 3600, next: null },
+    ],
+  };
+  await sql`insert into automations(id,org_id,environment_id,identifier,name,definition,enabled) values(${automation},${org},${env},'recovery','Recovery',${sql.json(definition)},true)`;
+  await createAutomationEvent(sql, principal, {
+    contact_id: contact,
+    name: 'signup',
+    external_id: randomUUID(),
+  });
+  await fanOutAutomationEvents(sql);
+  const [run] = await sql`select id from automation_runs where automation_id=${automation}`;
+  const id = String(run!.id);
+  const options = {
+    sql,
+    store: objectStore(),
+    transports: configuredTransports(),
+    encryptionKey: key,
+    trackingKey: key,
+  };
+  await Promise.all(Array.from({ length: 8 }, () => advanceAutomation(options, id)));
+  await advanceAutomation(options, id);
+  expect(await sql`select id from messages where automation_run_id=${id}`).toHaveLength(1);
+  await worker?.close();
+  worker = undefined;
+  await redis.flushdb();
+  await sql`update automation_steps set wake_at=now() where run_id=${id} and step_id='wait'`;
+  await sql`update automation_runs set next_step_at=now() where id=${id}`;
+  const automations = startAutomationWorker(sql, redis, key, key);
+  try {
+    await automations.dispatch();
+    await expect
+      .poll(
+        async () =>
+          String((await sql`select status from automation_runs where id=${id}`)[0]?.status),
+        { timeout: 15000 },
+      )
+      .toBe('completed');
+    expect(await sql`select id from messages where automation_run_id=${id}`).toHaveLength(1);
+  } finally {
+    await automations.close();
+  }
+});

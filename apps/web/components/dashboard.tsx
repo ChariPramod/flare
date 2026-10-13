@@ -49,6 +49,7 @@ import {
 } from './pages';
 import { WebhooksPage, LogsPage, MetricsPage } from './operations-pages';
 import { AudiencePage, TemplatesPage, BroadcastsPage } from './audience-pages';
+import { AutomationsPage } from './automation-pages';
 import { WorkflowEditor } from './workflow-editor';
 const groups: { name: string; items: [string, string, typeof Workflow][] }[] = [
   {
@@ -68,6 +69,7 @@ const groups: { name: string; items: [string, string, typeof Workflow][] }[] = [
       ['domains', 'Domains', Globe],
       ['audience', 'Audience', Users],
       ['broadcasts', 'Broadcasts', Send],
+      ['automations', 'Automations', Workflow],
       ['templates', 'Templates', Code2],
       ['suppressions', 'Suppressions', ShieldBan],
       ['webhooks', 'Webhooks', Webhook],
@@ -167,6 +169,14 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
   else if (section === 'audience') content = <AudiencePage id={id} writable={writable} />;
   else if (section === 'templates')
     content = <TemplatesPage id={id} editable={writable && !data.principal.production} />;
+  else if (section === 'automations')
+    content = (
+      <AutomationsPage
+        id={id}
+        editable={writable && !data.principal.production}
+        writable={writable}
+      />
+    );
   else if (section === 'broadcasts') content = <BroadcastsPage id={id} writable={writable} />;
   else if (section === 'topics') content = <Topics writable={writable} />;
   else if (section === 'integrations') content = <Integrations writable={writable} />;

@@ -33,3 +33,5 @@ export const infrastructureConfig = z.object({
 export * from './webhooks.js';
 export * from './redaction.js';
 export * from './audience.js';
+
+export * from './automations.js';

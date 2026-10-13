@@ -2100,3 +2100,27 @@ dd {
     gap: 16px;
   }
 }
+
+.automation-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.automation-canvas {
+  height: 520px;
+  margin: 16px -12px;
+  background: var(--surface-secondary, #f8fafc);
+}
+.automation-editor {
+  margin-bottom: 24px;
+}
+@media (max-width: 900px) {
+  .automation-meta {
+    grid-template-columns: 1fr;
+  }
+}
+
+.automation-editor .actions {
+  flex-wrap: wrap;
+}

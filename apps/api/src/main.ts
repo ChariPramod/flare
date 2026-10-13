@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { AutomationController } from './automations.js';
 import { Controller, Get, Module, ServiceUnavailableException } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -42,6 +43,7 @@ class HealthController {
     OperationsController,
     MetricsController,
     AudienceController,
+    AutomationController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },

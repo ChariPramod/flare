@@ -13,7 +13,7 @@ Updated: 2026-10-12, America/Los_Angeles.
 | 4 — Dashboard                                   | Local checkpoint; live-stack acceptance pending                  |
 | 5 — Webhooks, logs, metrics                     | Local checkpoint; live engine/container tests pending            |
 | 6 — Audience, broadcasts, templates             | Local checkpoint; live recovery/provider tests pending           |
-| 7 — Automations, inbound, translations, layouts | Pending                                                          |
+| 7 — Automations, inbound, translations, layouts | Automations implemented; remaining modules in progress           |
 | 8 — Hardening, SDK, CLI                         | Pending                                                          |
 
 ## Checkpoint log
@@ -31,6 +31,8 @@ Updated: 2026-10-12, America/Los_Angeles.
 - 2026-10-12: Added durable Svix-compatible webhook fanout, atomic delivery claims, retries/recovery/replay, rotating secrets, endpoint alerts, native engine callback verification, redacted request logs/search/CSV/retention, and delivery metrics with dashboard screens. Lint/typecheck/build/gitleaks and 77 tests pass, including official Svix interoperability and loopback HTTP checks. All four Playwright browser contract flows pass; screenshots inspected. Real PostgreSQL/Redis webhook recovery tests are added but unrun without Docker.
 
 - 2026-10-12: Added tenant contacts, typed properties, atomic CSV mapping/import, dynamic segments, audience topics and signed public preferences; immutable HTML template versions and safe previews; throttled, recoverable broadcasts with pinned content, preference/suppression rechecks, cancellation and DKIM-signed one-click unsubscribe headers. Lint/typecheck/build/gitleaks and 89 tests pass. All five Playwright browser contract flows pass; preference/template screenshots inspected, and template cache freshness fixed after browser testing. Real queue-loss recovery coverage is added but awaits Docker.
+
+- 2026-10-12: Added durable contact automation definitions/events/runs, pinned email steps, persisted waits/event windows, bounded condition branches, cancellation, retries and per-step history; dashboard sequence editor and run timeline. Lint/typecheck/build/gitleaks and 94 tests pass; the new browser flow passes and its screenshot was inspected. Inbound, translations, layouts and expanded publication remain unfinished in Phase 7.
 
 ## Known issues and verification limits
 
@@ -54,6 +56,8 @@ Updated: 2026-10-12, America/Los_Angeles.
 `22f693a feat(dashboard): add authenticated notification and email control plane` — pending GitHub setup.
 
 `6ac7592 feat(operations): add durable webhooks, redacted logs and delivery metrics` — local checkpoint, pending GitHub setup.
+
+`a8c4d3c feat(audience): add contacts, versioned templates and durable broadcasts` — local checkpoint; automatic approval review blocked upload pending destination ownership/trust confirmation.
 
 ## Next
 

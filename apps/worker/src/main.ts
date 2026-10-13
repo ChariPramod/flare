@@ -1,3 +1,4 @@
+import { startAutomationWorker } from './automations.js';
 import { startBroadcastWorker } from './broadcasts.js';
 import { startWorkflowWorker } from './workflows.js';
 import { startWebhookWorker } from './webhooks.js';
@@ -24,6 +25,20 @@ const broadcastDispatch = setInterval(() => {
   void broadcastWorker
     .dispatch()
     .catch((err: unknown) => logger.error({ err }, 'Broadcast dispatch failed'));
+}, 1000);
+const automationWorker = startAutomationWorker(
+  client,
+  redis,
+  config.FLARE_ENCRYPTION_KEY,
+  config.JWT_SECRET,
+);
+automationWorker.worker.on('error', (err: Error) =>
+  logger.error({ err }, 'Automation worker error'),
+);
+const automationDispatch = setInterval(() => {
+  void automationWorker
+    .dispatch()
+    .catch((err: unknown) => logger.error({ err }, 'Automation dispatch failed'));
 }, 1000);
 const webhookWorker = startWebhookWorker(client, redis, config.FLARE_ENCRYPTION_KEY);
 webhookWorker.worker.on('error', (err: Error) => logger.error({ err }, 'Webhook worker error'));
@@ -80,12 +95,14 @@ for (const signal of ['SIGTERM', 'SIGINT'])
     clearInterval(webhookDispatch);
     clearInterval(retention);
     clearInterval(broadcastDispatch);
+    clearInterval(automationDispatch);
     server.close();
     void Promise.all([
       workflowWorker.close(),
       mailWorker.close(),
       webhookWorker.close(),
       broadcastWorker.close(),
+      automationWorker.close(),
     ])
       .then(() => Promise.all([client.end(), redis.quit()]))
       .then(() => process.exit(0));

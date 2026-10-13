@@ -42,7 +42,12 @@ export async function submitEmails(
     mode?: 'strict' | 'permissive';
     batch?: boolean;
     transaction?: Transaction;
-    campaign?: { broadcastId: string; contactId: string; topicId: string | null };
+    campaign?: {
+      broadcastId?: string;
+      automationRunId?: string;
+      contactId: string;
+      topicId: string | null;
+    };
     smtpHeaders?: { to: string[]; cc: string[] };
   } = {},
 ) {
@@ -155,7 +160,7 @@ export async function submitEmails(
           const stored = { ...input, attachments: metadata };
           await db`insert into messages(id,org_id,environment_id,domain_id,request,mime_key,envelope_from,status,scheduled_at) values(${id},${p.orgId},${p.environmentId},${domain.id},${db.json(toJson(stored))},${mimeKey},${address(input.from)},${status},${at})`;
           if (settings.campaign)
-            await db`update messages set broadcast_id=${settings.campaign.broadcastId},contact_id=${settings.campaign.contactId},audience_topic_id=${settings.campaign.topicId} where id=${id}`;
+            await db`update messages set broadcast_id=${settings.campaign.broadcastId ?? null},automation_run_id=${settings.campaign.automationRunId ?? null},contact_id=${settings.campaign.contactId},audience_topic_id=${settings.campaign.topicId} where id=${id}`;
           for (const recipient of envelope) {
             const recipientStatus = blocked.has(recipient.address) ? 'suppressed' : 'queued';
             await db`insert into message_recipients(org_id,environment_id,message_id,address,kind,status) values(${p.orgId},${p.environmentId},${id},${recipient.address},${recipient.kind},${recipientStatus})`;
