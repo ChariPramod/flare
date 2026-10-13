@@ -88,3 +88,9 @@
 - Confirmed Flare API/web/worker and the pinned Novu API reach healthy status in CI after the disk repair; both standard and 11 real-service integration checks pass.
 - Provision Postal's private config volume for its actual UID 999 and launch Flare services directly with Node, avoiding runtime package-manager cache permissions under the relay's mounted-key owner.
 - Stage only Git-visible source, exclude generated browser/cache artifacts from Docker contexts, add bounded redacted failure diagnostics, and cover promoted automation execution and SDK consumer types in acceptance.
+
+## Novu integration compatibility — 2026-10-12
+
+- Reuse the current environment’s preinstalled Novu Inbox instead of creating an invalid second provider; enforce unique engine mappings.
+- Use the native primary-selection endpoint for email/SMS and persist actual provider state.
+- CI now confirms healthy full-stack startup, baseline migration upgrade, login/bootstrap and local DNS verification. Further end-to-end scenarios remain pending.

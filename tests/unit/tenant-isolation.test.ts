@@ -27,6 +27,9 @@ async function scoped<T>(
 beforeAll(async () => {
   await db.exec(readFileSync('packages/db/migrations/0001_identity.sql', 'utf8'));
   await db.exec(readFileSync('packages/db/migrations/0002_workflows.sql', 'utf8'));
+  await db.exec(
+    readFileSync('packages/db/migrations/0014_integration_engine_identity.sql', 'utf8'),
+  );
   await db.query('insert into organizations (id,name,slug) values ($1,$2,$3),($4,$5,$6)', [
     orgA,
     'A',
@@ -87,4 +90,15 @@ describe('PostgreSQL tenant policies', () => {
       await db.exec('ROLLBACK');
     }
   });
+});
+
+it('prevents duplicate native integration mappings within an environment', async () => {
+  const insert = (env: string, identifier: string) =>
+    db.query(
+      "insert into integrations(org_id,environment_id,identifier,provider,channel,name,credential_cipher,novu_id) values($1,$2,$3,'novu','in_app','Inbox','encrypted','engine-inbox')",
+      [orgA, env, identifier],
+    );
+  await insert(devA, 'inbox');
+  await insert(prodA, 'inbox');
+  await expect(insert(devA, 'duplicate')).rejects.toThrow(/integrations_engine_identity/);
 });

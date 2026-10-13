@@ -6,7 +6,7 @@ Updated: 2026-10-12, America/Los_Angeles.
 
 | Phase                                           | Status                                                           |
 | ----------------------------------------------- | ---------------------------------------------------------------- |
-| 0 — Scaffold, CI, Compose                       | Local checkpoint passed; container startup unverified            |
+| 0 — Scaffold, CI, Compose                       | CI full stack starts; local Docker verification pending          |
 | 1 — Auth, RBAC, environments, keys              | Local checkpoint passed; live OIDC/container tests pending       |
 | 2 — Novu wrapper                                | Core API/queue checkpoint; live engine validation pending        |
 | 3 — Email pipeline                              | Local checkpoint passed; container/provider verification pending |
@@ -65,10 +65,12 @@ Continue Phase 8 with container acceptance, load tests and operational documenta
 
 - Tooling checkpoint `4fd2267` is pushed. Its standard CI job passed all checks and 11 browser flows. Official pinned MinIO sources built successfully; integration startup then failed because Compose waited on the completed initializer. The runner now initializes the bucket separately.
 - Added a disposable full-stack CI/local runner with isolated secrets/data, baseline upgrade and repeatable seed assertions, local authoritative DNS, pinned Novu and SMTP flows, signed inbound simulation, content publication, browser recovery and bounded load/queue-loss checks. Added operational deployment and restore documentation.
-- First execution of the new full-stack harness is pending. The Mac still has no Docker. Real providers, public DNS, and OIDC remain open; full acceptance is not complete.
+- The full-stack harness is running in CI; see the execution evidence below. The Mac still has no Docker. Real providers, public DNS, and OIDC remain open; full acceptance is not complete.
 
 - Closed the automation publication implementation gap: selected promotion now includes pinned template dependencies, remaps Production IDs, validates the Production sender and preserves existing runs. Two new database tests and the updated automation browser flow pass. Full-stack CI is running for the acceptance harness; no live-provider completion is claimed.
 
 - CI run `38350216440` passed standard checks and all 11 real PostgreSQL/Redis/MinIO/Mailpit integration tests. Full-stack acceptance exhausted runner disk before producing archived logs; CI now frees unused preinstalled toolchains and prunes only its ephemeral build cache after image creation. Retry pending.
 
 - CI run `38351015247` passed standard checks and all 11 integration tests. The disk repair allowed the full stack to build and Flare API/web/worker plus Novu API to become healthy. Startup then stopped at Postal initialization, with the relay restarting. Pinned Postal runs as UID 999 while host secrets are private to the setup user; a private owned config volume now bridges that boundary. Runtime Node launch removes the relay's package-manager cache dependency. Redacted diagnostic tests pass; next full-stack run remains pending.
+
+- CI run `38353054193` passed standard checks (including 11 browser flows), all 11 real-service tests, healthy startup of every pinned service, upgrade from `62aaa57`, authentication/bootstrap and local DNS verification. Setup then exposed Novu’s preinstalled Inbox singleton. Flare now adopts only the current environment’s Inbox, enforces unique local engine mappings, and uses Novu’s dedicated email/SMS primary endpoint. Lint, typecheck, 130 tests, production build and gitleaks pass, including five focused regressions. Continued live acceptance is pending.
