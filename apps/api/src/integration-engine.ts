@@ -47,7 +47,8 @@ export async function createEngineIntegration(
   const body = {
     identifier: input.identifier,
     name: input.name,
-    providerId: input.provider,
+    providerId:
+      input.channel === 'email' && input.provider === 'smtp' ? 'nodemailer' : input.provider,
     channel: input.channel,
     credentials: input.credentials,
     active: input.active,

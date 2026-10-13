@@ -19,7 +19,7 @@ Do not call acceptance complete unless every required row has evidence for the c
 | lint/types/unit/build/secrets           | checkpoint and CI check job                               | Passed on ce28096 in CI                                                   |
 | browser contract tests                  | 11 Playwright flows                                       | Passed on ce28096 in CI                                                   |
 | real-service integration                | CI integration job and same script locally                | 11 tests passed in CI on ce28096; local run pending                       |
-| pinned full stack                       | CI acceptance job and same script locally                 | Workflow creation passed on ce28096; empty trigger context repair pending |
+| pinned full stack                       | CI acceptance job and same script locally                 | Native trigger accepted on cddd8c7; SMTP provider mapping repair pending |
 | migration/seed/upgrade                  | acceptance scenario                                       | Baseline upgrade and repeated seed passed on 523ad87                      |
 | load/queue-loss recovery                | acceptance scenario                                       | Pending                                                                   |
 | public DNS and DKIM delivery            | controlled external sending/receiving domain              | Credentials/infrastructure pending                                        |

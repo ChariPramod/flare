@@ -102,3 +102,5 @@
 - Omit empty native trigger context without mutating accepted request snapshots or logical transaction identity; improve metadata-only acceptance failure diagnostics.
 
 - Allow only Flare’s internal relay in Novu’s outbound policy and explicitly require STARTTLS in generated SMTP credentials.
+
+- Map Flare’s public SMTP provider name to Novu’s native `nodemailer` handler.

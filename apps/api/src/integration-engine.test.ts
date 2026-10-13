@@ -12,6 +12,15 @@ const input = {
 };
 
 describe('pinned Novu integrations', () => {
+  it('maps the public SMTP integration to Novu’s native nodemailer handler', async () => {
+    const engine = vi.fn(async () => ({ _id: 'relay', active: true, primary: true }));
+    await createEngineIntegration(engine, { ...input, channel: 'email', provider: 'smtp' });
+    expect(engine).toHaveBeenCalledWith(
+      '/v1/integrations',
+      'POST',
+      expect.objectContaining({ providerId: 'nodemailer', channel: 'email' }),
+    );
+  });
   it('adopts only the current environment Inbox and never creates a second provider', async () => {
     const engine = vi.fn(async (path: string) => {
       if (path === '/v1/environments/me') return { _id: 'development' };
