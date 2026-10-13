@@ -114,3 +114,4 @@
 - Verified signed inbound receipt, SMTP authentication/Bcc handling, suppression and four live dashboard flows against the full stack in CI. The final workflow browser and load stages remain under verification.
 - Made the GitHub repository public at the owner's request and updated access instructions.
 - Added real-service coverage for four SMTP 421 rejections followed by one Mailpit submission, with ordered persisted attempts and provider acceptance kept separate from delivery.
+- All five live browser flows pass against the pinned stack. Use Compose's compatible `up --wait` restart path for the final queue-loss stage; the earlier `start --wait` flag was unsupported on the CI runner.

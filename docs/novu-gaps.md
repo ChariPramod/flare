@@ -6,7 +6,7 @@ Verified against the [v3.19.0 Compose source](https://github.com/novuhq/novu/blo
 
 Team limits, topics, layouts, translations and webhook availability require live community-image tests. Flare does not assume cloud-only features are available. Do not present untested edition behavior as a runtime finding.
 
-Flare owns team authorization, org/environment isolation, API key scoping, suppression, idempotency, retries/failover, email tracking and signed webhooks. The workflow editor must describe channel failure as continuing execution and action failure as canceling remaining steps. Provider acceptance must never be labeled delivery.
+Flare owns team authorization, org/environment isolation, API key scoping, suppression, idempotency, email transport retries/failover, workflow dispatch recovery, email tracking and signed webhooks. The workflow editor describes channel failure as continuing execution and action failure as canceling remaining steps. Provider acceptance must never be labeled delivery.
 
 Reference: [Novu releases](https://github.com/novuhq/novu/releases/tag/v3.19.0), [Postal container processes](https://docs.postalserver.io/other/containers/).
 
@@ -28,3 +28,9 @@ Topics and subscription conditions are stored and expanded in Flare before trigg
 | Delay, digest, throttle, HTTP request | Editor/API request support                                          | Execution, timing and failure behavior in the pinned engine                        |
 
 Flare emits HTML explicitly for its email editor and precompiled templates/layouts. Native block content remains available only when explicitly selected in API control values. Workflow preference requests use complete `all` and `channels` objects; Novu returns the default layer as `preferences.default`. Subscriber preference updates instead use boolean channel values. SDK contract tests and publication reconciliation tests cover these distinctions; runtime acceptance is tracked separately in [the evidence ledger](acceptance.md).
+
+## Retry ownership and failure semantics
+
+Flare retries definitively rejected workflow submissions and recovers its own queued work. Once Novu accepts a trigger, downstream SMS, push, chat and action execution belongs to Novu; Flare does not provide generic provider failover for those channels. Email accepted by the Flare relay enters the shared durable email pipeline and its configured transport priority.
+
+Pinned-source inspection confirms that [action failures halt the chain](https://github.com/novuhq/novu/blob/v3.19.0/apps/worker/src/app/shared/utils/should-halt-on-step-failure.ts); legacy `shouldStopOnFail` can also halt a channel. The [worker records failed sends and applies that continuation decision](https://github.com/novuhq/novu/blob/v3.19.0/apps/worker/src/app/workflow/usecases/run-job/run-job.usecase.ts). These source findings do not certify runtime timing or credentialed channel delivery. Ambiguous Flare submissions remain quarantined, regardless of provider retry capabilities.
