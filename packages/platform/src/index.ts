@@ -5,3 +5,5 @@ export * from './audience.js';
 export * from './broadcasts.js';
 
 export * from './automations.js';
+
+export * from './inbound.js';

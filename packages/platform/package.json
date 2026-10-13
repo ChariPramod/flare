@@ -14,10 +14,14 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@flare/shared": "workspace:*",
     "@flare/db": "workspace:*",
     "@flare/mail": "workspace:*",
+    "@flare/shared": "workspace:*",
+    "mailparser": "^3.9.38",
     "undici": "^7.16.0",
     "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/mailparser": "^3.9.0"
   }
 }

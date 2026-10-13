@@ -49,6 +49,7 @@ import {
 } from './pages';
 import { WebhooksPage, LogsPage, MetricsPage } from './operations-pages';
 import { AudiencePage, TemplatesPage, BroadcastsPage } from './audience-pages';
+import { InboundPage } from './inbound-pages';
 import { AutomationsPage } from './automation-pages';
 import { WorkflowEditor } from './workflow-editor';
 const groups: { name: string; items: [string, string, typeof Workflow][] }[] = [
@@ -71,6 +72,7 @@ const groups: { name: string; items: [string, string, typeof Workflow][] }[] = [
       ['broadcasts', 'Broadcasts', Send],
       ['automations', 'Automations', Workflow],
       ['templates', 'Templates', Code2],
+      ['inbound', 'Inbound', Mail],
       ['suppressions', 'Suppressions', ShieldBan],
       ['webhooks', 'Webhooks', Webhook],
       ['logs', 'Logs', FileText],
@@ -169,6 +171,7 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
   else if (section === 'audience') content = <AudiencePage id={id} writable={writable} />;
   else if (section === 'templates')
     content = <TemplatesPage id={id} editable={writable && !data.principal.production} />;
+  else if (section === 'inbound') content = <InboundPage id={id} writable={writable} />;
   else if (section === 'automations')
     content = (
       <AutomationsPage

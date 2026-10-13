@@ -53,3 +53,5 @@ See [webhooks, logs and metrics operations](docs/operations.md) for receiver sig
 See [audience, templates and broadcasts](docs/audience.md) for CSV mapping, preferences, immutable template versions, throttling and cancellation semantics.
 
 See [contact automations](docs/automations.md) for durable sequence definitions, event correlation, waits and recovery.
+
+See [inbound receiving and forwarding](docs/inbound.md) for Postal routing, signature verification, MIME limits and retrieval.

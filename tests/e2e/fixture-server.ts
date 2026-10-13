@@ -95,6 +95,39 @@ const server = createServer(async (req, res) => {
           production,
         },
       });
+    if (path === 'inbound' || path.startsWith('inbound/')) {
+      const inbound = {
+        id: '00000000-0000-4000-8000-000000000088',
+        domain_id: '00000000-0000-4000-8000-000000000087',
+        mail_from: 'sender@example.test',
+        rcpt_to: 'support@example.test',
+        subject: 'Support request',
+        status: 'parsed',
+        size: 250,
+        created_at: new Date().toISOString(),
+        headers: [{ key: 'subject', line: 'Subject: Support request' }],
+        attachments: [
+          { id: '00000000-0000-4000-8000-000000000089', filename: 'note.txt', size: 4 },
+        ],
+        attempts: [{ ordinal: 1, status: 'parsed' }],
+        forwards: [],
+        error: null,
+      };
+      if (path === 'inbound') return reply({ data: [inbound] });
+      if (path.endsWith('/body'))
+        return reply({
+          text: 'Please help with my account.',
+          html: '<h1>Support request</h1><img src="https://remote-image.invalid/pixel"><script>window.parent.compromised=true</script>',
+        });
+      if (path.endsWith('/raw') || path.includes('/attachments/'))
+        return reply({
+          filename: path.endsWith('/raw') ? 'support.eml' : 'note.txt',
+          content_type: 'text/plain',
+          content: Buffer.from('note').toString('base64'),
+        });
+      return reply(inbound);
+    }
+    if (path === 'forwarding-rules') return reply([]);
     if (path === 'auth/logout') return reply({ success: true });
     if (path === 'environments')
       return reply(

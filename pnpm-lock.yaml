@@ -303,12 +303,19 @@ importers:
       '@flare/shared':
         specifier: workspace:*
         version: link:../shared
+      mailparser:
+        specifier: ^3.9.38
+        version: 3.9.38
       undici:
         specifier: ^7.16.0
         version: 7.30.0
       zod:
         specifier: ^3.25.76
         version: 3.25.76
+    devDependencies:
+      '@types/mailparser':
+        specifier: ^3.9.0
+        version: 3.9.0
 
   packages/shared:
     dependencies:

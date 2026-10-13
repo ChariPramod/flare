@@ -33,3 +33,9 @@
 - Added durable event-triggered contact sequences with immutable run snapshots, pinned email templates, wait/event/condition steps, retry history and cancellation.
 - Added a sequence canvas, per-step settings, real test-event submission and run/email timelines.
 - Added database and browser regressions plus a container recovery test; inbound, layouts, translations and publication remain in progress.
+
+## Inbound checkpoint — 2026-10-12
+
+- Added native signed Postal receipt, raw MIME storage, bounded asynchronous parsing, attachment retrieval, tenant/domain isolation and metadata-only received events.
+- Added durable forwarding through the existing mail pipeline, Reply-To preservation, suppression and loop prevention, plus sandboxed message previews and downloads.
+- Added database/signature/browser regressions and real concurrent receipt/queue-loss recovery coverage; Docker and live Postal verification remain pending.

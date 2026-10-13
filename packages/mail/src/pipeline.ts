@@ -48,6 +48,7 @@ export async function submitEmails(
       contactId: string;
       topicId: string | null;
     };
+    forwardedId?: string;
     smtpHeaders?: { to: string[]; cc: string[] };
   } = {},
 ) {
@@ -118,10 +119,16 @@ export async function submitEmails(
           let mimeKey: string | null = null;
           const metadata: Record<string, unknown>[] = [];
           if (status !== 'suppressed') {
+            const mimeInput = settings.forwardedId
+              ? {
+                  ...input,
+                  headers: { ...input.headers, 'X-Flare-Forwarded': settings.forwardedId },
+                }
+              : input;
             const built = await buildMime(
               settings.smtpHeaders
-                ? { ...input, to: settings.smtpHeaders.to, cc: settings.smtpHeaders.cc }
-                : input,
+                ? { ...mimeInput, to: settings.smtpHeaders.to, cc: settings.smtpHeaders.cc }
+                : mimeInput,
               id,
               {
                 name: String(domain.name),

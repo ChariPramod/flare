@@ -50,9 +50,12 @@ export function requestLogs(req: Request, res: Response, next: NextFunction) {
       );
       return;
     }
+    const inbound = /^\/v1\/inbound(?:\/|$)/.test(req.path);
+    const loggedBody = inbound ? '[INBOUND CONTENT REDACTED]' : req.body;
+    if (inbound) responseBody = '[INBOUND CONTENT REDACTED]';
     const task = (async () => {
       try {
-        await sql`insert into request_logs(id,org_id,environment_id,key_id,actor_id,method,path,status,latency_ms,request_body,response_body) values(${id},${principal?.orgId ?? null},${principal?.environmentId ?? null},${principal?.kind === 'api_key' ? principal.actorId : null},${principal?.actorId ?? null},${req.method},${path},${status},${latency},${sql.json(toJson(redact({ body: req.body, query: req.query })))},${sql.json(toJson(redact(responseBody)))})`;
+        await sql`insert into request_logs(id,org_id,environment_id,key_id,actor_id,method,path,status,latency_ms,request_body,response_body) values(${id},${principal?.orgId ?? null},${principal?.environmentId ?? null},${principal?.kind === 'api_key' ? principal.actorId : null},${principal?.actorId ?? null},${req.method},${path},${status},${latency},${sql.json(toJson(redact({ body: loggedBody, query: req.query })))},${sql.json(toJson(redact(responseBody)))})`;
       } catch (error) {
         logger.error({ requestId: id, err: error }, 'Request log persistence failed');
       }

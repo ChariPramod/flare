@@ -34,6 +34,7 @@ it('records tenant, route, latency and redacted bodies for completed and rejecte
       .status(201)
       .json({ id: 'created', secret: 'signing-secret', data: { token: 'session-token' } });
   });
+  app.post('/v1/inbound/postal/:id', (req, res) => res.json({ html: 'private response body' }));
   app.get('/v1/private', (_req, res) => res.status(401).json({ message: 'Unauthorized' }));
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -47,8 +48,13 @@ it('records tenant, route, latency and redacted bodies for completed and rejecte
     expect(response.status).toBe(201);
     await response.text();
     await fetch(`${origin}/v1/private`).then((r) => r.text());
+    await fetch(`${origin}/v1/inbound/postal/domain`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'private encoded MIME' }),
+    }).then((r) => r.text());
     await flushRequestLogs();
-    expect(records).toHaveLength(2);
+    expect(records).toHaveLength(3);
     expect(records[0]!.slice(1, 8)).toEqual([
       'org',
       'env',
@@ -62,6 +68,8 @@ it('records tenant, route, latency and redacted bodies for completed and rejecte
     expect(records[1]!.slice(1, 4)).toEqual([null, null, null]);
     const stored = JSON.stringify(records);
     for (const secret of [
+      'private encoded MIME',
+      'private response body',
       'query-secret',
       'header-secret',
       'password-secret',

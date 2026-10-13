@@ -1,3 +1,4 @@
+import { InboundController } from './inbound.js';
 import 'reflect-metadata';
 import { AutomationController } from './automations.js';
 import { Controller, Get, Module, ServiceUnavailableException } from '@nestjs/common';
@@ -44,6 +45,7 @@ class HealthController {
     MetricsController,
     AudienceController,
     AutomationController,
+    InboundController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },

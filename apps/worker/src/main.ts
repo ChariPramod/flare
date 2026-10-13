@@ -1,3 +1,4 @@
+import { startInboundWorker } from './inbound.js';
 import { startAutomationWorker } from './automations.js';
 import { startBroadcastWorker } from './broadcasts.js';
 import { startWorkflowWorker } from './workflows.js';
@@ -12,6 +13,18 @@ const logger = createLogger('worker');
 const { client } = connectDatabase(config.DATABASE_URL);
 const redis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null });
 redis.on('error', (err: Error) => logger.error({ err }, 'Redis connection failed'));
+const inboundWorker = startInboundWorker(
+  client,
+  redis,
+  config.FLARE_ENCRYPTION_KEY,
+  config.JWT_SECRET,
+);
+inboundWorker.worker.on('error', (err: Error) => logger.error({ err }, 'Inbound worker error'));
+const inboundDispatch = setInterval(() => {
+  void inboundWorker
+    .dispatch()
+    .catch((err: unknown) => logger.error({ err }, 'Inbound dispatch failed'));
+}, 1000);
 const workflowWorker = startWorkflowWorker(client, redis, config.FLARE_ENCRYPTION_KEY);
 const mailWorker = startMailWorker(client, redis, config.FLARE_ENCRYPTION_KEY, config.JWT_SECRET);
 const broadcastWorker = startBroadcastWorker(
@@ -90,6 +103,7 @@ logger.info('Worker health server listening');
 for (const signal of ['SIGTERM', 'SIGINT'])
   process.once(signal, () => {
     clearInterval(dispatch);
+    clearInterval(inboundDispatch);
     clearInterval(mailDispatch);
     clearInterval(domainPolling);
     clearInterval(webhookDispatch);
@@ -99,6 +113,7 @@ for (const signal of ['SIGTERM', 'SIGINT'])
     server.close();
     void Promise.all([
       workflowWorker.close(),
+      inboundWorker.close(),
       mailWorker.close(),
       webhookWorker.close(),
       broadcastWorker.close(),

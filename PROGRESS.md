@@ -13,7 +13,7 @@ Updated: 2026-10-12, America/Los_Angeles.
 | 4 — Dashboard                                   | Local checkpoint; live-stack acceptance pending                  |
 | 5 — Webhooks, logs, metrics                     | Local checkpoint; live engine/container tests pending            |
 | 6 — Audience, broadcasts, templates             | Local checkpoint; live recovery/provider tests pending           |
-| 7 — Automations, inbound, translations, layouts | Automations implemented; remaining modules in progress           |
+| 7 — Automations, inbound, translations, layouts | Automations/inbound implemented; content/publication pending           |
 | 8 — Hardening, SDK, CLI                         | Pending                                                          |
 
 ## Checkpoint log
@@ -34,6 +34,8 @@ Updated: 2026-10-12, America/Los_Angeles.
 
 - 2026-10-12: Added durable contact automation definitions/events/runs, pinned email steps, persisted waits/event windows, bounded condition branches, cancellation, retries and per-step history; dashboard sequence editor and run timeline. Lint/typecheck/build/gitleaks and 94 tests pass; the new browser flow passes and its screenshot was inspected. Inbound, translations, layouts and expanded publication remain unfinished in Phase 7.
 
+- 2026-10-12: Added signed Postal inbound receipt, durable bounded MIME parsing, MinIO retrieval, forwarding with shared suppression/TLS/DKIM checks, domain-scoped access, redacted inbound logs and a sandboxed dashboard. Lint/typecheck/build/gitleaks and 99 backend tests pass; the inbound browser flow passes and its screenshot was inspected. Real concurrent receipt/Redis-loss recovery coverage is added but awaits Docker.
+
 ## Known issues and verification limits
 
 - This host has no Docker runtime. Full-stack startup, official image pulls and container integration tests cannot be validated here yet.
@@ -45,8 +47,8 @@ Updated: 2026-10-12, America/Los_Angeles.
 ## GitHub delivery
 
 - 2026-10-12: Authenticated GitHub CLI as `ChariPramod`, created [ChariPramod/flare](https://github.com/ChariPramod/flare) as a private repository, and pushed all eight completed checkpoints through `551f476` to `main` over HTTPS. Local `main` tracks `origin/main`. The eight-commit history passed gitleaks before upload.
-- The unfinished inbound MIME dependency preparation remains local and uncommitted; it is not included in the published checkpoint history.
+- Inbound MIME dependency preparation is now incorporated into the inbound implementation checkpoint.
 
 ## Next
 
-Continue Phase 7 with authenticated inbound receiving, translations/layouts and publication dependencies, then hardening and SDK/CLI. Durable automations are committed. Full Compose verification remains a prerequisite for production readiness.
+Continue Phase 7 with translations/layouts and publication dependencies, then hardening and SDK/CLI/MCP. Durable automations and inbound receiving are implemented. Full Compose verification remains a prerequisite for production readiness.

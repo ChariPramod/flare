@@ -299,3 +299,56 @@ it('resumes an automation wait after Redis loss without duplicating its prior em
     await automations.close();
   }
 });
+
+it('deduplicates concurrent inbound receipts and recovers parsing and forwarding after Redis loss', async () => {
+  const { acceptInbound, parseInbound } = await import('@flare/platform');
+  const { startInboundWorker } = await import('../src/inbound.js');
+  const [domain] =
+    await sql`update domains set receiving=true where org_id=${org} and environment_id=${env} returning id`;
+  const domainId = String(domain!.id),
+    store = objectStore();
+  await sql`insert into forwarding_rules(org_id,environment_id,domain_id,sender,destinations) values(${org},${env},${domainId},'forward@example.com',${sql.json(['inbound@example.net'])})`;
+  const raw = Buffer.from(
+    'From: sender@example.net\r\nTo: support@example.com\r\nSubject: Inbound recovery\r\n\r\nRecover this message.',
+  );
+  const body = {
+    id: 'recovery',
+    mail_from: 'sender@example.net',
+    rcpt_to: 'support@example.com',
+    message: raw.toString('base64'),
+    base64: true,
+    size: raw.length,
+  };
+  const accepted = await Promise.all(
+    Array.from({ length: 8 }, () => acceptInbound(sql, store, domainId, body)),
+  );
+  expect(new Set(accepted.map((v) => v.id)).size).toBe(1);
+  const id = accepted[0]!.id;
+  await Promise.all(Array.from({ length: 8 }, () => parseInbound(sql, store, id)));
+  expect(await sql`select id from inbound_attempts where inbound_id=${id}`).toHaveLength(1);
+  await worker?.close();
+  worker = undefined;
+  await redis.flushdb();
+  const incoming = startInboundWorker(sql, redis, key, key);
+  try {
+    await incoming.dispatch();
+    await expect
+      .poll(
+        async () =>
+          String(
+            (await sql`select status from inbound_forwards where inbound_id=${id}`)[0]?.status,
+          ),
+        { timeout: 15000 },
+      )
+      .toBe('submitted');
+    await incoming.dispatch();
+    expect(
+      await sql`select message_id from inbound_forwards where inbound_id=${id} and message_id is not null`,
+    ).toHaveLength(1);
+    expect(
+      await sql`select id from event_outbox where type='email.received' and data->>'inbound_id'=${id}`,
+    ).toHaveLength(1);
+  } finally {
+    await incoming.close();
+  }
+});

@@ -255,3 +255,31 @@ test('automation sequence editor, test event, wait timeline and cancellation', a
   await expect(page.locator('.inline-tags .badge').first()).toHaveText('canceled');
   expect(errors).toEqual([]);
 });
+
+test('inbound envelope, sandboxed HTML and authenticated downloads', async ({ page }) => {
+  await login(page);
+  await page.getByRole('link', { name: 'Inbound', exact: true }).click();
+  await page.getByRole('link', { name: 'Support request', exact: true }).click();
+  await expect(
+    page.getByText('sender@example.test → support@example.test', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText('Please help with my account.', { exact: true })).toBeVisible();
+  const outbound: string[] = [];
+  page.on('request', (r) => {
+    if (r.url().includes('remote-image.invalid')) outbound.push(r.url());
+  });
+  await page.getByRole('button', { name: 'html', exact: true }).click();
+  await expect(
+    page
+      .frameLocator('iframe[title="Received HTML preview"]')
+      .getByRole('heading', { name: 'Support request' }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => Object.prototype.hasOwnProperty.call(window, 'compromised')),
+  ).toBe(false);
+  expect(outbound).toEqual([]);
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'note.txt · 4 bytes', exact: true }).click();
+  expect((await downloaded).suggestedFilename()).toBe('note.txt');
+  await page.screenshot({ path: 'test-results/inbound-detail.png', fullPage: true });
+});
