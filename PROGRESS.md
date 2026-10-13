@@ -60,3 +60,9 @@ Updated: 2026-10-12, America/Los_Angeles.
 ## Next
 
 Continue Phase 8 with container acceptance, load tests and operational documentation. Inbound receiving, layouts, translations and selected content publication are implemented. Production automation promotion remains a separate integration gap. Full Compose verification remains a prerequisite for production readiness.
+
+## Acceptance checkpoint in progress
+
+- Tooling checkpoint `4fd2267` is pushed. Its standard CI job passed all checks and 11 browser flows. Official pinned MinIO sources built successfully; integration startup then failed because Compose waited on the completed initializer. The runner now initializes the bucket separately.
+- Added a disposable full-stack CI/local runner with isolated secrets/data, baseline upgrade and repeatable seed assertions, local authoritative DNS, pinned Novu and SMTP flows, signed inbound simulation, content publication, browser recovery and bounded load/queue-loss checks. Added operational deployment and restore documentation.
+- First execution of the new full-stack harness is pending. The Mac still has no Docker. Real providers, public DNS, OIDC, and production automation promotion remain open; full acceptance is not complete.

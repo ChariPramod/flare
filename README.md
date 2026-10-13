@@ -63,3 +63,5 @@ See [durable publication](docs/publication.md) for content dependencies, Product
 Operational rate limits, recovery, tracing and dashboards: [reliability guide](docs/reliability.md).
 
 Developer packages and the generated API contract: [SDK, CLI and MCP guide](docs/developer-tools.md).
+
+Full-stack verification and release operations: [acceptance evidence](docs/acceptance.md) and [deployment, backup/restore, upgrades and troubleshooting](docs/deployment.md). Run `bash scripts/acceptance.sh` on a Docker host; it creates and destroys only its own disposable project.

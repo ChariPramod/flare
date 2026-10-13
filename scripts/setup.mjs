@@ -4,6 +4,8 @@ import { execFileSync } from 'node:child_process';
 if (existsSync('.env')) throw new Error('.env already exists; setup will not overwrite secrets.');
 const secret = () => randomBytes(32).toString('hex');
 const values = {
+  FLARE_UID: String(process.getuid?.() ?? 1000),
+  FLARE_GID: String(process.getgid?.() ?? 1000),
   POSTGRES_PASSWORD: secret(),
   METRICS_TOKEN: secret(),
   JWT_SECRET: secret(),

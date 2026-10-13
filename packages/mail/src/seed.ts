@@ -45,6 +45,18 @@ try {
       'Content-Type': 'application/json',
     };
     const url = `${process.env.NOVU_API_URL ?? 'http://novu-api:3000'}/v2/workflows`;
+    const subscriber = await fetch(
+      `${process.env.NOVU_API_URL ?? 'http://novu-api:3000'}/v2/subscribers`,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(profile),
+        redirect: 'error',
+        signal: AbortSignal.timeout(15000),
+      },
+    );
+    if (!subscriber.ok)
+      throw new Error(`Novu demo subscriber upsert failed (${subscriber.status})`);
     const existing = await fetch(`${url}/welcome`, {
       headers,
       redirect: 'error',
@@ -64,9 +76,27 @@ try {
         signal: AbortSignal.timeout(15000),
       });
       if (!result.ok) throw new Error(`Novu demo workflow creation failed (${result.status})`);
-      await sql`insert into workflows(org_id,environment_id,identifier,definition) values(${org},${env},'welcome',${sql.json(toJson(definition))}) on conflict do nothing`;
     } else if (!existing.ok)
       throw new Error(`Novu demo workflow lookup failed (${existing.status})`);
+    const [local] =
+      await sql`select id from workflows where org_id=${org} and environment_id=${env} and identifier='welcome'`;
+    if (!local) {
+      if (existing.ok) {
+        const remote = (await existing.json()) as { data?: { name?: string; steps?: unknown[] } };
+        const candidate = (remote.data ?? remote) as { name?: string; steps?: unknown[] };
+        if (
+          candidate.name !== definition.name ||
+          !Array.isArray(candidate.steps) ||
+          candidate.steps.length !== 1 ||
+          (candidate.steps[0] as { controlValues?: { body?: string } }).controlValues?.body !==
+            definition.steps[0]!.controlValues.body
+        )
+          throw new Error(
+            'Existing Novu welcome workflow differs from the seed; reconcile it before seeding',
+          );
+      }
+      await sql`insert into workflows(org_id,environment_id,identifier,definition,source_definition) values(${org},${env},'welcome',${sql.json(toJson(definition))},${sql.json(toJson(definition))}) on conflict do nothing`;
+    }
   } else
     console.log(
       'Novu demo workflow pending: configure the Development Novu API key and run seed again.',

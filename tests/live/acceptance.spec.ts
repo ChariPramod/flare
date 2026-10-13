@@ -59,3 +59,86 @@ test('live domain DNS screen → email → provider acceptance', async ({ page }
   await page.getByRole('button', { name: 'Raw MIME' }).click();
   await expect(page.locator('pre').filter({ hasText: 'DKIM-Signature:' })).toBeVisible();
 });
+
+test('live inbound retrieval preserves envelope recipients and blocks remote HTML resources', async ({
+  page,
+}) => {
+  test.skip(!process.env.E2E_ACCEPTANCE, 'Requires disposable signed inbound fixture');
+  await page.goto('/login');
+  await page.getByLabel('Work email').fill(required('E2E_EMAIL'));
+  await page.getByLabel('Password', { exact: true }).fill(required('E2E_PASSWORD'));
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+  await page.goto(`/inbound/${required('E2E_INBOUND_ID')}`);
+  await expect(
+    page.getByText('incoming@example.net → hidden@acceptance.test', { exact: true }),
+  ).toBeVisible();
+  const remote: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('remote.invalid')) remote.push(request.url());
+  });
+  const dialogs: string[] = [];
+  page.on('dialog', async (dialog) => {
+    dialogs.push(dialog.message());
+    await dialog.dismiss();
+  });
+  await page.getByRole('button', { name: 'html', exact: true }).click();
+  await expect(
+    page.frameLocator('iframe[title="Received HTML preview"]').getByText('Safe incoming body'),
+  ).toBeVisible();
+  expect(remote).toEqual([]);
+  expect(dialogs).toEqual([]);
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download original MIME', exact: true }).click();
+  expect((await download).suggestedFilename()).toBe(`${required('E2E_INBOUND_ID')}.eml`);
+});
+
+test('live layout editing and selected publication reaches verified completion', async ({
+  page,
+}) => {
+  await page.goto('/login');
+  await page.getByLabel('Work email').fill(required('E2E_EMAIL'));
+  await page.getByLabel('Password', { exact: true }).fill(required('E2E_PASSWORD'));
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+  await page.goto('/layouts');
+  const name = `Browser layout ${Date.now()}`;
+  const identifier = `browser-layout-${Date.now()}`;
+  await page.getByRole('button', { name: 'Create layout', exact: true }).click();
+  await page.getByLabel('Layout name', { exact: true }).fill(name);
+  await page.getByLabel('Layout identifier', { exact: true }).fill(identifier);
+  await page.getByRole('button', { name: 'Create wrapper', exact: true }).click();
+  await page.getByRole('link', { name, exact: true }).click();
+  await page
+    .getByLabel('Layout HTML')
+    .fill('<main>{{{body}}}</main><footer>Acceptance footer</footer>');
+  await page.getByRole('button', { name: 'Save layout version', exact: true }).click();
+  await expect(page.getByText(`Version 2 · ${identifier}`, { exact: true })).toBeVisible();
+  await page.goto('/workflows');
+  await page.getByRole('button', { name: 'Publish changes', exact: true }).click();
+  await page
+    .getByRole('dialog')
+    .getByRole('checkbox', { name: new RegExp(identifier) })
+    .check();
+  await page.getByRole('button', { name: 'Publish 1 selected', exact: true }).click();
+  await expect(
+    page.getByText('All selected resources and engine updates are verified.', { exact: true }),
+  ).toBeVisible({ timeout: 120000 });
+});
+
+test('live dead-letter redrive preserves identity and reaches Novu', async ({ page }) => {
+  test.skip(!process.env.E2E_ACCEPTANCE, 'Requires disposable definitive failure fixture');
+  await page.goto('/login');
+  await page.getByLabel('Work email').fill(required('E2E_EMAIL'));
+  await page.getByLabel('Password', { exact: true }).fill(required('E2E_PASSWORD'));
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+  await page.goto('/dead-letters');
+  const label = `workflow · ${required('E2E_REDRIVE_ID').slice(0, 8)}`;
+  await page.getByRole('button', { name: label, exact: true }).click();
+  await expect(page.getByRole('dialog').getByText('Acceptance definitive failure')).toBeVisible();
+  await page.getByRole('button', { name: 'Redrive operation', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeHidden();
+  await page.goto(`/activity/${required('E2E_REDRIVE_ID')}`);
+  await expect(page.getByText('accepted', { exact: true })).toBeVisible({ timeout: 60000 });
+});

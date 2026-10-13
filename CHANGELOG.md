@@ -66,3 +66,9 @@
 - Added local package installation/consumer checks, webhook verification, typed errors, pagination and credential redaction. No registry packages were published.
 - Added immutable publication delegation for owner/admin-created keys, with a dashboard control; ordinary API keys remain unable to publish.
 - Replaced unavailable official MinIO binary images with builds from pinned official source commits, including the server security release. Actual container verification remains pending.
+
+### Acceptance harness and deployment operations
+
+- Added a separate pinned Compose CI job, disposable secrets/volumes, upgrade-from-62aaa57 and repeatable seed checks, local authoritative DNS verification, real Novu/SMTP/API scenarios, live browser flows and rate/burst/queue-loss load verification.
+- Fixed integration startup waiting on the completed MinIO initializer, relay private-key UID/GID access, and seed reconciliation of editable workflow source and the Novu demo subscriber.
+- Added deployment, consistent backup/restore, upgrade, recovery and evidence-ledger documentation. Container acceptance and external provider checks remain pending until their runs pass.

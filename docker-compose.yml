@@ -250,6 +250,7 @@ services:
       <<: *node-health
   flare-smtp-relay:
     <<: *flare
+    user: '${FLARE_UID:-1000}:${FLARE_GID:-1000}'
     environment:
       OTEL_SERVICE_NAME: flare-smtp-relay
     build:

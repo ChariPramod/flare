@@ -98,6 +98,9 @@ export interface DnsResolver {
   resolveCname(host: string): Promise<string[]>;
 }
 const resolver = new Resolver({ timeout: 5000, tries: 2 });
+// Operator-controlled resolvers support private authoritative DNS; never accept these from a request.
+if (process.env.DOMAIN_DNS_SERVERS)
+  resolver.setServers(process.env.DOMAIN_DNS_SERVERS.split(',').map((server) => server.trim()));
 const normalizeHost = (s: string) => s.toLowerCase().replace(/\.$/, '');
 const txtTags = (value: string) =>
   Object.fromEntries(

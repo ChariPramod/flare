@@ -1,0 +1,26 @@
+# Used only by scripts/acceptance.sh in a disposable generated directory.
+services:
+  acceptance-dns:
+    image: coredns/coredns:1.12.4
+    command: [-conf, /zones/Corefile]
+    volumes: ['./acceptance/dns:/zones:ro']
+    networks:
+      default: { ipv4_address: 172.29.250.53 }
+  flare-api:
+    # Test fixtures and zone files exist only in the disposable acceptance checkout.
+    volumes:
+      [
+        './acceptance:/acceptance',
+        './ops/postal/config/signing.key:/acceptance-postal.key:ro',
+        './ops/certs/relay.crt:/app/ops/certs/relay.crt:ro',
+      ]
+    user: root
+  flare-migrate:
+    volumes: ['./acceptance:/acceptance']
+  flare-worker:
+    depends_on:
+      acceptance-dns: { condition: service_started }
+networks:
+  default:
+    ipam:
+      config: [{ subnet: 172.29.250.0/24 }]
