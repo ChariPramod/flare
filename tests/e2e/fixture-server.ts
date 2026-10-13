@@ -37,6 +37,7 @@ const contacts = new Map<string, Record<string, unknown>>(),
   broadcasts = new Map<string, Record<string, unknown>>();
 const automations = new Map<string, Record<string, unknown>>(),
   automationRuns = new Map<string, Record<string, unknown>>();
+let deadLetterRedriven = false;
 const publications = new Map<string, Record<string, unknown>>();
 const layouts = new Map<string, Record<string, unknown>>(),
   dictionaries = new Map<string, Record<string, string>>();
@@ -55,6 +56,7 @@ const server = createServer(async (req, res) => {
       workflows.clear();
       layouts.clear();
       publications.clear();
+      deadLetterRedriven = false;
       dictionaries.clear();
       domains.clear();
       emails.clear();
@@ -146,6 +148,26 @@ const server = createServer(async (req, res) => {
         resolved: {},
         dependencies: { layouts: [], templates: [], translations: [] },
       });
+    if (path === 'dead-letters')
+      return reply({
+        data: deadLetterRedriven
+          ? []
+          : [
+              {
+                id: '00000000-0000-4000-8000-000000000088',
+                kind: 'workflow',
+                status: 'failed',
+                error: 'Novu is not configured',
+                attempts: 1,
+                created_at: new Date().toISOString(),
+                redrivable: true,
+              },
+            ],
+      });
+    if (path.startsWith('dead-letters/') && method === 'POST') {
+      deadLetterRedriven = true;
+      return reply({ status: 'pending' });
+    }
     if (path === 'inbound' || path.startsWith('inbound/')) {
       const inbound = {
         id: '00000000-0000-4000-8000-000000000088',

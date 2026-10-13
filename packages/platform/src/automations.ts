@@ -147,9 +147,9 @@ export async function advanceAutomation(options: PipelineOptions, id: string) {
     let messageId: string | null = null,
       matchedEvent: string | null = null;
     if (step.type === 'wait' || step.type === 'wait_for_event') {
-      if (!record) {
+      if (!record || (record.status === 'failed' && !record.wake_at)) {
         const seconds = step.type === 'wait' ? step.seconds : step.timeout_seconds;
-        await tx`insert into automation_steps(org_id,environment_id,run_id,step_id,type,status,wake_at) values(${tenant.orgId},${tenant.environmentId},${id},${step.id},${step.type},'waiting',now()+${seconds}*interval '1 second')`;
+        await tx`insert into automation_steps(org_id,environment_id,run_id,step_id,type,status,wake_at) values(${tenant.orgId},${tenant.environmentId},${id},${step.id},${step.type},'waiting',now()+${seconds}*interval '1 second') on conflict(org_id,environment_id,run_id,step_id) do update set status='waiting',wake_at=excluded.wake_at,error=null,finished_at=null`;
         await tx`update automation_runs set status='waiting',next_step_at=now()+${seconds}*interval '1 second',attempts=0,error=null,updated_at=now() where id=${id}`;
         return { status: 'waiting' };
       }
@@ -226,7 +226,7 @@ export async function advanceAutomation(options: PipelineOptions, id: string) {
       );
       messageId = result.data[0]!.id;
     }
-    await tx`insert into automation_steps(org_id,environment_id,run_id,step_id,type,status,message_id,matched_event_id,finished_at) values(${tenant.orgId},${tenant.environmentId},${id},${step.id},${step.type},'completed',${messageId},${matchedEvent},now()) on conflict(org_id,environment_id,run_id,step_id) do update set status='completed',finished_at=now(),matched_event_id=excluded.matched_event_id`;
+    await tx`insert into automation_steps(org_id,environment_id,run_id,step_id,type,status,message_id,matched_event_id,finished_at) values(${tenant.orgId},${tenant.environmentId},${id},${step.id},${step.type},'completed',${messageId},${matchedEvent},now()) on conflict(org_id,environment_id,run_id,step_id) do update set status='completed',finished_at=now(),message_id=excluded.message_id,matched_event_id=excluded.matched_event_id`;
     await tx`update automation_runs set current_step=${next},status=${next ? 'queued' : 'completed'},next_step_at=now(),attempts=0,error=null,updated_at=now(),finished_at=${next ? null : new Date()} where id=${id}`;
     if (!next) await outbox(tx, tenant, 'automation.completed', { id });
     return { status: next ? 'queued' : 'completed', messageId };

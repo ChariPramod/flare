@@ -1,3 +1,5 @@
+import { correlation } from '@flare/shared';
+import { cancelWorkflow } from '@flare/platform';
 import { createHmac, randomUUID } from 'node:crypto';
 import {
   Body,
@@ -264,7 +266,7 @@ export class WorkflowController {
               transactionId: chunkTransaction,
             };
             const [run] =
-              await tx`insert into workflow_runs (org_id,environment_id,workflow_id,transaction_id,parent_transaction_id,payload) values (${req.principal.orgId},${req.principal.environmentId},${input.name},${chunkTransaction},${transactionId},${tx.json(JSON.parse(JSON.stringify(payload)))}) returning id`;
+              await tx`insert into workflow_runs (org_id,environment_id,workflow_id,transaction_id,parent_transaction_id,payload,request_id,traceparent) values (${req.principal.orgId},${req.principal.environmentId},${input.name},${chunkTransaction},${transactionId},${tx.json(JSON.parse(JSON.stringify(payload)))},${correlation()?.requestId ?? null},${correlation()?.traceparent ?? null}) returning id`;
             ids.push(String(run!.id));
             await outbox(tx, req.principal, 'workflow.queued', {
               id: run!.id,
@@ -299,36 +301,22 @@ export class WorkflowController {
     @Req() req: AuthRequest,
     @Param('transactionId') id: string,
   ) {
-    const runs = await withTenant(sql, req.principal, async (tx) => {
-      const rows =
-        await tx`update workflow_runs set status='canceled',updated_at=now() where parent_transaction_id=${safeId(id)} and status in ('queued','accepted') returning id,workflow_id,transaction_id`;
-      for (const row of rows)
-        await outbox(tx, req.principal, 'workflow.canceled', {
-          id: row.id,
-          workflowId: row.workflow_id,
-          transactionId: row.transaction_id,
-        });
-      return rows;
-    });
-    for (const run of runs)
-      await novu(
-        req.principal,
-        `/v1/events/trigger/${encodeURIComponent(String(run.transaction_id))}`,
-        'DELETE',
-      );
+    const runs = await cancelWorkflow(sql, req.principal, safeId(id));
     return { transactionId: id, canceled: runs.length };
   }
   @Get('activity') async activity(@Req() req: AuthRequest, @Query() query: unknown) {
     const input = parse(
       listQuery.extend({
         workflow: z.string().optional(),
-        status: z.enum(['queued', 'accepted', 'failed', 'canceled']).optional(),
+        status: z
+          .enum(['queued', 'dispatching', 'accepted', 'failed', 'ambiguous', 'canceled'])
+          .optional(),
         transactionId: z.string().optional(),
       }),
       query,
     );
     return withTenant(sql, req.principal, async (tx) => ({
-      data: await tx`select id,workflow_id,transaction_id,status,attempts,error,created_at,updated_at from workflow_runs where (${input.workflow ?? null}::text is null or workflow_id=${input.workflow ?? null}) and (${input.status ?? null}::text is null or status=${input.status ?? null}) and (${input.transactionId ?? null}::text is null or parent_transaction_id=${input.transactionId ?? null}) order by created_at desc limit ${input.limit} offset ${(input.page - 1) * input.limit}`,
+      data: await tx`select id,workflow_id,transaction_id,status,attempts,error,cancellation_status,created_at,updated_at from workflow_runs where (${input.workflow ?? null}::text is null or workflow_id=${input.workflow ?? null}) and (${input.status ?? null}::text is null or status=${input.status ?? null}) and (${input.transactionId ?? null}::text is null or parent_transaction_id=${input.transactionId ?? null}) order by created_at desc limit ${input.limit} offset ${(input.page - 1) * input.limit}`,
       page: input.page,
       limit: input.limit,
     }));

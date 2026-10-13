@@ -93,7 +93,7 @@ export class IdentityController {
       sql,
       req.principal,
       (tx) =>
-        tx`select id, name, prefix, permission, domain_id, created_at, last_used_at, revoked_at from api_keys order by created_at desc`,
+        tx`select id, name, prefix, permission, domain_id, rate_limit, rate_burst, created_at, last_used_at, revoked_at from api_keys order by created_at desc`,
     );
   }
   @Access('manage_keys') @Post('api-keys') async createKey(
@@ -106,6 +106,8 @@ export class IdentityController {
           name: z.string().trim().min(1).max(120),
           permission: z.enum(['full_access', 'sending_access']),
           domain_id: idSchema.optional(),
+          rate_limit: z.number().int().min(1).max(10000).optional(),
+          rate_burst: z.number().int().min(1).max(10000).optional(),
         })
         .strict()
         .refine(
@@ -121,7 +123,7 @@ export class IdentityController {
         if (!domain) throw new BadRequestException('Domain does not exist in this environment');
       }
       const [row] =
-        await tx`insert into api_keys (org_id, environment_id, name, token_hash, prefix, permission, domain_id, created_by) values (${req.principal.orgId}, ${req.principal.environmentId}, ${input.name}, ${key.hash}, ${key.prefix}, ${input.permission}, ${input.domain_id ?? null}, ${req.principal.actorId}) returning id, name, prefix, permission, domain_id, created_at`;
+        await tx`insert into api_keys (org_id, environment_id, name, token_hash, prefix, permission, domain_id, created_by, rate_limit, rate_burst) values (${req.principal.orgId}, ${req.principal.environmentId}, ${input.name}, ${key.hash}, ${key.prefix}, ${input.permission}, ${input.domain_id ?? null}, ${req.principal.actorId}, ${input.rate_limit ?? null}, ${input.rate_burst ?? null}) returning id, name, prefix, permission, domain_id, rate_limit, rate_burst, created_at`;
       await audit(tx, req.principal, 'api_key.created', String(row!.id));
       return { ...row, token: key.token };
     });

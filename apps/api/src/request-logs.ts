@@ -1,6 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
-import { redact, redactText } from '@flare/shared';
+import {
+  redact,
+  redactText,
+  withRequest,
+  correlation,
+  requestDuration,
+  requestSpan,
+} from '@flare/shared';
 import { toJson } from '@flare/db';
 import { sql, logger } from './context.js';
 import type { AuthRequest } from './context.js';
@@ -8,6 +15,15 @@ const pending = new Set<Promise<void>>();
 export function requestLogs(req: Request, res: Response, next: NextFunction) {
   const id = randomUUID(),
     start = performance.now();
+  let parent = '';
+  const span = withRequest(id, req.headers.traceparent, () => {
+    parent = correlation()!.traceparent;
+    return requestSpan();
+  });
+  const sc = span.spanContext();
+  if (sc.traceId !== '00000000000000000000000000000000')
+    parent = `00-${sc.traceId}-${sc.spanId}-0${sc.traceFlags & 1}`;
+  const traceId = parent.split('-')[1]!;
   let responseBody: unknown;
   res.setHeader('x-request-id', id);
   const json = res.json.bind(res),
@@ -31,9 +47,23 @@ export function requestLogs(req: Request, res: Response, next: NextFunction) {
         : redactText(req.path).slice(0, 1000);
     const latency = Math.round(performance.now() - start),
       status = res.writableFinished ? res.statusCode : 499;
+    const route = typeof req.route?.path === 'string' ? String(req.route.path) : 'unmatched';
+    requestDuration.observe(
+      {
+        method: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'].includes(req.method)
+          ? req.method
+          : 'OTHER',
+        route,
+        status: String(status),
+      },
+      latency / 1000,
+    );
+    span.setAttributes({ 'http.route': route, 'http.response.status_code': status });
+    span.end();
     logger.info(
       {
         requestId: id,
+        traceId,
         orgId: principal?.orgId,
         environmentId: principal?.environmentId,
         method: req.method,
@@ -55,7 +85,7 @@ export function requestLogs(req: Request, res: Response, next: NextFunction) {
     if (inbound) responseBody = '[INBOUND CONTENT REDACTED]';
     const task = (async () => {
       try {
-        await sql`insert into request_logs(id,org_id,environment_id,key_id,actor_id,method,path,status,latency_ms,request_body,response_body) values(${id},${principal?.orgId ?? null},${principal?.environmentId ?? null},${principal?.kind === 'api_key' ? principal.actorId : null},${principal?.actorId ?? null},${req.method},${path},${status},${latency},${sql.json(toJson(redact({ body: loggedBody, query: req.query })))},${sql.json(toJson(redact(responseBody)))})`;
+        await sql`insert into request_logs(id,org_id,environment_id,key_id,actor_id,method,path,status,latency_ms,trace_id,request_body,response_body) values(${id},${principal?.orgId ?? null},${principal?.environmentId ?? null},${principal?.kind === 'api_key' ? principal.actorId : null},${principal?.actorId ?? null},${req.method},${path},${status},${latency},${traceId},${sql.json(toJson(redact({ body: loggedBody, query: req.query })))},${sql.json(toJson(redact(responseBody)))})`;
       } catch (error) {
         logger.error({ requestId: id, err: error }, 'Request log persistence failed');
       }
@@ -65,7 +95,10 @@ export function requestLogs(req: Request, res: Response, next: NextFunction) {
   };
   res.once('finish', persist);
   res.once('close', persist);
-  next();
+  withRequest(id, parent, () => {
+    res.setHeader('traceparent', correlation()!.traceparent);
+    next();
+  });
 }
 export async function flushRequestLogs() {
   await Promise.allSettled([...pending]);

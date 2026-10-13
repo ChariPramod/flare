@@ -1,118 +1,62 @@
-import { Queue, UnrecoverableError, Worker } from 'bullmq';
+import { Queue, Worker } from 'bullmq';
 import type { Sql } from '@flare/db';
-import { outbox } from '@flare/mail';
 import { decrypt } from '@flare/shared';
+import { dispatchWorkflow, recoverWorkflowRuns, sendWorkflowRequest } from '@flare/platform';
 import type { Redis } from 'ioredis';
-
 export function startWorkflowWorker(sql: Sql, connection: Redis, encryptionKey: string) {
   const queue = new Queue('workflow-triggers', { connection });
   const worker = new Worker<{ id: string }>(
     'workflow-triggers',
     async (job) => {
-      const [run] =
-        await sql`select r.*,e.novu_key_cipher from workflow_runs r join environments e on e.id=r.environment_id and e.org_id=r.org_id where r.id=${job.data.id}`;
-      if (!run || run.status !== 'queued') return;
-      if (!run.novu_key_cipher) throw new UnrecoverableError('Novu is not configured');
-      const key = decrypt(
-        String(run.novu_key_cipher),
-        encryptionKey,
-        `${run.org_id}/${run.environment_id}`,
-      );
-      await sql`update workflow_runs set attempts=attempts+1,updated_at=now() where id=${run.id}`;
-      const response = await fetch(
-        `${process.env.NOVU_API_URL ?? 'http://novu-api:3000'}/v1/events/trigger`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `ApiKey ${key}`,
-            'Content-Type': 'application/json',
-            'Idempotency-Key': String(run.id),
-          },
-          body: JSON.stringify(run.payload),
-          signal: AbortSignal.timeout(15000),
-          redirect: 'error',
-        },
-      );
-      if (!response.ok) {
-        if (
-          response.status >= 400 &&
-          response.status < 500 &&
-          ![408, 409, 429].includes(response.status)
-        )
-          throw new UnrecoverableError(`Novu rejected trigger (${response.status})`);
-        throw new Error(`Novu unavailable (${response.status})`);
-      }
-      const result = await response.json();
-      const updated = await sql.begin(async (tx) => {
-        const rows =
-          await tx`update workflow_runs set status='accepted',response=${tx.json(JSON.parse(JSON.stringify(result)))},updated_at=now() where id=${run.id} and status='queued' returning id`;
-        if (rows.length)
-          await outbox(
-            tx,
-            { orgId: String(run.org_id), environmentId: String(run.environment_id) },
-            'workflow.accepted',
-            { id: run.id, workflowId: run.workflow_id, transactionId: run.transaction_id },
+      await dispatchWorkflow(sql, job.data.id, async (run, cancel) => {
+        const [environment] =
+          await sql`select novu_key_cipher from environments where id=${String(run.environment_id)} and org_id=${String(run.org_id)}`;
+        if (!environment?.novu_key_cipher)
+          return { kind: 'rejected', error: 'Novu is not configured' };
+        let key: string;
+        try {
+          key = decrypt(
+            String(environment.novu_key_cipher),
+            encryptionKey,
+            `${run.org_id}/${run.environment_id}`,
           );
-        return rows;
-      });
-      if (!updated.length)
-        await fetch(
-          `${process.env.NOVU_API_URL ?? 'http://novu-api:3000'}/v1/events/trigger/${encodeURIComponent(String(run.transaction_id))}`,
-          {
-            method: 'DELETE',
-            headers: { Authorization: `ApiKey ${key}` },
-            signal: AbortSignal.timeout(15000),
-            redirect: 'error',
-          },
+        } catch {
+          return { kind: 'rejected', error: 'Novu credentials cannot be decrypted' };
+        }
+        return sendWorkflowRequest(
+          process.env.NOVU_API_URL ?? 'http://novu-api:3000',
+          key,
+          run,
+          cancel,
         );
+      });
     },
     { connection, concurrency: 10 },
   );
-  worker.on('failed', (job, error) => {
-    if (
-      job &&
-      (job.attemptsMade >= Number(job.opts.attempts ?? 1) || error instanceof UnrecoverableError)
-    )
-      void sql
-        .begin(async (tx) => {
-          const [run] =
-            await tx`update workflow_runs set status='failed',error=${error.message.slice(0, 500)},updated_at=now() where id=${job.data.id} and status='queued' returning *`;
-          if (run)
-            await outbox(
-              tx,
-              { orgId: String(run.org_id), environmentId: String(run.environment_id) },
-              'workflow.failed',
-              { id: run.id, workflowId: run.workflow_id, error: run.error },
-            );
-        })
-        .catch(() => undefined);
-  });
   let polling = false;
-  const dispatch = async () => {
-    if (polling) return;
-    polling = true;
-    try {
-      const rows =
-        await sql`select id from workflow_runs where status='queued' order by created_at limit 100`;
-      for (const row of rows)
-        await queue.add(
-          'trigger',
-          { id: String(row.id) },
-          {
-            jobId: String(row.id),
-            attempts: 4,
-            backoff: { type: 'exponential', delay: 1000 },
-            removeOnComplete: 1000,
-            removeOnFail: 1000,
-          },
-        );
-    } finally {
-      polling = false;
-    }
-  };
   return {
     worker,
-    dispatch,
+    dispatch: async () => {
+      if (polling) return;
+      polling = true;
+      try {
+        await recoverWorkflowRuns(sql);
+        const rows =
+          await sql`select id from workflow_runs where claim_id is null and next_attempt_at<=now() and (status='queued' or (status='canceled' and cancellation_status='pending')) order by next_attempt_at limit 100`;
+        for (const row of rows) {
+          const previous = await queue.getJob(String(row.id));
+          if (previous && ['completed', 'failed'].includes(await previous.getState()))
+            await previous.remove();
+          await queue.add(
+            'trigger',
+            { id: String(row.id) },
+            { jobId: String(row.id), removeOnComplete: true, removeOnFail: true },
+          );
+        }
+      } finally {
+        polling = false;
+      }
+    },
     close: async () => {
       await worker.close();
       await queue.close();

@@ -1,3 +1,4 @@
+import { withJob } from '@flare/shared';
 import { Queue, Worker } from 'bullmq';
 import type { Redis } from 'ioredis';
 import type { Sql } from '@flare/db';
@@ -19,10 +20,11 @@ export function startInboundWorker(
   };
   const worker = new Worker<{ id: string; kind: 'parse' | 'forward' }>(
     'inbound',
-    async (job) => {
-      if (job.data.kind === 'parse') await parseInbound(sql, options.store, job.data.id);
-      else await forwardInbound(options, job.data.id);
-    },
+    async (job) =>
+      withJob('inbound', job.data.id, undefined, undefined, async () => {
+        if (job.data.kind === 'parse') await parseInbound(sql, options.store, job.data.id);
+        else await forwardInbound(options, job.data.id);
+      }),
     { connection, concurrency: 4 },
   );
   let polling = false;

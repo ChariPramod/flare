@@ -1,3 +1,4 @@
+import { providerAttempts } from '@flare/shared';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { withTenant, toJson } from '@flare/db';
@@ -42,7 +43,7 @@ export async function deliverEmail(options: PipelineOptions, id: string) {
     for (const transport of options.transports) {
       const prior = Number(
         (
-          await sql`select count(*)::int as n from transport_attempts where message_id=${id} and provider=${transport.name}`
+          await sql`select count(*)::int as n from transport_attempts where message_id=${id} and provider=${transport.name} and retry_cycle=${message.redrives}`
         )[0]!.n,
       );
       for (let retry = prior; retry < 4; retry++) {
@@ -97,7 +98,7 @@ export async function deliverEmail(options: PipelineOptions, id: string) {
           return;
         }
         const [attempt] =
-          await sql`insert into transport_attempts(org_id,environment_id,message_id,provider,ordinal,status,recipients) select ${tenant.orgId},${tenant.environmentId},${id},${transport.name},${++ordinal},'started',${sql.json(to)} from messages where id=${id} and claim_id=${claim} and lease_until>now() returning id`;
+          await sql`insert into transport_attempts(org_id,environment_id,message_id,provider,ordinal,status,recipients,retry_cycle) select ${tenant.orgId},${tenant.environmentId},${id},${transport.name},${++ordinal},'started',${sql.json(to)},${message.redrives} from messages where id=${id} and claim_id=${claim} and lease_until>now() returning id`;
         if (!attempt) return;
         try {
           const result = await transport.send({
@@ -105,6 +106,10 @@ export async function deliverEmail(options: PipelineOptions, id: string) {
             from: String(message.envelope_from),
             to,
             requireTls: Boolean(domain.enforce_tls),
+          });
+          providerAttempts.inc({
+            provider: transport.name,
+            outcome: result.accepted.length ? 'accepted' : 'rejected',
           });
           const pending = await withTenant(sql, tenant, async (tx) => {
             await tx`update transport_attempts set status=${result.accepted.length ? 'accepted' : 'transient_failure'},provider_ids=${tx.json(result.ids)},finished_at=now() where id=${attempt.id}`;
@@ -139,6 +144,7 @@ export async function deliverEmail(options: PipelineOptions, id: string) {
             error instanceof TransportError
               ? error
               : new TransportError('Unknown transport outcome', 'ambiguous');
+          providerAttempts.inc({ provider: transport.name, outcome: failure.kind });
           await sql`update transport_attempts set status=${failure.kind === 'ambiguous' ? 'ambiguous' : failure.kind === 'transient' ? 'transient_failure' : 'permanent_failure'},error=${failure.message.slice(0, 500)},finished_at=now() where id=${attempt.id}`;
           if (failure.kind === 'ambiguous') {
             await fail('Provider outcome is ambiguous; review the attempt before retrying');
@@ -161,7 +167,7 @@ export async function recoverDeliveries(sql: Sql) {
   // An abandoned request might have been accepted. Never silently resend an uncertain attempt.
   await sql.begin(async (tx) => {
     const stale =
-      await tx`select * from messages where claim_id is not null and lease_until<now() for update skip locked`;
+      await tx`select * from messages where claim_id is not null and lease_until<now() for update skip locked limit 100`;
     for (const message of stale) {
       const [uncertain] =
         await tx`select id from transport_attempts where message_id=${message.id} and status in ('started','ambiguous') limit 1`;

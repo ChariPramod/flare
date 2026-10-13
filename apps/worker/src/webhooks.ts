@@ -1,3 +1,4 @@
+import { withJob } from '@flare/shared';
 import { Queue, Worker } from 'bullmq';
 import type { Redis } from 'ioredis';
 import type { Sql } from '@flare/db';
@@ -6,9 +7,10 @@ export function startWebhookWorker(sql: Sql, connection: Redis, encryptionKey: s
   const queue = new Queue('webhook-delivery', { connection });
   const worker = new Worker<{ id: string }>(
     'webhook-delivery',
-    async (job) => {
-      await deliverWebhook(sql, encryptionKey, job.data.id);
-    },
+    async (job) =>
+      withJob('webhook-delivery', job.data.id, undefined, undefined, async () => {
+        await deliverWebhook(sql, encryptionKey, job.data.id);
+      }),
     { connection, concurrency: 10 },
   );
   let running = false;

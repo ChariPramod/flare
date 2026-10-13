@@ -427,3 +427,35 @@ it('reconciles a publication after engine acceptance and Redis loss on real Post
     else process.env.NOVU_API_URL = oldUrl;
   }
 });
+
+it('enforces atomic token buckets across concurrent clients and refills from the Redis clock', async () => {
+  const { tokenBucket } = await import('@flare/platform');
+  const bucket = randomUUID();
+  const results = await Promise.all(
+    Array.from({ length: 50 }, () => tokenBucket(redis, bucket, 0.01, 10)),
+  );
+  expect(results.filter((r) => r.allowed)).toHaveLength(10);
+  const refillBucket = randomUUID();
+  await Promise.all(Array.from({ length: 10 }, () => tokenBucket(redis, refillBucket, 10, 10)));
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+  expect((await tokenBucket(redis, refillBucket, 10, 10)).allowed).toBe(true);
+  expect((await tokenBucket(redis, randomUUID(), 10, 10)).remaining).toBe(9);
+});
+it('recovers workflow dispatch from Redis loss and serializes independent PostgreSQL claims', async () => {
+  const { dispatchWorkflow } = await import('@flare/platform');
+  const id = randomUUID();
+  await sql`insert into workflow_runs(id,org_id,environment_id,workflow_id,transaction_id,parent_transaction_id,payload) values(${id},${org},${env},'test',${id},${id},'{}')`;
+  await redis.flushdb();
+  let count = 0;
+  await Promise.all(
+    Array.from({ length: 8 }, () =>
+      dispatchWorkflow(sql, id, async () => {
+        count++;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return { kind: 'accepted' };
+      }),
+    ),
+  );
+  expect(count).toBe(1);
+  expect((await sql`select status from workflow_runs where id=${id}`)[0]!.status).toBe('accepted');
+});

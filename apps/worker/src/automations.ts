@@ -1,3 +1,4 @@
+import { withJob } from '@flare/shared';
 import { Queue, Worker } from 'bullmq';
 import type { Redis } from 'ioredis';
 import type { Sql } from '@flare/db';
@@ -12,23 +13,24 @@ export function startAutomationWorker(
   const queue = new Queue('automation-steps', { connection });
   const worker = new Worker<{ id: string }>(
     'automation-steps',
-    async (job) => {
-      try {
-        await advanceAutomation(
-          {
-            sql,
-            store: objectStore(),
-            transports: configuredTransports(),
-            encryptionKey,
-            trackingKey,
-          },
-          job.data.id,
-        );
-      } catch (error) {
-        await failAutomation(sql, job.data.id, error);
-        throw error;
-      }
-    },
+    async (job) =>
+      withJob('automations', job.data.id, undefined, undefined, async () => {
+        try {
+          await advanceAutomation(
+            {
+              sql,
+              store: objectStore(),
+              transports: configuredTransports(),
+              encryptionKey,
+              trackingKey,
+            },
+            job.data.id,
+          );
+        } catch (error) {
+          await failAutomation(sql, job.data.id, error);
+          throw error;
+        }
+      }),
     { connection, concurrency: 8 },
   );
   let polling = false;

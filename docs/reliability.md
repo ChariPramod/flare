@@ -1,0 +1,33 @@
+# Reliability and operations
+
+## Limits
+
+Every authenticated API key uses an atomic Redis token bucket. Defaults are 10 requests/second and burst 10. Set `API_RATE_LIMIT` / `API_RATE_BURST`, or provide `rate_limit` / `rate_burst` when creating a key. Scope and permission remain immutable. Responses expose `RateLimit-Limit`, `RateLimit-Remaining`, and `RateLimit-Reset` (seconds until full refill); denied requests return 429 with `Retry-After`. Redis failure returns 503 and `Retry-After: 1`, before invoking the endpoint. Per-key limits apply across replicas.
+
+Public authentication endpoints have an independent IP bucket (`AUTH_RATE_LIMIT=0.166667`, `AUTH_RATE_BURST=10`). All public auth routes, including OIDC start/callback, consume this bucket. Only configure `TRUST_PROXY` with actual trusted proxy IPs/CIDRs; arbitrary client forwarding headers are ignored by default. Dashboard requests reach the API through its server proxy and share that proxy's IP quota unless your ingress provides an authenticated client-IP forwarding design. Deploy edge login throttling as well; do not trust arbitrary browser-supplied IP headers. API key rate headers and request correlation pass through the dashboard proxy.
+
+## Workflow recovery
+
+PostgreSQL owns claims, attempts, retry times and cancellation compensation. BullMQ only wakes workers. Polling re-creates missing jobs after Redis loss and removes retained terminal jobs from older checkpoints. A claim is committed before an engine request. Concurrent workers cannot submit the same live claim. HTTP 429 refusals retry with persisted exponential delay, at most four attempts per recovery cycle. Definitive 4xx failures stop. A network exception, HTTP 408/409/5xx, or an expired in-flight lease leaves **ambiguous** acceptance: it is never automatically resent or redriven. A stable transaction ID and idempotency header are preserved, but these are not treated as proof of unlimited Novu deduplication.
+
+Cancellation marks the local operation canceled immediately and records pending engine compensation. It waits for the in-flight trigger to settle or its lease to expire before issuing DELETE. DELETE failures retry durably; after exhaustion the cancellation remains visibly failed in dead letters. A positive engine acknowledgement is required for confirmed compensation. Cancellation cannot recall messages already delivered, and an engine that completes an earlier timed-out request after cancellation may still require provider investigation.
+
+Email transport retries remain bounded to four per provider per retry cycle, with priority failover only after definitive failures. SMTP, Postal and SES acceptance is not delivery. An unknown outcome halts failover and manual redrive. Retrying eligible failed email recipients retains the message ID and signed MIME; recipients already sent, suppressed or delivered are preserved. Suppression and domain/TLS checks run again.
+
+## Dead letters
+
+`GET /v1/dead-letters?page=1&limit=25` returns tenant-scoped failed workflows, email, webhook deliveries, inbound parsing/forwarding, automation runs and publications. The dashboard provides the same inspection view. `POST /v1/dead-letters/:kind/:id/redrive` requires write access and an unscoped credential, rejects active/successful/canceled/ambiguous operations, preserves logical identity and records an audit event. A disabled webhook endpoint must be enabled first. Inbound recovery retains attempt history and grants another parsing attempt; malformed content will fail again. Publication failures use their dedicated retry/replacement controls and authorization.
+
+Fix configuration first. Never infer that a transport timeout means rejection. For ambiguous outcomes, inspect the provider by message/transaction ID and reconcile using actual events. Flare intentionally exposes no blind resend button for them. Failed cancellation compensation is visible for investigation, without allowing the original canceled trigger to run again.
+
+## Observability and shutdown
+
+Set a random `METRICS_TOKEN` of at least 32 characters. API, worker and SMTP relay expose `/internal/metrics` to that bearer token; without it the endpoint returns 404. `ops/prometheus.example.yml` uses a mounted token file. Import `ops/grafana/flare.json` into Grafana and select the Prometheus datasource. Metrics include HTTP latency/status, job invocation outcomes, provider attempt outcomes, process memory/event loop, and durable workflow/email/webhook backlog (capped at 10001). Job completion measures processor completion; inspect durable status metrics/logs for business outcomes.
+
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` and a distinct `OTEL_SERVICE_NAME` for each service to export explicit sanitized spans. Request/job IDs and validated W3C trace context are stored with workflow runs and direct email; workers propagate them to Novu and logs. Spans omit payloads, email bodies and credentials. Auxiliary jobs have independent job spans. This is explicit instrumentation, not automatic SQL or provider-payload collection. Verify collector connectivity in your deployment.
+
+Readiness checks PostgreSQL, Redis (where used) and the MinIO bucket. SIGTERM stops polling/listening, waits for active workers, flushes request logs and telemetry, then closes dependencies. `SHUTDOWN_TIMEOUT_MS` defaults to 30000; a deadline exit leaves durable leases recoverable. Request-log and expired-idempotency cleanup deletes at most 1000 rows per table each minute. Delivery histories and stored MIME are retained until a separately reviewed data-retention policy is configured; this checkpoint does not delete customer content.
+
+## Verification boundaries
+
+Local database/HTTP/browser tests exercise recovery and authorization. Real PostgreSQL concurrency, Redis Lua behavior, Mailpit delivery and pinned Novu cancellation/rendering require the integration/Compose jobs. No local or simulated result certifies DNS, OIDC, SES, Postal, SMS, collector or production provider interoperability.

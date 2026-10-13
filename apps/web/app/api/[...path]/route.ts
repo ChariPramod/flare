@@ -79,6 +79,7 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
     const endpoint = joined === 'session' ? 'auth/me' : joined;
     if (req.headers.get('idempotency-key'))
       headers['Idempotency-Key'] = req.headers.get('idempotency-key')!;
+    if (req.headers.get('traceparent')) headers.traceparent = req.headers.get('traceparent')!;
     const response = await fetch(`${api()}/v1/${endpoint}${req.nextUrl.search}`, {
       method: req.method,
       headers,
@@ -110,6 +111,17 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
       headers: {
         'Content-Type': response.headers.get('Content-Type') ?? 'application/json',
         'Cache-Control': 'no-store',
+        ...Object.fromEntries(
+          [
+            'ratelimit-limit',
+            'ratelimit-remaining',
+            'ratelimit-reset',
+            'retry-after',
+            'traceparent',
+          ].flatMap((key) =>
+            response.headers.has(key) ? [[key, response.headers.get(key)!]] : [],
+          ),
+        ),
         ...(response.headers.get('x-request-id')
           ? { 'x-request-id': response.headers.get('x-request-id')! }
           : {}),

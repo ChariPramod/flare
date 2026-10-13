@@ -1,3 +1,13 @@
+import { dependencyReady } from '@flare/shared';
+import { objectStore } from '@flare/mail';
+import {
+  startTelemetry,
+  stopTelemetry,
+  shutdownDeadline,
+  registry,
+  metricsAuthorized,
+  backlog,
+} from '@flare/shared';
 import { startPublicationWorker } from './publication.js';
 import { startInboundWorker } from './inbound.js';
 import { startAutomationWorker } from './automations.js';
@@ -9,7 +19,9 @@ import { createServer } from 'node:http';
 import { Redis } from 'ioredis';
 import { connectDatabase } from '@flare/db';
 import { createLogger, infrastructureConfig } from '@flare/shared';
+startTelemetry();
 const config = infrastructureConfig.parse(process.env);
+const readinessStore = objectStore();
 const logger = createLogger('worker');
 const { client } = connectDatabase(config.DATABASE_URL);
 const redis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null });
@@ -74,10 +86,13 @@ const retentionDays = Number(process.env.LOG_RETENTION_DAYS ?? 30);
 if (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 3650)
   throw new Error('LOG_RETENTION_DAYS must be 1–3650');
 const retention = setInterval(() => {
-  void client`delete from request_logs where created_at<now()-${retentionDays}*interval '1 day'`.catch(
-    (err: unknown) => logger.error({ err }, 'Request log retention failed'),
-  );
-}, 3600000);
+  void client
+    .begin(async (tx) => {
+      await tx`delete from request_logs where id in (select id from request_logs where created_at<now()-${retentionDays}*interval '1 day' order by created_at for update skip locked limit 1000)`;
+      await tx`delete from idempotency where ctid in (select ctid from idempotency where expires_at<now() for update skip locked limit 1000)`;
+    })
+    .catch((err: unknown) => logger.error({ err }, 'Request log retention failed'));
+}, 60000);
 mailWorker.worker.on('error', (err: Error) => logger.error({ err }, 'Email worker error'));
 const mailDispatch = setInterval(() => {
   void mailWorker
@@ -95,7 +110,33 @@ const dispatch = setInterval(() => {
     .dispatch()
     .catch((err: unknown) => logger.error({ err }, 'Workflow dispatch failed'));
 }, 2000);
+let metricsPolling = false;
+const backlogPoll = setInterval(() => {
+  if (metricsPolling) return;
+  metricsPolling = true;
+  void client`select 'workflow' as kind,count(*)::int as n from (select id from workflow_runs where status in ('queued','dispatching') limit 10001) w union all select 'email',count(*)::int from (select id from messages where delivery_finished_at is null and status in ('queued','scheduled') limit 10001) m union all select 'webhook',count(*)::int from (select id from webhook_deliveries where status in ('pending','delivering') limit 10001) h`
+    .then(
+      (rows) => {
+        for (const row of rows) backlog.set({ kind: String(row.kind) }, Number(row.n));
+      },
+      (err) => logger.error({ err }, 'Backlog metrics failed'),
+    )
+    .finally(() => {
+      metricsPolling = false;
+    });
+}, 15000);
 const server = createServer((req, res) => {
+  if (req.url === '/internal/metrics') {
+    if (!metricsAuthorized(req.headers.authorization)) {
+      res.writeHead(404).end();
+      return;
+    }
+    void registry.metrics().then(
+      (body) => res.writeHead(200, { 'Content-Type': registry.contentType }).end(body),
+      () => res.writeHead(503).end(),
+    );
+    return;
+  }
   if (req.url === '/health') {
     res.end('{"status":"ok","service":"worker"}');
     return;
@@ -104,7 +145,7 @@ const server = createServer((req, res) => {
     res.writeHead(404).end();
     return;
   }
-  void Promise.all([client`select 1`, redis.ping()]).then(
+  void dependencyReady([client`select 1`, redis.ping(), readinessStore.ready()]).then(
     () => res.end('{"status":"ready"}'),
     () => res.writeHead(503).end('{"status":"unavailable"}'),
   );
@@ -112,6 +153,8 @@ const server = createServer((req, res) => {
 logger.info('Worker health server listening');
 for (const signal of ['SIGTERM', 'SIGINT'])
   process.once(signal, () => {
+    shutdownDeadline();
+    clearInterval(backlogPoll);
     clearInterval(dispatch);
     clearInterval(inboundDispatch);
     clearInterval(publicationDispatch);
@@ -131,6 +174,7 @@ for (const signal of ['SIGTERM', 'SIGINT'])
       broadcastWorker.close(),
       automationWorker.close(),
     ])
+      .then(stopTelemetry)
       .then(() => Promise.all([client.end(), redis.quit()]))
       .then(() => process.exit(0));
   });

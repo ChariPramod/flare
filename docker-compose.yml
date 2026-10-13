@@ -207,6 +207,8 @@ services:
       postgres: { condition: service_healthy }
   flare-api:
     <<: *flare
+    environment:
+      OTEL_SERVICE_NAME: flare-api
     volumes: ['./ops/certs/postal-public.pem:/app/ops/certs/postal-public.pem:ro']
     build:
       context: .
@@ -228,6 +230,8 @@ services:
       <<: *node-health
   flare-worker:
     <<: *flare
+    environment:
+      OTEL_SERVICE_NAME: flare-worker
     build:
       context: .
       args: { SERVICE: worker }
@@ -244,6 +248,8 @@ services:
       <<: *node-health
   flare-smtp-relay:
     <<: *flare
+    environment:
+      OTEL_SERVICE_NAME: flare-smtp-relay
     build:
       context: .
       args: { SERVICE: smtp-relay }
@@ -257,7 +263,7 @@ services:
           CMD,
           node,
           -e,
-          'fetch("http://localhost:4002/health").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))',
+          'fetch("http://localhost:4002/ready").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))',
         ]
       <<: *node-health
   flare-web:

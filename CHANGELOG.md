@@ -51,3 +51,11 @@
 - Added resumable workflow/layout/translation promotion, automatic pinned dependencies, stale-diff detection and immutable-version conflict handling.
 - Added durable operation history and retry/replacement controls; Production triggers pause while an existing workflow is being reconciled with Novu.
 - Added publication recovery and browser coverage; actual pinned Novu interoperability remains a live acceptance requirement.
+
+## Reliability checkpoint — 2026-10-12
+
+- Added configurable atomic API-key/auth token buckets, standard response headers and fail-closed Redis handling.
+- Replaced queue-callback workflow retries with durable atomic claims, attempt history, recovery and cancellation compensation; uncertain engine acceptance is quarantined.
+- Added tenant-scoped dead letters and audited redrive, preserving operation identity and refusing ambiguous sends.
+- Added sanitized request/job tracing, Prometheus metrics, Grafana panels, storage readiness, shutdown deadlines and bounded cleanup. Fixed SSO MFA exchange-token consumption on invalid codes.
+- Added recovery/rate-limit/browser tests and the first PostgreSQL/Redis/MinIO/Mailpit CI job. Local Docker and real provider checks remain pending.

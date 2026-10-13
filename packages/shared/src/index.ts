@@ -1,3 +1,4 @@
+import { correlation } from './telemetry.js';
 import { z } from 'zod';
 import pino from 'pino';
 export * from './security.js';
@@ -8,6 +9,7 @@ export const serviceName = z.enum(['api', 'worker', 'smtp-relay', 'web']);
 export const createLogger = (name: string) =>
   pino({
     name,
+    mixin: () => correlation() ?? {},
     level: process.env.LOG_LEVEL ?? 'info',
     redact: {
       paths: [
@@ -35,3 +37,5 @@ export * from './redaction.js';
 export * from './audience.js';
 
 export * from './automations.js';
+
+export * from './telemetry.js';

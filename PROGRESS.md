@@ -14,7 +14,7 @@ Updated: 2026-10-12, America/Los_Angeles.
 | 5 — Webhooks, logs, metrics                     | Local checkpoint; live engine/container tests pending            |
 | 6 — Audience, broadcasts, templates             | Local checkpoint; live recovery/provider tests pending           |
 | 7 — Automations, inbound, translations, layouts | Local modules passed; pinned-engine acceptance pending           |
-| 8 — Hardening, SDK, CLI                         | Pending                                                          |
+| 8 — Hardening, SDK, CLI                         | Reliability local checks passed; SDK/CLI/MCP pending             |
 
 ## Checkpoint log
 
@@ -40,6 +40,8 @@ Updated: 2026-10-12, America/Los_Angeles.
 
 - 2026-10-12: Added durable selected-resource publication with reviewed revision tokens, stable content identifiers, pinned dependencies, per-item recovery, failed-operation replacement and verified Novu reconciliation. Lint/typecheck/build/gitleaks and 110 backend tests pass; the ninth browser flow passes and its screenshot was inspected. Content checkpoint CI is green. Real PostgreSQL/Redis publication recovery and pinned Novu acceptance remain pending.
 
+- 2026-10-12: Added atomic per-key Redis limits, fail-closed availability handling, durable workflow claims/retries/cancellation compensation, ambiguity quarantine, tenant dead letters and audited identity-preserving redrive, explicit tracing/Prometheus/Grafana instrumentation, bucket readiness and bounded log/idempotency cleanup. Lint/typecheck/build/gitleaks and 116 backend tests pass; the tenth browser flow passes and its screenshot was inspected. Added a separate real-service integration CI job; its first run is pending. Publication checkpoint CI passed.
+
 ## Known issues and verification limits
 
 - This host has no Docker runtime. Full-stack startup, official image pulls and container integration tests cannot be validated here yet.
@@ -55,4 +57,4 @@ Updated: 2026-10-12, America/Los_Angeles.
 
 ## Next
 
-Continue Phase 8 with reliability, observability and SDK/CLI/MCP. Inbound receiving, layouts, translations and selected content publication are implemented. Production automation promotion remains a separate integration gap. Full Compose verification remains a prerequisite for production readiness.
+Continue Phase 8 with SDK/CLI/MCP, container acceptance, load tests and operational documentation. Inbound receiving, layouts, translations and selected content publication are implemented. Production automation promotion remains a separate integration gap. Full Compose verification remains a prerequisite for production readiness.

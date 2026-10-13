@@ -352,3 +352,15 @@ test('publication selection, durable status and completed resource timeline', as
   await expect(page.getByText('workflow · publish-example', { exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/publication-status.png', fullPage: true });
 });
+
+test('inspects a failed operation and redrives it through the API', async ({ page }) => {
+  await login(page);
+  await page.getByRole('link', { name: 'Dead letters', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Dead letters', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'workflow · 00000000' }).click();
+  await expect(page.getByRole('dialog').getByText('Novu is not configured')).toBeVisible();
+  await page.screenshot({ path: 'test-results/dead-letter-recovery.png', fullPage: true });
+  await page.getByRole('button', { name: 'Redrive operation', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'workflow · 00000000' })).toBeHidden();
+});

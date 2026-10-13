@@ -47,6 +47,7 @@ import {
   Integrations,
   Suppressions,
 } from './pages';
+import { DeadLettersPage } from './dead-letters-page';
 import { WebhooksPage, LogsPage, MetricsPage } from './operations-pages';
 import { AudiencePage, TemplatesPage, BroadcastsPage } from './audience-pages';
 import { PublicationPanel } from './publication-panel';
@@ -81,6 +82,7 @@ const groups: { name: string; items: [string, string, typeof Workflow][] }[] = [
       ['webhooks', 'Webhooks', Webhook],
       ['logs', 'Logs', FileText],
       ['metrics', 'Metrics', BarChart3],
+      ['dead-letters', 'Dead letters', ShieldBan],
     ],
   },
   {
@@ -193,6 +195,7 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
   else if (section === 'integrations') content = <Integrations writable={writable} />;
   else if (section === 'webhooks') content = <WebhooksPage id={id} writable={writable} />;
   else if (section === 'logs') content = <LogsPage id={id} />;
+  else if (section === 'dead-letters') content = <DeadLettersPage writable={writable} />;
   else if (section === 'metrics' || section === 'analytics') content = <MetricsPage />;
   else if (section === 'suppressions') content = <Suppressions writable={writable} />;
   else content = <SettingsPages section={section} session={data} />;

@@ -1,3 +1,13 @@
+import { dependencyReady } from '@flare/shared';
+import {
+  startTelemetry,
+  stopTelemetry,
+  shutdownDeadline,
+  registry,
+  metricsAuthorized,
+  withJob,
+} from '@flare/shared';
+import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { createLogger, infrastructureConfig, hashToken } from '@flare/shared';
@@ -5,6 +15,7 @@ import type { Principal } from '@flare/shared';
 import { connectDatabase } from '@flare/db';
 import { submitEmails, objectStore, configuredTransports, MailError } from '@flare/mail';
 import { createRelay } from './server.js';
+startTelemetry();
 const logger = createLogger('smtp-relay');
 const config = infrastructureConfig.parse(process.env);
 const { client: sql } = connectDatabase(config.DATABASE_URL);
@@ -30,17 +41,19 @@ const smtp = createRelay({
     };
   },
   async submit(principal, input, headers) {
-    const result = await submitEmails(
-      {
-        sql,
-        store,
-        encryptionKey: config.FLARE_ENCRYPTION_KEY,
-        trackingKey: config.JWT_SECRET,
-        transports: configuredTransports(),
-      },
-      principal,
-      [input],
-      { smtpHeaders: headers },
+    const result = await withJob('smtp-submission', randomUUID(), undefined, undefined, () =>
+      submitEmails(
+        {
+          sql,
+          store,
+          encryptionKey: config.FLARE_ENCRYPTION_KEY,
+          trackingKey: config.JWT_SECRET,
+          transports: configuredTransports(),
+        },
+        principal,
+        [input],
+        { smtpHeaders: headers },
+      ),
     );
     return result.data[0]!.id;
   },
@@ -48,9 +61,20 @@ const smtp = createRelay({
 smtp.on('error', (err: Error) => logger.error({ err }, 'SMTP listener failed'));
 smtp.listen(Number(process.env.SMTP_RELAY_PORT ?? 2525), '0.0.0.0');
 const server = createServer((req, res) => {
+  if (req.url === '/internal/metrics') {
+    if (!metricsAuthorized(req.headers.authorization)) {
+      res.writeHead(404).end();
+      return;
+    }
+    void registry.metrics().then(
+      (body) => res.writeHead(200, { 'Content-Type': registry.contentType }).end(body),
+      () => res.writeHead(503).end(),
+    );
+    return;
+  }
   if (req.url === '/health') res.end('{"status":"ok","service":"smtp-relay"}');
   else if (req.url === '/ready')
-    void sql`select 1`.then(
+    void dependencyReady([sql`select 1`, store.ready()]).then(
       () => res.end('{"status":"ready"}'),
       () => res.writeHead(503).end(),
     );
@@ -59,8 +83,11 @@ const server = createServer((req, res) => {
 logger.info('SMTP relay health server listening');
 for (const signal of ['SIGTERM', 'SIGINT'])
   process.once(signal, () => {
+    shutdownDeadline();
     server.close();
     smtp.close(() => {
-      void sql.end().then(() => process.exit(0));
+      void stopTelemetry()
+        .then(() => sql.end())
+        .then(() => process.exit(0));
     });
   });

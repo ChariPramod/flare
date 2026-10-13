@@ -11,3 +11,7 @@ export * from './inbound.js';
 export * from './content.js';
 
 export * from './publication.js';
+
+export * from './workflow-delivery.js';
+export * from './rate-limit.js';
+export * from './dead-letters.js';

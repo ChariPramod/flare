@@ -1,3 +1,4 @@
+import { correlation } from '@flare/shared';
 import { randomUUID } from 'node:crypto';
 import { withTenant, toJson } from '@flare/db';
 import type { Sql, Transaction } from '@flare/db';
@@ -165,7 +166,7 @@ export async function submitEmails(
             await options.store.put(mimeKey, built.raw, 'message/rfc822');
           }
           const stored = { ...input, attachments: metadata };
-          await db`insert into messages(id,org_id,environment_id,domain_id,request,mime_key,envelope_from,status,scheduled_at) values(${id},${p.orgId},${p.environmentId},${domain.id},${db.json(toJson(stored))},${mimeKey},${address(input.from)},${status},${at})`;
+          await db`insert into messages(id,org_id,environment_id,domain_id,request,mime_key,envelope_from,status,scheduled_at,request_id,traceparent) values(${id},${p.orgId},${p.environmentId},${domain.id},${db.json(toJson(stored))},${mimeKey},${address(input.from)},${status},${at},${correlation()?.requestId ?? null},${correlation()?.traceparent ?? null})`;
           if (settings.campaign)
             await db`update messages set broadcast_id=${settings.campaign.broadcastId ?? null},automation_run_id=${settings.campaign.automationRunId ?? null},contact_id=${settings.campaign.contactId},audience_topic_id=${settings.campaign.topicId} where id=${id}`;
           for (const recipient of envelope) {

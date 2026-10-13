@@ -1,3 +1,4 @@
+import { enforceLimit } from './rate-limit.js';
 import { randomBytes } from 'node:crypto';
 import {
   Body,
@@ -59,6 +60,8 @@ export async function authenticateApiKey(token: string) {
     permission: key.permission as 'full_access' | 'sending_access',
     domainId: key.domain_id as string | null,
     production: key.environment_name === 'Production',
+    rateLimit: Number(key.rate_limit ?? process.env.API_RATE_LIMIT ?? 10),
+    rateBurst: Number(key.rate_burst ?? process.env.API_RATE_BURST ?? 10),
   };
 }
 
@@ -66,18 +69,30 @@ export async function authenticateApiKey(token: string) {
 export class AuthGuard implements CanActivate {
   constructor(@Inject(Reflector) private readonly reflector: Reflector) {}
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const req = context.switchToHttp().getRequest<AuthRequest>();
+    const res = context.switchToHttp().getResponse<Response>();
     if (
       this.reflector.getAllAndOverride<boolean>('public', [
         context.getHandler(),
         context.getClass(),
       ])
-    )
+    ) {
+      if (req.path.startsWith('/v1/auth/'))
+        await enforceLimit(
+          res,
+          `auth:${hashToken(req.ip ?? 'unknown')}`,
+          Number(process.env.AUTH_RATE_LIMIT ?? 0.166667),
+          Number(process.env.AUTH_RATE_BURST ?? 10),
+        );
       return true;
-    const req = context.switchToHttp().getRequest<AuthRequest>();
+    }
     const token = req.headers.authorization?.match(/^Bearer (\S+)$/)?.[1];
     if (!token) throw new UnauthorizedException('Bearer authentication required');
-    if (token.startsWith('fl_')) req.principal = await authenticateApiKey(token);
-    else {
+    if (token.startsWith('fl_')) {
+      const principal = await authenticateApiKey(token);
+      req.principal = principal;
+      await enforceLimit(res, `key:${principal.actorId}`, principal.rateLimit, principal.rateBurst);
+    } else {
       let payload;
       try {
         ({ payload } = await jwtVerify(token, jwtKey, {
@@ -140,16 +155,6 @@ async function issueSession(userId: string) {
     await sql`select id, name, email, mfa_secret is not null as mfa_enabled from users where id = ${userId}`;
   return { token, expires_in: 43200, user, organizations };
 }
-async function loginThrottle(req: Request) {
-  const key = `login:${hashToken(req.ip ?? 'unknown')}`;
-  const count = await redis.eval(
-    "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],60) end; return n",
-    1,
-    key,
-  );
-  if (Number(count) > 10)
-    throw new ForbiddenException('Too many authentication attempts; retry in one minute');
-}
 async function consumeMfa(userId: string, code?: string) {
   return sql.begin(async (tx) => {
     const [user] = await tx`select * from users where id = ${userId} for update`;
@@ -194,8 +199,7 @@ export class AuthController {
           : null,
     };
   }
-  @Public() @Post('login') async login(@Body() body: unknown, @Req() req: Request) {
-    await loginThrottle(req);
+  @Public() @Post('login') async login(@Body() body: unknown) {
     const input = parse(loginSchema, body);
     const [user] = await sql`select id, password_hash from users where email = ${input.email}`;
     if (
@@ -348,18 +352,25 @@ export class AuthController {
     res.redirect(`${process.env.WEB_ORIGIN}/login?code=${encodeURIComponent(code)}`);
   }
   @Public() @Post('exchange') async exchange(@Req() req: Request, @Body() body: unknown) {
-    await loginThrottle(req);
     const { code, mfa_code } = parse(
       z.object({ code: z.string().min(32).max(256), mfa_code: z.string().max(128).optional() }),
       body,
     );
-    const userId = await redis.getdel(`oidc-exchange:${hashToken(code)}`);
+    const exchangeKey = `oidc-exchange:${hashToken(code)}`;
+    const userId = await redis.get(exchangeKey);
     if (!userId) throw new UnauthorizedException('Exchange code expired or already used');
     await consumeMfa(userId, mfa_code);
+    const consumed = await redis.eval(
+      "if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) else return 0 end",
+      1,
+      exchangeKey,
+      userId,
+    );
+    if (Number(consumed) !== 1)
+      throw new UnauthorizedException('Exchange code expired or already used');
     return issueSession(userId);
   }
   @Public() @Post('accept-invite') async acceptInvite(@Req() req: Request, @Body() body: unknown) {
-    await loginThrottle(req);
     const input = parse(
       z
         .object({

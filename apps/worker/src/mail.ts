@@ -1,3 +1,4 @@
+import { withJob } from '@flare/shared';
 import { Queue, Worker } from 'bullmq';
 import type { Redis } from 'ioredis';
 import type { Sql } from '@flare/db';
@@ -24,9 +25,13 @@ export function startMailWorker(
   const worker = new Worker<{ id: string }>(
     'email-delivery',
     async (job) => {
-      await deliverEmail(
-        { sql, store, encryptionKey, trackingKey, transports: configuredTransports() },
-        job.data.id,
+      const [context] =
+        await sql`select request_id,traceparent from messages where id=${job.data.id}`;
+      await withJob('email-delivery', job.data.id, context?.traceparent, context?.request_id, () =>
+        deliverEmail(
+          { sql, store, encryptionKey, trackingKey, transports: configuredTransports() },
+          job.data.id,
+        ),
       );
     },
     { connection, concurrency: 10 },

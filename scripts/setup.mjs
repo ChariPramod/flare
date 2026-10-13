@@ -5,6 +5,7 @@ if (existsSync('.env')) throw new Error('.env already exists; setup will not ove
 const secret = () => randomBytes(32).toString('hex');
 const values = {
   POSTGRES_PASSWORD: secret(),
+  METRICS_TOKEN: secret(),
   JWT_SECRET: secret(),
   FLARE_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
   STORE_ENCRYPTION_KEY: randomBytes(16).toString('hex'),

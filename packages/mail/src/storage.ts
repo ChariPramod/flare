@@ -8,6 +8,7 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  HeadBucketCommand,
 } from '@aws-sdk/client-s3';
 import { MailError, mailLimits } from './validation.js';
 import type { EmailInput } from './validation.js';
@@ -80,7 +81,7 @@ export interface ObjectStore {
   get(key: string, limit: number): Promise<Buffer>;
   remove(key: string): Promise<void>;
 }
-export function objectStore(): ObjectStore {
+export function objectStore(): ObjectStore & { ready(): Promise<void> } {
   const client = new S3Client({
     endpoint: process.env.S3_ENDPOINT,
     region: process.env.S3_REGION ?? 'us-east-1',
@@ -93,6 +94,11 @@ export function objectStore(): ObjectStore {
   });
   const Bucket = process.env.S3_BUCKET ?? 'flare';
   return {
+    async ready() {
+      await client.send(new HeadBucketCommand({ Bucket }), {
+        abortSignal: AbortSignal.timeout(2000),
+      });
+    },
     async put(Key, Body, ContentType) {
       await client.send(new PutObjectCommand({ Bucket, Key, Body, ContentType }), {
         abortSignal: AbortSignal.timeout(30_000),
