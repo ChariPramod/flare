@@ -37,28 +37,16 @@ Updated: 2026-10-12, America/Los_Angeles.
 ## Known issues and verification limits
 
 - This host has no Docker runtime. Full-stack startup, official image pulls and container integration tests cannot be validated here yet.
-- GitHub connector returned 404 for `ChariPramod/flare`; GitHub CLI has no authenticated account; SSH remote verification failed because GitHub host trust is not configured. No private repository was created.
 - Real PostgreSQL/Redis/MinIO/Mailpit integration harness is committed but unrun without Docker. Local PGlite tests use a single connection; real concurrency verification remains pending.
 - Postal/SES identities require provider-side authorization. Native callback interoperability, real DNS verification, and Novu → STARTTLS relay delivery need live verification.
 
 - OIDC provider interoperability and full HTTP session flows still require live integration verification; passing unit/database tests do not certify those deployments.
 
-## Pending pushes
+## GitHub delivery
 
-`68c47e9 chore(scaffold): initialize Flare monorepo and self-hosting stack` — pending GitHub authentication and private repository creation.
-
-`90eaa36 feat(auth): add tenant isolation, team roles and secure authentication` — pending the same GitHub setup.
-
-`e3a3d75 feat(workflows): add Novu control plane and durable trigger dispatch` — pending GitHub setup.
-
-`e4fda65 feat(mail): add durable shared email pipeline and authenticated relay` — pending GitHub setup.
-
-`22f693a feat(dashboard): add authenticated notification and email control plane` — pending GitHub setup.
-
-`6ac7592 feat(operations): add durable webhooks, redacted logs and delivery metrics` — local checkpoint, pending GitHub setup.
-
-`a8c4d3c feat(audience): add contacts, versioned templates and durable broadcasts` — local checkpoint; automatic approval review blocked upload pending destination ownership/trust confirmation.
+- 2026-10-12: Authenticated GitHub CLI as `ChariPramod`, created [ChariPramod/flare](https://github.com/ChariPramod/flare) as a private repository, and pushed all eight completed checkpoints through `551f476` to `main` over HTTPS. Local `main` tracks `origin/main`. The eight-commit history passed gitleaks before upload.
+- The unfinished inbound MIME dependency preparation remains local and uncommitted; it is not included in the published checkpoint history.
 
 ## Next
 
-Implement durable automations, authenticated inbound receiving, translations/layouts and publication dependencies, then hardening and SDK/CLI. Full Compose verification remains a prerequisite for production readiness.
+Continue Phase 7 with authenticated inbound receiving, translations/layouts and publication dependencies, then hardening and SDK/CLI. Durable automations are committed. Full Compose verification remains a prerequisite for production readiness.
