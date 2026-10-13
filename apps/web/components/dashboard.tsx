@@ -142,6 +142,7 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
   const canPublish = ['owner', 'admin'].includes(data.principal.role) && !data.principal.production;
   const activeEnvironment = environments.data?.find((v) => v.id === data.principal.environmentId);
   const change = async (orgId: string, environmentId: string) => {
+    if (orgId === data.principal.orgId && environmentId === data.principal.environmentId) return;
     setError(undefined);
     try {
       await api('session/switch', 'POST', { orgId, environmentId });

@@ -14,7 +14,18 @@ test('live login → workflow → Novu activity', async ({ page }) => {
   await page.getByLabel('Environment', { exact: true }).selectOption({ label: 'Development' });
   await page.getByRole('button', { name: 'Create workflow', exact: true }).click();
   await page.getByLabel('Workflow name').fill(`Acceptance ${suffix}`);
-  await page.getByRole('dialog').getByRole('button', { name: 'Create workflow' }).click();
+  const [created] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === '/api/workflows' &&
+        response.request().method() === 'POST',
+    ),
+    page.getByRole('dialog').getByRole('button', { name: 'Create workflow' }).click(),
+  ]);
+  expect(created.status(), 'Workflow creation HTTP status').toBe(201);
+  await expect(
+    page.getByRole('heading', { name: `Acceptance ${suffix}`, exact: true }),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Add first step' }).click();
   await page
     .getByRole('dialog')

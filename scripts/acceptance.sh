@@ -34,6 +34,6 @@ node scripts/acceptance/browser.mjs "$acceptance_dir/.env"
 "${compose[@]}" stop flare-worker
 "${compose[@]}" exec -T flare-api node scripts/acceptance/load.mjs accept
 "${compose[@]}" exec -T redis redis-cli FLUSHDB
-"${compose[@]}" start flare-worker
+"${compose[@]}" start --wait --wait-timeout 120 flare-worker
 "${compose[@]}" exec -T flare-api node scripts/acceptance/load.mjs verify
 printf 'Pinned full-stack acceptance passed (simulated local DNS/providers; external checks remain separate).\n'

@@ -18,6 +18,13 @@ test('sign in, create and edit a workflow, trigger it, and inspect activity', as
   expect(cookie?.httpOnly).toBe(true);
   expect(cookie?.sameSite).toBe('Lax');
   expect(await page.evaluate(() => document.cookie)).not.toContain('flare_session');
+  let redundantSwitches = 0;
+  await page.route('**/api/session/switch', async (route) => {
+    redundantSwitches++;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await route.continue();
+  });
+  await page.getByLabel('Environment', { exact: true }).selectOption({ label: 'Development' });
   await page.getByRole('button', { name: 'Create workflow', exact: true }).click();
   await page.getByLabel('Workflow name').fill('Welcome customers');
   await page.getByRole('dialog').getByRole('button', { name: 'Create workflow' }).click();
@@ -49,6 +56,7 @@ test('sign in, create and edit a workflow, trigger it, and inspect activity', as
   await page.getByRole('link', { name: 'accepted · 1 attempts' }).click();
   await expect(page.getByRole('heading', { name: 'Run timeline' })).toBeVisible();
   await expect(page.getByText('accepted', { exact: true })).toBeVisible();
+  expect(redundantSwitches).toBe(0);
   expect(errors).toEqual([]);
 });
 test('domain DNS records, verification contract, email submission and raw source', async ({

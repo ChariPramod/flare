@@ -30,7 +30,7 @@ Restore into an isolated network/project with delivery egress disabled. Restore 
 
 | Symptom                          | First checks                                                                                                      |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| GitHub shows 404                 | Sign in as a repository collaborator; Flare is private                                                            |
+| GitHub shows 404                 | Open the public repository at `https://github.com/ChariPramod/flare`; no collaborator access is required          |
 | Dashboard cannot log in          | `/ready`, API proxy URL, seeded owner, auth rate limit and HTTPS cookie/origin settings                           |
 | API 429 or 503                   | Rate-limit headers; Redis availability. Do not bypass fail-closed limiting                                        |
 | SMTP authentication or TLS fails | Relay key scope/revocation, private-key file ownership, certificate hostname/trust chain; AUTH requires STARTTLS  |

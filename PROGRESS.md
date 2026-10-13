@@ -1,6 +1,6 @@
 # Flare progress
 
-Updated: 2026-10-12, America/Los_Angeles.
+Updated: 2026-10-13, America/Los_Angeles.
 
 ## Phase status
 
@@ -56,6 +56,7 @@ Updated: 2026-10-12, America/Los_Angeles.
 
 - 2026-10-12: Authenticated GitHub CLI as `ChariPramod`, created [ChariPramod/flare](https://github.com/ChariPramod/flare) as a private repository, and pushed all eight completed checkpoints through `551f476` to `main` over HTTPS. Local `main` tracks `origin/main`. The eight-commit history passed gitleaks before upload.
 - Inbound MIME dependency preparation is now incorporated into the inbound implementation checkpoint.
+- 2026-10-13: Made `ChariPramod/flare` public at the owner's request; GitHub reports `PUBLIC` and an unauthenticated request returns HTTP 200.
 
 ## Next
 
@@ -90,3 +91,5 @@ Continue Phase 8 with container acceptance, load tests and operational documenta
 - CI `38364420571` verified native trigger acceptance, translated email through SMTP AUTH/STARTTLS to Mailpit, locale fallback, subscriber preference update, content publication/reconciliation, Production editing restrictions and promoted automation execution. The next failure was a test wording mismatch: SMTP correctly rejected bad credentials with `EAUTH`/535. The assertion now checks those protocol fields. The first dev-server browser login timed out; all 11 browser flows pass locally against the production build, which the contract suite now uses. Remaining inbound/browser/load scenarios are still pending.
 
 - Acceptance fixture metadata is created privately by the host before container writes, preserving ownership for the host browser. Full checkpoint passes with 136 tests; all 11 production-build browser flows pass locally.
+
+- 2026-10-13: CI `38437876860` passed standard checks, all 11 real-service tests, the complete API/SMTP/signed-inbound scenarios, and four live browser flows (email, inbound, content publication and dead-letter redrive). The workflow browser exposed a delayed redundant environment switch that navigated away during editing; reproduced locally and fixed by ignoring the active selection. Worker restart now waits for readiness before load recovery assertions. Full-stack workflow/load verification continues; Docker is still unavailable on this Mac.

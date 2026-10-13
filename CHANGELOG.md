@@ -106,3 +106,10 @@
 - Map Flare’s public SMTP provider name to Novu’s native `nodemailer` handler.
 
 - Run browser contract tests against the production build and assert SMTP authentication failures using protocol error codes. Live CI now verifies translated relay delivery and content/automation publication.
+
+## Acceptance recovery — 2026-10-13
+
+- Ignore selection of the already active organization/environment so a delayed session refresh cannot interrupt workflow creation. Added a delayed-response browser regression and explicit live workflow HTTP assertions.
+- Wait for worker readiness before checking recovery after Redis loss.
+- Verified signed inbound receipt, SMTP authentication/Bcc handling, suppression and four live dashboard flows against the full stack in CI. The final workflow browser and load stages remain under verification.
+- Made the GitHub repository public at the owner's request and updated access instructions.
