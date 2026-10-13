@@ -97,6 +97,11 @@ it('pins source layout versions while preserving payload variables and snapshott
     '<main><h1>{{payload.__flare_i18n.html_greeting}}</h1><p>{{payload.name}}</p><footer>{{payload.__flare_i18n.html_footer}}</footer></main>',
   );
   expect(first.definition.steps[0]!.controlValues).not.toHaveProperty('layoutIdentifier');
+  expect(first.definition.steps[0]!.controlValues).toMatchObject({
+    editorType: 'html',
+    layoutId: null,
+  });
+  expect(first.source.steps[0]!.controlValues).not.toHaveProperty('editorType');
   await sql`insert into layout_versions(org_id,environment_id,layout_id,version,html,translations) values(${org},${env},${layout},2,'<article>{{{body}}}</article>',false)`;
   await sql`update layouts set current_version=2 where id=${layout}`;
   const repeated = await withTenant(sql, principal, (tx) =>
@@ -107,6 +112,38 @@ it('pins source layout versions while preserving payload variables and snapshott
     (await withTenant(sql, principal, (tx) => compileWorkflowContent(tx, principal, source())))
       .source.steps[0]!.controlValues.layoutVersion,
   ).toBe(2);
+});
+it('uses HTML for Flare email while preserving explicitly requested native block content', async () => {
+  const workflow = workflowSchema.parse({
+    workflowId: 'formats',
+    name: 'Formats',
+    steps: [
+      {
+        stepId: 'html',
+        name: 'HTML',
+        type: 'email',
+        controlValues: { subject: 'HTML', body: '<p>Hello</p>' },
+      },
+      {
+        stepId: 'block',
+        name: 'Block',
+        type: 'email',
+        controlValues: {
+          subject: 'Block',
+          body: '{"type":"doc","content":[]}',
+          editorType: 'block',
+        },
+      },
+    ],
+  });
+  const result = await withTenant(sql, principal, (tx) =>
+    compileWorkflowContent(tx, principal, workflow),
+  );
+  expect(result.definition.steps.map((step) => step.controlValues.editorType)).toEqual([
+    'html',
+    'block',
+  ]);
+  expect(result.source).toEqual(workflow);
 });
 it('resolves missing locales and keys, escapes HTML and keeps previously resolved values unchanged', async () => {
   await setup();

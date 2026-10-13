@@ -83,6 +83,8 @@ export async function compileWorkflowContent(tx: Transaction, _tenant: Tenant, i
   for (const [index, step] of definition.steps.entries()) {
     const controls = { ...step.controlValues },
       original = source.steps[index]!.controlValues;
+    // Flare's editor accepts HTML. Novu otherwise defaults this field to Maily JSON.
+    if (step.type === 'email') controls.editorType ??= 'html';
     if (step.type === 'email' && typeof controls.templateId === 'string') {
       const id = contentInput(z.string().uuid(), controls.templateId);
       const version =
@@ -94,6 +96,7 @@ export async function compileWorkflowContent(tx: Transaction, _tenant: Tenant, i
       if (!template) throw new MailError(422, 'Workflow email template not found');
       controls.subject = template.subject;
       controls.body = template.html;
+      controls.editorType = 'html';
       original.templateVersion = Number(template.version);
       dependencies.templates.push({
         identifier: String(template.identifier),
@@ -117,6 +120,8 @@ export async function compileWorkflowContent(tx: Transaction, _tenant: Tenant, i
         await tx`select l.identifier,l.name,v.* from layouts l join layout_versions v on v.layout_id=l.id and v.org_id=l.org_id and v.environment_id=l.environment_id and v.version=coalesce(${version},l.current_version) where l.identifier=${name}`;
       if (!layout) throw new MailError(422, 'Workflow layout version not found');
       controls.body = String(layout.html).replace('{{{body}}}', () => String(controls.body ?? ''));
+      controls.editorType = 'html';
+      controls.layoutId = null; // The pinned Flare layout has already been applied.
       original.layoutVersion = Number(layout.version);
       dependencies.layouts.push({
         identifier: name,

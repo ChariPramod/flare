@@ -94,3 +94,5 @@
 - Reuse the current environment’s preinstalled Novu Inbox instead of creating an invalid second provider; enforce unique engine mappings.
 - Use the native primary-selection endpoint for email/SMS and persist actual provider state.
 - CI now confirms healthy full-stack startup, baseline migration upgrade, login/bootstrap and local DNS verification. Further end-to-end scenarios remain pending.
+
+- Compile Flare email bodies as explicit HTML and avoid applying an engine layout over an already pinned Flare wrapper. Preserve source definitions and explicit native block content.
