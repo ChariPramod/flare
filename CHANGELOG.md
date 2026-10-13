@@ -98,3 +98,5 @@
 - Compile Flare email bodies as explicit HTML and avoid applying an engine layout over an already pinned Flare wrapper. Preserve source definitions and explicit native block content.
 
 - Fix workflow and subscriber preference contracts against the pinned Novu API; compare publication preferences using Novu’s native response field names.
+
+- Omit empty native trigger context without mutating accepted request snapshots or logical transaction identity; improve metadata-only acceptance failure diagnostics.

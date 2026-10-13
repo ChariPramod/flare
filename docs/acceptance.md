@@ -16,11 +16,11 @@ Do not call acceptance complete unless every required row has evidence for the c
 
 | Check                                   | Evidence required                                         | Current boundary                                                          |
 | --------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------- |
-| lint/types/unit/build/secrets           | checkpoint and CI check job                               | Passing through tooling checkpoint                                        |
-| browser contract tests                  | 11 Playwright flows                                       | Passing through tooling checkpoint                                        |
-| real-service integration                | CI integration job and same script locally                | 11 tests passed in CI on 6dbf291; local run pending                       |
-| pinned full stack                       | CI acceptance job and same script locally                 | Healthy startup on 9581989; Inbox compatibility repair under verification |
-| migration/seed/upgrade                  | acceptance scenario                                       | Baseline upgrade passed on 9581989; repeated seed checks pending          |
+| lint/types/unit/build/secrets           | checkpoint and CI check job                               | Passed on ce28096 in CI                                                   |
+| browser contract tests                  | 11 Playwright flows                                       | Passed on ce28096 in CI                                                   |
+| real-service integration                | CI integration job and same script locally                | 11 tests passed in CI on ce28096; local run pending                       |
+| pinned full stack                       | CI acceptance job and same script locally                 | Workflow creation passed on ce28096; empty trigger context repair pending |
+| migration/seed/upgrade                  | acceptance scenario                                       | Baseline upgrade and repeated seed passed on 523ad87                      |
 | load/queue-loss recovery                | acceptance scenario                                       | Pending                                                                   |
 | public DNS and DKIM delivery            | controlled external sending/receiving domain              | Credentials/infrastructure pending                                        |
 | Postal routing/native delivery callback | real Postal server/domain routing                         | Pending; signed fixtures do not substitute                                |

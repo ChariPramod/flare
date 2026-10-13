@@ -53,10 +53,16 @@ try {
     name: schema.workflowId,
     to: 'acceptance-french',
   });
-  await until(
-    async () => (await api(`/activity/${run.ids[0]}`)).status === 'accepted',
-    'pinned Novu trigger acceptance',
-  );
+  await until(async () => {
+    const current = await api(`/activity/${run.ids[0]}`);
+    if (['failed', 'ambiguous', 'canceled'].includes(current.status)) {
+      const httpStatus = String(current.error).match(/\((\d{3})\)/)?.[1] ?? 'unavailable';
+      throw new Error(
+        `Workflow dispatch ${current.status}; attempts=${Number(current.attempts)}; upstream HTTP=${httpStatus}`,
+      );
+    }
+    return current.status === 'accepted';
+  }, 'pinned Novu trigger acceptance');
   await until(
     async () =>
       (await json('http://mailpit:8025/api/v1/messages')).messages.some(

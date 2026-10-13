@@ -61,6 +61,33 @@ async function run() {
   await sql`insert into workflow_runs(id,org_id,environment_id,workflow_id,transaction_id,parent_transaction_id,payload) values(${id},${org},${env},'welcome',${id},${id},${sql.json({ name: 'welcome', transactionId: id })})`;
   return id;
 }
+it('omits empty native context without changing durable request or transaction identity', async () => {
+  const payload = { name: 'welcome', to: 'subscriber', context: {}, transactionId: randomUUID() };
+  const fetcher = vi.fn<typeof fetch>(async () => new Response('{"data":{"acknowledged":true}}'));
+  vi.stubGlobal('fetch', fetcher);
+  try {
+    const row = { id: randomUUID(), transaction_id: payload.transactionId, payload };
+    await sendWorkflowRequest('https://engine.test', 'key', row, false);
+    const init = fetcher.mock.calls[0]![1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({
+      name: 'welcome',
+      to: 'subscriber',
+      transactionId: payload.transactionId,
+    });
+    expect(payload.context).toEqual({});
+    await sendWorkflowRequest(
+      'https://engine.test',
+      'key',
+      { ...row, payload: { ...payload, context: { tenant: 'acme' } } },
+      false,
+    );
+    expect(JSON.parse(String((fetcher.mock.calls[1]![1] as RequestInit).body)).context).toEqual({
+      tenant: 'acme',
+    });
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 it('claims once, cancels during dispatch, and recovers durable compensation independently of queue callbacks', async () => {
   const id = await run();
   let release!: () => void;

@@ -119,6 +119,15 @@ export async function sendWorkflowRequest(
   run: Record<string, unknown>,
   cancel: boolean,
 ): Promise<WorkflowOutcome> {
+  const payload = { ...(run.payload as Record<string, unknown>) };
+  // Novu accepts an omitted context but rejects an empty object. Keep the durable
+  // request intact so older accepted runs can be redriven with the same identity.
+  if (
+    payload.context &&
+    typeof payload.context === 'object' &&
+    Object.keys(payload.context).length === 0
+  )
+    delete payload.context;
   const response = await fetch(
     `${url}/v1/events/trigger${cancel ? `/${encodeURIComponent(String(run.transaction_id))}` : ''}`,
     {
@@ -130,7 +139,7 @@ export async function sendWorkflowRequest(
         ...(run.traceparent ? { traceparent: String(run.traceparent) } : {}),
         'x-request-id': String(run.request_id ?? run.id),
       },
-      ...(cancel ? {} : { body: JSON.stringify(run.payload) }),
+      ...(cancel ? {} : { body: JSON.stringify(payload) }),
       signal: AbortSignal.timeout(15000),
       redirect: 'error',
     },
