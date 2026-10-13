@@ -364,3 +364,26 @@ test('inspects a failed operation and redrives it through the API', async ({ pag
   await expect(page.getByRole('dialog')).toBeHidden();
   await expect(page.getByRole('button', { name: 'workflow · 00000000' })).toBeHidden();
 });
+
+test('lets an owner explicitly delegate publication when creating a full-access key', async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto('/api-keys');
+  await page.getByRole('button', { name: 'Create API key', exact: true }).click();
+  await page.getByRole('dialog').getByLabel('Name', { exact: true }).fill('Deployment CLI');
+  await page
+    .getByRole('dialog')
+    .getByRole('combobox', { name: /Permission/ })
+    .selectOption('full_access');
+  await page.getByRole('checkbox', { name: /Allow publication/ }).check();
+  const request = page.waitForRequest(
+    (r) => r.url().endsWith('/api/api-keys') && r.method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Create key', exact: true }).click();
+  expect((await request).postDataJSON()).toMatchObject({
+    permission: 'full_access',
+    allow_publish: true,
+  });
+  await expect(page.getByRole('heading', { name: 'Save your API key', exact: true })).toBeVisible();
+});

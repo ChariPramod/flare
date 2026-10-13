@@ -1,0 +1,103 @@
+import { it, expect, vi } from 'vitest';
+import { randomBytes, createHmac } from 'node:crypto';
+import { FlareClient, FlareError, verifyWebhook } from '../../packages/sdk/src/index.js';
+const environmentId = '00000000-0000-4000-8000-000000000001',
+  apiKey = `fl_${randomBytes(32).toString('base64url')}`;
+it('uses explicit tenant headers, path encoding and stable idempotency without retrying mutations', async () => {
+  const calls: { url: URL; init: RequestInit }[] = [];
+  const fetcher = vi.fn(async (url: URL | RequestInfo, init?: RequestInit) => {
+    calls.push({ url: new URL(String(url)), init: init! });
+    return new Response('{"id":"message"}', { status: 201 });
+  }) as typeof fetch;
+  const client = new FlareClient({
+    baseUrl: 'https://flare.example.test',
+    environmentId,
+    apiKey,
+    fetch: fetcher,
+  });
+  await client.sendEmail(
+    { from: 'sender@example.test', to: 'reader@example.test', subject: 'Welcome', text: 'Hello' },
+    'stable-key',
+  );
+  expect(calls[0]!.url.pathname).toBe('/v1/emails');
+  expect(calls[0]!.init.headers).toMatchObject({
+    'x-environment-id': environmentId,
+    'Idempotency-Key': 'stable-key',
+  });
+  expect(calls[0]!.init.redirect).toBe('error');
+  await client.request('get', '/v1/subscribers/{id}', { path: { id: 'user/with space' } });
+  expect(calls[1]!.url.pathname).toBe('/v1/subscribers/user%2Fwith%20space');
+  fetcher.mockImplementationOnce(async () => {
+    throw new Error('Lost response');
+  });
+  await expect(
+    client.sendEmail({ from: 'a@b.test', to: 'c@d.test', subject: 'x', text: 'x' }, 'stable-key'),
+  ).rejects.toMatchObject({ status: 0 });
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  expect(() => new FlareClient({ baseUrl: 'http://remote.test', environmentId, apiKey })).toThrow(
+    'HTTPS',
+  );
+  expect(
+    () => new FlareClient({ baseUrl: 'https://flare.test', environmentId: '', apiKey }),
+  ).toThrow('environment');
+});
+it('paginates bounded data and preserves typed HTTP error metadata without leaking its key', async () => {
+  let page = 0;
+  const client = new FlareClient({
+    baseUrl: 'http://localhost:4000',
+    environmentId,
+    apiKey,
+    fetch: vi.fn(
+      async () => new Response(JSON.stringify({ data: ++page === 1 ? [{ id: 'a' }] : [] })),
+    ) as typeof fetch,
+  });
+  const rows = [];
+  for await (const row of client.paginate('/v1/contacts', {}, { limit: 1, maxPages: 3 }))
+    rows.push(row);
+  expect(rows).toEqual([{ id: 'a' }]);
+  expect(page).toBe(2);
+  const failed = new FlareClient({
+    baseUrl: 'https://flare.test',
+    environmentId,
+    apiKey,
+    fetch: vi.fn(
+      async () =>
+        new Response(JSON.stringify({ message: `denied ${apiKey}`, echo: apiKey }), {
+          status: 429,
+          headers: { 'retry-after': '2', 'x-request-id': 'request-1' },
+        }),
+    ) as typeof fetch,
+  });
+  try {
+    await failed.request('get', '/v1/domains', {});
+    throw new Error('Must reject');
+  } catch (e) {
+    expect(e).toBeInstanceOf(FlareError);
+    expect(e).toMatchObject({ status: 429, retryAfter: 2, requestId: 'request-1' });
+    expect(JSON.stringify(e)).not.toContain(apiKey);
+  }
+});
+it('verifies Svix signatures, rotation and timestamps over the original body', async () => {
+  const bytes = randomBytes(32),
+    secret = `whsec_${bytes.toString('base64')}`,
+    body = '{"type":"email.sent"}',
+    timestamp = 1700000000,
+    id = 'event-1';
+  const signature = createHmac('sha256', bytes)
+    .update(`${id}.${timestamp}.${body}`)
+    .digest('base64');
+  const headers = {
+    'svix-id': id,
+    'svix-timestamp': String(timestamp),
+    'svix-signature': `v1,invalid v1,${signature}`,
+  };
+  expect(await verifyWebhook(secret, body, headers, { now: timestamp })).toEqual({
+    type: 'email.sent',
+  });
+  await expect(verifyWebhook(secret, body + ' ', headers, { now: timestamp })).rejects.toThrow(
+    'signature',
+  );
+  await expect(verifyWebhook(secret, body, headers, { now: timestamp + 301 })).rejects.toThrow(
+    'expired',
+  );
+});

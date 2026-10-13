@@ -14,7 +14,7 @@ Updated: 2026-10-12, America/Los_Angeles.
 | 5 — Webhooks, logs, metrics                     | Local checkpoint; live engine/container tests pending            |
 | 6 — Audience, broadcasts, templates             | Local checkpoint; live recovery/provider tests pending           |
 | 7 — Automations, inbound, translations, layouts | Local modules passed; pinned-engine acceptance pending           |
-| 8 — Hardening, SDK, CLI                         | Reliability local checks passed; SDK/CLI/MCP pending             |
+| 8 — Hardening, SDK, CLI                         | Reliability/tooling local checks passed; acceptance pending      |
 
 ## Checkpoint log
 
@@ -42,6 +42,8 @@ Updated: 2026-10-12, America/Los_Angeles.
 
 - 2026-10-12: Added atomic per-key Redis limits, fail-closed availability handling, durable workflow claims/retries/cancellation compensation, ambiguity quarantine, tenant dead letters and audited identity-preserving redrive, explicit tracing/Prometheus/Grafana instrumentation, bucket readiness and bounded log/idempotency cleanup. Lint/typecheck/build/gitleaks and 116 backend tests pass; the tenth browser flow passes and its screenshot was inspected. Added a separate real-service integration CI job; its first run is pending. Publication checkpoint CI passed.
 
+- 2026-10-12: Added a 142-operation validator-derived OpenAPI contract, typed SDK, credential-safe CLI, read-only-by-default stdio MCP, and immutable owner/admin-delegated publication keys. Backend checkpoint passes with 122 tests; locally packed SDK/CLI/MCP tarballs install and consumer typechecks pass. The eleventh browser flow verifies explicit publication delegation. Standard reliability CI passed all ten browser flows; container integration stopped at the withdrawn MinIO client image. Compose now builds official pinned MinIO sources, including the upstream server security patch; first source-build CI verification is pending.
+
 ## Known issues and verification limits
 
 - This host has no Docker runtime. Full-stack startup, official image pulls and container integration tests cannot be validated here yet.
@@ -57,4 +59,4 @@ Updated: 2026-10-12, America/Los_Angeles.
 
 ## Next
 
-Continue Phase 8 with SDK/CLI/MCP, container acceptance, load tests and operational documentation. Inbound receiving, layouts, translations and selected content publication are implemented. Production automation promotion remains a separate integration gap. Full Compose verification remains a prerequisite for production readiness.
+Continue Phase 8 with container acceptance, load tests and operational documentation. Inbound receiving, layouts, translations and selected content publication are implemented. Production automation promotion remains a separate integration gap. Full Compose verification remains a prerequisite for production readiness.

@@ -19,7 +19,10 @@
     "db:migrate": "pnpm --filter @flare/db migrate",
     "seed": "pnpm --filter @flare/db seed && pnpm --filter @flare/mail seed",
     "checkpoint": "bash scripts/checkpoint.sh",
-    "test:e2e:live": "playwright test --config playwright.live.config.ts"
+    "test:e2e:live": "playwright test --config playwright.live.config.ts",
+    "openapi:generate": "node scripts/openapi.mjs",
+    "openapi:check": "node scripts/openapi.mjs --check",
+    "test:packages": "node scripts/package-smoke.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.15",
@@ -29,6 +32,7 @@
     "@types/node": "^22.19.0",
     "eslint": "^9.39.0",
     "eslint-config-prettier": "^10.1.8",
+    "openapi-typescript": "^7.13.0",
     "prettier": "^3.6.2",
     "svix": "^2.8.0",
     "tsx": "^4.20.6",
@@ -36,6 +40,7 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "8.46.0",
     "vitest": "^3.2.4",
-    "yaml": "^2.8.1"
+    "yaml": "^2.8.1",
+    "zod-to-json-schema": "^3.25.2"
   }
 }

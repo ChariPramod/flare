@@ -20,7 +20,8 @@ services:
       timeout: 3s
       retries: 20
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    build: { context: ./ops/minio, target: server }
+    image: flare-minio:RELEASE.2025-10-15T17-29-55Z
     command: server /data
     environment: { MINIO_ROOT_USER: flare-test, MINIO_ROOT_PASSWORD: local-test-only }
     ports: ['127.0.0.1:19000:9000']
@@ -30,7 +31,8 @@ services:
       timeout: 3s
       retries: 20
   minio-init:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    build: { context: ./ops/minio, target: client }
+    image: flare-minio-mc:RELEASE.2025-08-13T08-35-41Z
     depends_on: { minio: { condition: service_healthy } }
     entrypoint:
       [

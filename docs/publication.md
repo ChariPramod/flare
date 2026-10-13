@@ -1,6 +1,6 @@
 # Durable publication
 
-Development owners/admins publish selected workflows, layouts and workflow translation dictionaries. Production content editing remains disabled. API keys cannot publish. Subscribers, integrations, topics, contacts and credentials are never copied.
+Development owners/admins publish selected workflows, layouts and workflow translation dictionaries. Production content editing remains disabled. Ordinary API keys cannot publish. An owner/admin user can explicitly delegate publication to a new unscoped full-access key using `allow_publish: true` (also available in the API key dashboard). This grant is immutable and audited. Subscribers, integrations, topics, contacts and credentials are never copied.
 
 `GET /v1/publish/diff` returns resource comparisons, workflow dependency snapshots and a `diff_token`. `POST /v1/publish` accepts `{workflows:[],layouts:[],translations:[],diff_token?}`; translation selections are workflow identifiers. Existing workflow-only request bodies remain valid. Send the reviewed token to reject changes since the diff was read. Without it, the request snapshots the current selection.
 

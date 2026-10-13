@@ -18,7 +18,9 @@ import { AutomationController } from './automations.js';
 import { Controller, Get, Module, ServiceUnavailableException } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SwaggerModule } from '@nestjs/swagger';
+import type { OpenAPIObject } from '@nestjs/swagger';
+import { readFileSync } from 'node:fs';
 import helmet from 'helmet';
 import { AuthController, AuthGuard, Public } from './auth.js';
 import { WorkflowController } from './workflows.js';
@@ -93,10 +95,9 @@ app.useBodyParser('json', {
 });
 app.use(helmet());
 app.enableCors({ origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000', credentials: true });
-const document = SwaggerModule.createDocument(
-  app,
-  new DocumentBuilder().setTitle('Flare API').setVersion('1').addBearerAuth().build(),
-);
+const document = JSON.parse(
+  readFileSync(new URL('../../../docs/api/openapi.json', import.meta.url), 'utf8'),
+) as OpenAPIObject;
 SwaggerModule.setup('docs', app, document);
 await app.listen(Number(process.env.PORT ?? 4000), '0.0.0.0');
 logger.info('Flare API listening');

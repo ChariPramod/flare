@@ -60,6 +60,7 @@ export async function authenticateApiKey(token: string) {
     permission: key.permission as 'full_access' | 'sending_access',
     domainId: key.domain_id as string | null,
     production: key.environment_name === 'Production',
+    allowPublish: Boolean(key.allow_publish),
     rateLimit: Number(key.rate_limit ?? process.env.API_RATE_LIMIT ?? 10),
     rateBurst: Number(key.rate_burst ?? process.env.API_RATE_BURST ?? 10),
   };

@@ -59,3 +59,10 @@
 - Added tenant-scoped dead letters and audited redrive, preserving operation identity and refusing ambiguous sends.
 - Added sanitized request/job tracing, Prometheus metrics, Grafana panels, storage readiness, shutdown deadlines and bounded cleanup. Fixed SSO MFA exchange-token consumption on invalid codes.
 - Added recovery/rate-limit/browser tests and the first PostgreSQL/Redis/MinIO/Mailpit CI job. Local Docker and real provider checks remain pending.
+
+## Developer tooling checkpoint — 2026-10-12
+
+- Added a generated OpenAPI contract with drift checks, typed TypeScript SDK, environment-explicit CLI and stdio MCP with validated read-only/mutating tools.
+- Added local package installation/consumer checks, webhook verification, typed errors, pagination and credential redaction. No registry packages were published.
+- Added immutable publication delegation for owner/admin-created keys, with a dashboard control; ordinary API keys remain unable to publish.
+- Replaced unavailable official MinIO binary images with builds from pinned official source commits, including the server security release. Actual container verification remains pending.

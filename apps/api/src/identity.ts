@@ -1,3 +1,4 @@
+import { can } from '@flare/shared';
 import { randomBytes } from 'node:crypto';
 import {
   Body,
@@ -93,7 +94,7 @@ export class IdentityController {
       sql,
       req.principal,
       (tx) =>
-        tx`select id, name, prefix, permission, domain_id, rate_limit, rate_burst, created_at, last_used_at, revoked_at from api_keys order by created_at desc`,
+        tx`select id, name, prefix, permission, domain_id, rate_limit, rate_burst, allow_publish, created_at, last_used_at, revoked_at from api_keys order by created_at desc`,
     );
   }
   @Access('manage_keys') @Post('api-keys') async createKey(
@@ -106,6 +107,7 @@ export class IdentityController {
           name: z.string().trim().min(1).max(120),
           permission: z.enum(['full_access', 'sending_access']),
           domain_id: idSchema.optional(),
+          allow_publish: z.boolean().default(false),
           rate_limit: z.number().int().min(1).max(10000).optional(),
           rate_burst: z.number().int().min(1).max(10000).optional(),
         })
@@ -116,6 +118,16 @@ export class IdentityController {
         ),
       body,
     );
+    if (
+      input.allow_publish &&
+      (!can(req.principal, 'publish') ||
+        req.principal.kind !== 'session' ||
+        input.permission !== 'full_access' ||
+        input.domain_id)
+    )
+      throw new ForbiddenException(
+        'Only an authorized owner/admin session may delegate publication to an unscoped full-access key',
+      );
     const key = createApiKey();
     return withTenant(sql, req.principal, async (tx) => {
       if (input.domain_id) {
@@ -123,8 +135,10 @@ export class IdentityController {
         if (!domain) throw new BadRequestException('Domain does not exist in this environment');
       }
       const [row] =
-        await tx`insert into api_keys (org_id, environment_id, name, token_hash, prefix, permission, domain_id, created_by, rate_limit, rate_burst) values (${req.principal.orgId}, ${req.principal.environmentId}, ${input.name}, ${key.hash}, ${key.prefix}, ${input.permission}, ${input.domain_id ?? null}, ${req.principal.actorId}, ${input.rate_limit ?? null}, ${input.rate_burst ?? null}) returning id, name, prefix, permission, domain_id, rate_limit, rate_burst, created_at`;
-      await audit(tx, req.principal, 'api_key.created', String(row!.id));
+        await tx`insert into api_keys (org_id, environment_id, name, token_hash, prefix, permission, domain_id, created_by, rate_limit, rate_burst, allow_publish) values (${req.principal.orgId}, ${req.principal.environmentId}, ${input.name}, ${key.hash}, ${key.prefix}, ${input.permission}, ${input.domain_id ?? null}, ${req.principal.actorId}, ${input.rate_limit ?? null}, ${input.rate_burst ?? null}, ${input.allow_publish}) returning id, name, prefix, permission, domain_id, rate_limit, rate_burst, allow_publish, created_at`;
+      await audit(tx, req.principal, 'api_key.created', String(row!.id), {
+        allow_publish: input.allow_publish,
+      });
       return { ...row, token: key.token };
     });
   }

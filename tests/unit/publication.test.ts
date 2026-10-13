@@ -287,3 +287,31 @@ it('allows a corrected replacement to supersede an irreparable failed snapshot w
     (await sql`select status from publication_operations where id=${replacement.id}`)[0]!.status,
   ).toBe('completed');
 });
+
+it('accepts explicitly delegated publication keys while ordinary keys remain forbidden', async () => {
+  await setup();
+  await expect(
+    createPublication(
+      sql,
+      { ...principal, kind: 'api_key', role: 'developer', permission: 'full_access' },
+      { workflows: ['welcome'] },
+    ),
+  ).rejects.toThrow('publication credential');
+  const operation = await createPublication(
+    sql,
+    {
+      ...principal,
+      kind: 'api_key',
+      role: 'developer',
+      permission: 'full_access',
+      allowPublish: true,
+    },
+    { workflows: ['welcome'] },
+  );
+  expect(operation.status).toBe('pending');
+  const key = randomUUID();
+  await sql`insert into api_keys(id,org_id,environment_id,name,token_hash,prefix,permission,allow_publish) values(${key},${org},${env},'deploy',${randomUUID()},'fl_test','full_access',false)`;
+  await expect(sql`update api_keys set allow_publish=true where id=${key}`).rejects.toThrow(
+    'immutable',
+  );
+});

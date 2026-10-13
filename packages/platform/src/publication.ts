@@ -96,7 +96,7 @@ export async function publicationDiff(sql: Sql, tenant: Tenant) {
 }
 export async function createPublication(sql: Sql, principal: Principal, raw: unknown) {
   if (principal.production || !can(principal, 'publish'))
-    throw new MailError(403, 'An authorized Development user session is required to publish');
+    throw new MailError(403, 'An authorized Development publication credential is required');
   const input = contentInput(publicationSchema, raw),
     diff = await publicationDiff(sql, principal);
   if (principal.environmentId !== diff.sourceId)

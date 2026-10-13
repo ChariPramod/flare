@@ -1,0 +1,25 @@
+{
+  "name": "@pareto-labs/flare-cli",
+  "version": "0.1.0",
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "bin": {
+    "flare": "dist/main.js"
+  },
+  "exports": {
+    "./config": "./dist/config.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@pareto-labs/flare-sdk": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

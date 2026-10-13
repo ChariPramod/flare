@@ -1,0 +1,27 @@
+{
+  "name": "@pareto-labs/flare-mcp",
+  "version": "0.1.0",
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "bin": {
+    "flare-mcp": "dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@pareto-labs/flare-sdk": "workspace:*",
+    "@pareto-labs/flare-cli": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "zod": "^3.25.76",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

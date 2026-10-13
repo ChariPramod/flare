@@ -61,3 +61,5 @@ See [layouts and translations](docs/content.md) for version pinning, locale fall
 See [durable publication](docs/publication.md) for content dependencies, Production promotion and interrupted-operation recovery.
 
 Operational rate limits, recovery, tracing and dashboards: [reliability guide](docs/reliability.md).
+
+Developer packages and the generated API contract: [SDK, CLI and MCP guide](docs/developer-tools.md).

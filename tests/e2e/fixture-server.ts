@@ -92,6 +92,12 @@ const server = createServer(async (req, res) => {
     )
       return reply({ message: 'No tenant access' }, 403);
     const production = req.headers['x-environment-id'] === prod;
+    if (path === 'api-keys')
+      return reply(
+        method === 'POST'
+          ? { id: randomUUID(), ...body, token: 'fl_browser_contract_key_only' }
+          : [],
+      );
     if (path === 'auth/me')
       return reply({
         user,

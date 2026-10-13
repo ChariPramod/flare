@@ -10,6 +10,7 @@ type ApiKey = {
   prefix: string;
   permission: string;
   domain_id: string | null;
+  allow_publish?: boolean;
   created_at: string;
   last_used_at: string;
   revoked_at: string | null;
@@ -22,7 +23,13 @@ type Environment = {
   bridge_url: string | null;
 };
 export function SettingsPages({ section, session }: { section: string; session: Session }) {
-  if (section === 'api-keys') return <Keys canManage={session.principal.role !== 'viewer'} />;
+  if (section === 'api-keys')
+    return (
+      <Keys
+        canManage={session.principal.role !== 'viewer'}
+        canPublish={['owner', 'admin'].includes(session.principal.role)}
+      />
+    );
   if (section === 'environments' || section === 'bridge')
     return (
       <Environments
@@ -34,7 +41,7 @@ export function SettingsPages({ section, session }: { section: string; session: 
     return <Team canManage={['owner', 'admin'].includes(session.principal.role)} />;
   return <Account session={session} />;
 }
-function Keys({ canManage }: { canManage: boolean }) {
+function Keys({ canManage, canPublish }: { canManage: boolean; canPublish: boolean }) {
   const query = useApi<ApiKey[]>('api-keys'),
     domains = useApi<{ id: string; name: string }[]>('domains'),
     create = useAction<ApiKey & { token: string }>('api-keys');
@@ -75,7 +82,12 @@ function Keys({ canManage }: { canManage: boolean }) {
           {
             accessorKey: 'permission',
             header: 'Permission',
-            cell: ({ getValue }) => <Badge>{String(getValue()).replaceAll('_', ' ')}</Badge>,
+            cell: ({ row, getValue }) => (
+              <Badge>
+                {String(getValue()).replaceAll('_', ' ')}
+                {row.original.allow_publish ? ' · publication' : ''}
+              </Badge>
+            ),
           },
           {
             accessorKey: 'domain_id',
@@ -121,7 +133,11 @@ function Keys({ canManage }: { canManage: boolean }) {
             e.preventDefault();
             const form = Object.fromEntries(new FormData(e.currentTarget));
             create.mutate(
-              { ...form, domain_id: form.domain_id || undefined },
+              {
+                ...form,
+                domain_id: form.domain_id || undefined,
+                allow_publish: form.allow_publish === 'on',
+              },
               {
                 onSuccess: (result) => {
                   setSecret(result.token);
@@ -154,6 +170,14 @@ function Keys({ canManage }: { canManage: boolean }) {
                   </option>
                 ))}
               </select>
+            </Field>
+          )}
+          {canPublish && permission === 'full_access' && (
+            <Field
+              label="Allow publication"
+              hint="Delegate Development-to-Production publication. This permission cannot be changed after creation."
+            >
+              <input type="checkbox" name="allow_publish" />
             </Field>
           )}
           <ErrorBox error={create.error} />
