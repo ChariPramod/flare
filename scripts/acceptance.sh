@@ -10,9 +10,9 @@ compose=(docker compose --project-name "$project" --project-directory "$acceptan
 cleanup() {
   result=$?
   if [[ $result -ne 0 ]]; then
-    # Logs stay local: provider logs can contain credentials or message content.
     "${compose[@]}" ps || true
-    echo 'Acceptance failed. No provider logs or generated credentials are uploaded.' >&2
+    "${compose[@]}" logs --no-color --tail 80 flare-migrate flare-api flare-worker flare-smtp-relay novu-api novu-worker postal-init 2>/dev/null | node scripts/acceptance/diagnostics.mjs "$acceptance_dir/.env" || true
+    echo 'Acceptance failed. Only filtered, redacted error diagnostics are shown.' >&2
   fi
   "${compose[@]}" down -v --remove-orphans || true
   case "$acceptance_dir" in */flare-acceptance-*) rm -rf -- "$acceptance_dir";; esac

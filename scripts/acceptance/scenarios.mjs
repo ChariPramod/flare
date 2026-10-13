@@ -89,6 +89,46 @@ try {
     body: JSON.stringify(schema),
   });
   assert.equal(forbidden.status, 403);
+  const automation = await api('/automations', 'POST', {
+    identifier: 'acceptance-sequence',
+    name: 'Acceptance sequence',
+    enabled: true,
+    definition: {
+      trigger: 'acceptance_signup',
+      entry: 'wait',
+      steps: [{ id: 'wait', name: 'Durable wait', type: 'wait', seconds: 1, next: null }],
+    },
+  });
+  const promotion = await api('/publish', 'POST', { automations: ['acceptance-sequence'] });
+  await until(
+    async () => (await api(`/publications/${promotion.id}`)).status === 'completed',
+    'automation publication',
+  );
+  const productionApi = (path, method = 'GET', body) =>
+    json(`http://localhost:4000/v1${path}`, {
+      method,
+      body,
+      headers: { ...headers, 'x-environment-id': production.id },
+    });
+  const promoted = (await productionApi('/automations')).find(
+    (a) => a.identifier === 'acceptance-sequence',
+  );
+  assert.notEqual(promoted.id, automation.id);
+  const contact = await productionApi('/contacts', 'POST', {
+    email: 'production-contact@example.net',
+  });
+  await productionApi('/automation-events', 'POST', {
+    contact_id: contact.id,
+    name: 'acceptance_signup',
+    external_id: 'acceptance-production-event',
+  });
+  await until(
+    async () =>
+      (await productionApi(`/automation-runs?automation_id=${promoted.id}`)).some(
+        (r) => r.status === 'completed',
+      ),
+    'promoted automation execution in Production',
+  );
   // Exercise the authenticated relay separately, including failed authentication and hidden envelope recipients.
   const transport = (password) =>
     nodemailer.createTransport({

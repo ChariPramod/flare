@@ -1,26 +1,39 @@
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  lstatSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 const directory = mkdtempSync(join(tmpdir(), 'flare-acceptance-'));
-const excluded = new Set([
-  '.git',
-  '.tools',
-  'node_modules',
-  'dist',
-  '.next',
-  'test-results',
-  'playwright-report',
-  'coverage',
-]);
-cpSync(process.cwd(), directory, {
-  recursive: true,
-  filter: (path) =>
-    !excluded.has(basename(path)) &&
-    !basename(path).startsWith('.env') &&
-    !path.startsWith(resolve('ops/certs')) &&
-    !path.startsWith(resolve('ops/postal/config')),
-});
+// Respect Git's source boundary, including uncommitted source, while excluding ignored caches/secrets.
+const sourceFiles = execFileSync(
+  'git',
+  ['ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+  { encoding: 'utf8' },
+)
+  .split('\0')
+  .filter(Boolean);
+for (const file of new Set(sourceFiles)) {
+  if (!existsSync(file)) continue;
+  if (file.split('/').some((part) => ['.git', '.aws', '.ssh', '.codex', '.agents'].includes(part)))
+    continue;
+  if (
+    basename(file).startsWith('.env') ||
+    file.startsWith('ops/certs/') ||
+    file.startsWith('ops/postal/config/')
+  )
+    continue;
+  if (!lstatSync(file).isFile())
+    throw new Error(`Acceptance staging requires a regular source file: ${file}`);
+  mkdirSync(dirname(join(directory, file)), { recursive: true });
+  cpSync(file, join(directory, file));
+}
 cpSync('.env.example', join(directory, '.env.example'));
 execFileSync(process.execPath, ['scripts/setup.mjs', '--dev'], { cwd: directory, stdio: 'pipe' });
 const envPath = join(directory, '.env');

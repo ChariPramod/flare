@@ -82,3 +82,9 @@
 
 - Real-service integration now passes all 11 PostgreSQL/Redis/MinIO/Mailpit tests in GitHub Actions.
 - Full-stack CI exhausted runner disk; free unused hosted-runner toolchains and remove only ephemeral CI build cache after images are created. Local Docker caches remain untouched.
+
+### Container startup and acceptance diagnostics
+
+- Confirmed Flare API/web/worker and the pinned Novu API reach healthy status in CI after the disk repair; both standard and 11 real-service integration checks pass.
+- Provision Postal's private config volume for its actual UID 999 and launch Flare services directly with Node, avoiding runtime package-manager cache permissions under the relay's mounted-key owner.
+- Stage only Git-visible source, exclude generated browser/cache artifacts from Docker contexts, add bounded redacted failure diagnostics, and cover promoted automation execution and SDK consumer types in acceptance.

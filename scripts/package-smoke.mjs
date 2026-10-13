@@ -27,6 +27,7 @@ try {
     `import {FlareClient} from '@pareto-labs/flare-sdk';
 const client = new FlareClient({baseUrl:'https://flare.test',apiKey:'fl_test',environmentId:'00000000-0000-4000-8000-000000000001'});
 void client.sendEmail({from:'a@b.test',to:'c@d.test',subject:'Hello',text:'Welcome'});
+void client.publish({automations:['welcome-sequence']});
 // @ts-expect-error Invalid recipient type must not compile.
 void client.sendEmail({from:'a@b.test',to:42,subject:'Hello',text:'Welcome'});
 // @ts-expect-error Required route parameters must be supplied.

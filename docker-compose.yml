@@ -92,17 +92,25 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+  postal-config:
+    image: ghcr.io/postalserver/postal:3.3.7
+    user: root
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - 'cp /source/postal.yml /source/signing.key /config/; chown -R 999:999 /config; chmod 700 /config; chmod 600 /config/postal.yml /config/signing.key'
+    volumes: ['./ops/postal/config:/source:ro', 'postal-config-data:/config']
   postal-init:
     image: ghcr.io/postalserver/postal:3.3.7
     command: postal initialize
-    volumes: ['./ops/postal/config:/config:ro']
+    volumes: ['postal-config-data:/config:ro']
     depends_on:
       postal-mariadb: { condition: service_healthy }
+      postal-config: { condition: service_completed_successfully }
   postal:
     image: ghcr.io/postalserver/postal:3.3.7
     command: postal web-server
     restart: unless-stopped
-    volumes: ['./ops/postal/config:/config:ro']
+    volumes: ['postal-config-data:/config:ro']
     ports: ['127.0.0.1:5000:5000']
     depends_on:
       postal-init: { condition: service_completed_successfully }
@@ -113,14 +121,14 @@ services:
     image: ghcr.io/postalserver/postal:3.3.7
     command: postal worker
     restart: unless-stopped
-    volumes: ['./ops/postal/config:/config:ro']
+    volumes: ['postal-config-data:/config:ro']
     depends_on:
       postal-init: { condition: service_completed_successfully }
   postal-smtp:
     image: ghcr.io/postalserver/postal:3.3.7
     command: postal smtp-server
     restart: unless-stopped
-    volumes: ['./ops/postal/config:/config:ro']
+    volumes: ['postal-config-data:/config:ro']
     cap_add: [NET_BIND_SERVICE]
     depends_on:
       postal-init: { condition: service_completed_successfully }
@@ -300,5 +308,6 @@ volumes:
   redis-data:
   minio-data:
   postal-data:
+  postal-config-data:
   novu-mongo-data:
   novu-redis-data:

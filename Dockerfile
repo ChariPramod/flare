@@ -15,4 +15,4 @@ COPY --from=build --chown=node:node /app /app
 USER node
 ARG SERVICE=api
 ENV SERVICE=$SERVICE
-CMD ["sh", "-c", "exec pnpm --filter @flare/$SERVICE start"]
+CMD ["sh", "-c", "if [ \"$SERVICE\" = web ]; then exec node apps/web/node_modules/next/dist/bin/next start apps/web -H 0.0.0.0; else exec node \"apps/$SERVICE/dist/main.js\"; fi"]

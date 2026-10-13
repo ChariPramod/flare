@@ -8,3 +8,14 @@ node_modules
 coverage
 ops/postal/config
 ops/certs
+**/.turbo
+.pnpm-store
+playwright-report
+test-results
+**/*.tsbuildinfo
+*.log
+*.tgz
+.aws
+.ssh
+.codex
+.agents
