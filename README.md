@@ -55,3 +55,5 @@ See [audience, templates and broadcasts](docs/audience.md) for CSV mapping, pref
 See [contact automations](docs/automations.md) for durable sequence definitions, event correlation, waits and recovery.
 
 See [inbound receiving and forwarding](docs/inbound.md) for Postal routing, signature verification, MIME limits and retrieval.
+
+See [layouts and translations](docs/content.md) for version pinning, locale fallback, preview and workflow source compatibility.

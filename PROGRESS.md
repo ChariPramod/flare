@@ -13,7 +13,7 @@ Updated: 2026-10-12, America/Los_Angeles.
 | 4 — Dashboard                                   | Local checkpoint; live-stack acceptance pending                  |
 | 5 — Webhooks, logs, metrics                     | Local checkpoint; live engine/container tests pending            |
 | 6 — Audience, broadcasts, templates             | Local checkpoint; live recovery/provider tests pending           |
-| 7 — Automations, inbound, translations, layouts | Automations/inbound implemented; content/publication pending           |
+| 7 — Automations, inbound, translations, layouts | Automations/inbound/content implemented; publication pending           |
 | 8 — Hardening, SDK, CLI                         | Pending                                                          |
 
 ## Checkpoint log
@@ -36,6 +36,8 @@ Updated: 2026-10-12, America/Los_Angeles.
 
 - 2026-10-12: Added signed Postal inbound receipt, durable bounded MIME parsing, MinIO retrieval, forwarding with shared suppression/TLS/DKIM checks, domain-scoped access, redacted inbound logs and a sandboxed dashboard. Lint/typecheck/build/gitleaks and 99 backend tests pass; the inbound browser flow passes and its screenshot was inspected. Real concurrent receipt/Redis-loss recovery coverage is added but awaits Docker.
 
+- 2026-10-12: Added immutable layout/translation versions, workflow source/dependency preservation, locale grouping and durable resolved trigger payloads, content editors and previews. Backend checkpoint passes with 104 tests. All eight browser flows have passed across the full run and targeted repairs. Fixed a Chromium CI preview issue by rebuilding resource-free HTML before sandboxing; pinned Novu rendering remains a live acceptance check.
+
 ## Known issues and verification limits
 
 - This host has no Docker runtime. Full-stack startup, official image pulls and container integration tests cannot be validated here yet.
@@ -51,4 +53,4 @@ Updated: 2026-10-12, America/Los_Angeles.
 
 ## Next
 
-Continue Phase 7 with translations/layouts and publication dependencies, then hardening and SDK/CLI/MCP. Durable automations and inbound receiving are implemented. Full Compose verification remains a prerequisite for production readiness.
+Continue Phase 7 with durable publication and content dependencies, then hardening and SDK/CLI/MCP. Automations, inbound receiving, layouts and translations are implemented. Full Compose verification remains a prerequisite for production readiness.

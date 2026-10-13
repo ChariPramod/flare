@@ -37,6 +37,8 @@ const contacts = new Map<string, Record<string, unknown>>(),
   broadcasts = new Map<string, Record<string, unknown>>();
 const automations = new Map<string, Record<string, unknown>>(),
   automationRuns = new Map<string, Record<string, unknown>>();
+const layouts = new Map<string, Record<string, unknown>>(),
+  dictionaries = new Map<string, Record<string, string>>();
 const logId = '00000000-0000-4000-8000-000000000099';
 const server = createServer(async (req, res) => {
   const reply = (value: unknown, status = 200) => {
@@ -50,6 +52,8 @@ const server = createServer(async (req, res) => {
     if (path === '/health') return reply({ status: 'ok' });
     if (path === '/reset') {
       workflows.clear();
+      layouts.clear();
+      dictionaries.clear();
       domains.clear();
       emails.clear();
       runs.clear();
@@ -95,6 +99,51 @@ const server = createServer(async (req, res) => {
           production,
         },
       });
+    if (path === 'layouts') {
+      if (method === 'GET') return reply([...layouts.values()]);
+      const row = {
+        ...body,
+        id: randomUUID(),
+        current_version: 1,
+        versions: [{ version: 1, html: body.html, translations: body.translations }],
+      };
+      layouts.set(body.identifier, row);
+      return reply(row);
+    }
+    if (path.startsWith('layouts/')) {
+      const id = path.split('/')[1]!,
+        row = layouts.get(id);
+      if (!row) return reply({ message: 'Layout not found' }, 404);
+      if (method === 'PUT') {
+        const version = Number(row.current_version) + 1;
+        Object.assign(row, body, {
+          current_version: version,
+          versions: [
+            { version, html: body.html, translations: body.translations },
+            ...(row.versions as unknown[]),
+          ],
+        });
+      }
+      return reply(row);
+    }
+    if (path.startsWith('translations/')) {
+      const [, workflow, locale] = path.split('/');
+      if (method === 'PUT') {
+        dictionaries.set(`${workflow}/${locale}`, body);
+        return reply({ locale, version: 1, entries: body });
+      }
+      return reply(
+        [...dictionaries]
+          .filter(([key]) => key.startsWith(`${workflow}/`))
+          .map(([key, entries]) => ({ locale: key.split('/')[1], current_version: 1, entries })),
+      );
+    }
+    if (path === 'content/preview')
+      return reply({
+        definition: body.workflow,
+        resolved: {},
+        dependencies: { layouts: [], templates: [], translations: [] },
+      });
     if (path === 'inbound' || path.startsWith('inbound/')) {
       const inbound = {
         id: '00000000-0000-4000-8000-000000000088',
@@ -113,6 +162,51 @@ const server = createServer(async (req, res) => {
         forwards: [],
         error: null,
       };
+      if (path === 'layouts') {
+        if (method === 'GET') return reply([...layouts.values()]);
+        const row = {
+          ...body,
+          id: randomUUID(),
+          current_version: 1,
+          versions: [{ version: 1, html: body.html, translations: body.translations }],
+        };
+        layouts.set(body.identifier, row);
+        return reply(row);
+      }
+      if (path.startsWith('layouts/')) {
+        const id = path.split('/')[1]!,
+          row = layouts.get(id);
+        if (!row) return reply({ message: 'Layout not found' }, 404);
+        if (method === 'PUT') {
+          const version = Number(row.current_version) + 1;
+          Object.assign(row, body, {
+            current_version: version,
+            versions: [
+              { version, html: body.html, translations: body.translations },
+              ...(row.versions as unknown[]),
+            ],
+          });
+        }
+        return reply(row);
+      }
+      if (path.startsWith('translations/')) {
+        const [, workflow, locale] = path.split('/');
+        if (method === 'PUT') {
+          dictionaries.set(`${workflow}/${locale}`, body);
+          return reply({ locale, version: 1, entries: body });
+        }
+        return reply(
+          [...dictionaries]
+            .filter(([key]) => key.startsWith(`${workflow}/`))
+            .map(([key, entries]) => ({ locale: key.split('/')[1], current_version: 1, entries })),
+        );
+      }
+      if (path === 'content/preview')
+        return reply({
+          definition: body.workflow,
+          resolved: {},
+          dependencies: { layouts: [], templates: [], translations: [] },
+        });
       if (path === 'inbound') return reply({ data: [inbound] });
       if (path.endsWith('/body'))
         return reply({

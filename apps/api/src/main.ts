@@ -1,3 +1,4 @@
+import { ContentController } from './content.js';
 import { InboundController } from './inbound.js';
 import 'reflect-metadata';
 import { AutomationController } from './automations.js';
@@ -46,6 +47,7 @@ class HealthController {
     AudienceController,
     AutomationController,
     InboundController,
+    ContentController,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },

@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { emailPreview } from '../lib/email-preview';
 import { useState } from 'react';
 import { api, useApi, useAction, date, pretty } from '../lib/api';
 import { PageHeader, DataTable, Button, Badge, Field, Modal, ErrorBox, Loading } from './ui';
@@ -261,7 +262,7 @@ function InboundBody({ id, html }: { id: string; html: boolean }) {
   if (query.isPending) return <Loading />;
   if (!query.data) return <ErrorBox error={query.error} />;
   // No scripts, network loads, forms or navigation privileges are granted to received mail.
-  const content = `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'"></head><body>${query.data.html}</body></html>`;
+  const content = emailPreview(query.data.html);
   return html ? (
     <iframe
       title="Received HTML preview"

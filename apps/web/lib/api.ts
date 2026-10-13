@@ -86,6 +86,7 @@ export type WorkflowRow = {
   id: string;
   identifier: string;
   definition: Workflow;
+  source_definition?: Workflow;
   revision: number;
   updated_at: string;
 };

@@ -29,6 +29,8 @@ import {
 } from '@flare/shared';
 import type { Preferences, Workflow } from '@flare/shared';
 import { z } from 'zod';
+import { enginePayloadSchema, translationPayload, emptyDependencies } from '@flare/platform';
+import type { ContentDependencies } from '@flare/platform';
 import { Access } from './auth.js';
 import { parse, sql } from './context.js';
 import type { AuthRequest } from './context.js';
@@ -49,7 +51,7 @@ function ensureDevelopment(req: AuthRequest) {
   if (!canEditWorkflow(req.principal))
     throw new ForbiddenException('Production workflows are read-only. Publish from Development.');
 }
-function engineDefinition(workflow: Workflow) {
+function engineDefinition(workflow: Workflow, deps: ContentDependencies = emptyDependencies()) {
   try {
     ajv.compile(workflow.payloadSchema);
   } catch {
@@ -63,7 +65,7 @@ function engineDefinition(workflow: Workflow) {
     severity: workflow.severity,
     active: workflow.active,
     steps: workflow.steps,
-    payloadSchema: workflow.payloadSchema,
+    payloadSchema: enginePayloadSchema(workflow.payloadSchema, deps),
     validatePayload: true,
     preferences: {
       workflow: {
@@ -121,17 +123,18 @@ export class WorkflowController {
   }
   @Post('workflows') async create(@Req() req: AuthRequest, @Body() body: unknown) {
     ensureDevelopment(req);
-    const workflow = await expandWorkflowTemplates(req.principal, parse(workflowSchema, body));
+    const compiled = await expandWorkflowTemplates(req.principal, parse(workflowSchema, body));
+    const workflow = compiled.definition;
     await novu(
       req.principal,
       '/v2/workflows',
       'POST',
-      engineDefinition(workflow),
+      engineDefinition(workflow, compiled.dependencies),
       `workflow-create-${workflow.workflowId}`,
     );
     return withTenant(sql, req.principal, async (tx) => {
       const [row] =
-        await tx`insert into workflows (org_id,environment_id,identifier,definition) values (${req.principal.orgId},${req.principal.environmentId},${workflow.workflowId},${tx.json(toJson(workflow))}) returning *`;
+        await tx`insert into workflows (org_id,environment_id,identifier,definition,source_definition,content_dependencies) values (${req.principal.orgId},${req.principal.environmentId},${workflow.workflowId},${tx.json(toJson(workflow))},${tx.json(toJson(compiled.source))},${tx.json(toJson(compiled.dependencies))}) returning *`;
       await audit(tx, req.principal, 'workflow.created', workflow.workflowId);
       return row;
     });
@@ -142,15 +145,19 @@ export class WorkflowController {
     @Body() body: unknown,
   ) {
     ensureDevelopment(req);
-    const workflow = await expandWorkflowTemplates(req.principal, parse(workflowSchema, body));
+    const compiled = await expandWorkflowTemplates(req.principal, parse(workflowSchema, body));
+    const workflow = compiled.definition;
     if (workflow.workflowId !== id)
       throw new BadRequestException('Workflow identifier is immutable');
     await this.get(req, id);
-    const { workflowId: _workflowId, ...definition } = engineDefinition(workflow);
+    const { workflowId: _workflowId, ...definition } = engineDefinition(
+      workflow,
+      compiled.dependencies,
+    );
     await novu(req.principal, `/v2/workflows/${encodeURIComponent(id)}`, 'PUT', definition);
     return withTenant(sql, req.principal, async (tx) => {
       const [row] =
-        await tx`update workflows set definition = ${tx.json(toJson(workflow))}, revision = revision+1, updated_at = now() where identifier = ${id} returning *`;
+        await tx`update workflows set definition = ${tx.json(toJson(workflow))},source_definition=${tx.json(toJson(compiled.source))},content_dependencies=${tx.json(toJson(compiled.dependencies))}, revision = revision+1, updated_at = now() where identifier = ${id} returning *`;
       await audit(tx, req.principal, 'workflow.updated', id);
       return row;
     });
@@ -172,6 +179,8 @@ export class WorkflowController {
     if (req.principal.permission === 'sending_access')
       throw new ForbiddenException('Workflow triggers require full_access');
     const input = parse(triggerSchema, body);
+    if (Object.hasOwn(input.payload, '__flare_i18n'))
+      throw new BadRequestException('__flare_i18n is reserved for Flare');
     // Resolve credentials before accepting durable work, without returning them to the caller.
     await novuKey(req.principal);
     return idempotent(
@@ -180,7 +189,8 @@ export class WorkflowController {
       req.headers['idempotency-key'],
       input,
       async (tx) => {
-        const [row] = await tx`select definition from workflows where identifier = ${input.name}`;
+        const [row] =
+          await tx`select definition,content_dependencies from workflows where identifier = ${input.name}`;
         if (!row) throw new NotFoundException('Workflow not found');
         const workflow = row.definition as Workflow;
         if (!workflow.active) throw new BadRequestException('Workflow is inactive');
@@ -225,26 +235,40 @@ export class WorkflowController {
           throw new BadRequestException('Fan-out exceeds 10,000 recipients; split the trigger');
         const transactionId = input.transactionId ?? randomUUID();
         const ids: string[] = [];
-        for (let offset = 0; offset < filtered.length; offset += 100) {
-          const chunkTransaction =
-            offset === 0 ? transactionId : `${transactionId}-${offset / 100}`;
-          const payload = {
-            name: input.name,
-            to: filtered.slice(offset, offset + 100),
-            payload: input.payload,
-            overrides: input.overrides,
-            actor: input.actor,
-            context: input.context,
-            transactionId: chunkTransaction,
-          };
-          const [run] =
-            await tx`insert into workflow_runs (org_id,environment_id,workflow_id,transaction_id,parent_transaction_id,payload) values (${req.principal.orgId},${req.principal.environmentId},${input.name},${chunkTransaction},${transactionId},${tx.json(JSON.parse(JSON.stringify(payload)))}) returning id`;
-          ids.push(String(run!.id));
-          await outbox(tx, req.principal, 'workflow.queued', {
-            id: run!.id,
-            workflowId: input.name,
-            transactionId: chunkTransaction,
-          });
+        const deps = (row.content_dependencies ?? emptyDependencies()) as ContentDependencies;
+        const groups = new Map<string, Record<string, unknown>[]>();
+        for (const target of filtered) {
+          const locale =
+            deps.translations.length && typeof target.locale === 'string' ? target.locale : 'en_US';
+          const list = groups.get(locale) ?? [];
+          list.push(target);
+          groups.set(locale, list);
+        }
+        let chunkIndex = 0;
+        for (const [locale, targets] of groups) {
+          const resolved = await translationPayload(tx, input.name, deps, locale);
+          for (let offset = 0; offset < targets.length; offset += 100) {
+            const chunkTransaction =
+              chunkIndex === 0 ? transactionId : `${transactionId}-${chunkIndex}`;
+            chunkIndex++;
+            const payload = {
+              name: input.name,
+              to: targets.slice(offset, offset + 100),
+              payload: resolved ? { ...input.payload, __flare_i18n: resolved } : input.payload,
+              overrides: input.overrides,
+              actor: input.actor,
+              context: input.context,
+              transactionId: chunkTransaction,
+            };
+            const [run] =
+              await tx`insert into workflow_runs (org_id,environment_id,workflow_id,transaction_id,parent_transaction_id,payload) values (${req.principal.orgId},${req.principal.environmentId},${input.name},${chunkTransaction},${transactionId},${tx.json(JSON.parse(JSON.stringify(payload)))}) returning id`;
+            ids.push(String(run!.id));
+            await outbox(tx, req.principal, 'workflow.queued', {
+              id: run!.id,
+              workflowId: input.name,
+              transactionId: chunkTransaction,
+            });
+          }
         }
         return { ids, transactionId, status: 'queued', recipients: filtered.length };
       },

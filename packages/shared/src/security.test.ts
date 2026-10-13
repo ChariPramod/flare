@@ -16,7 +16,11 @@ describe('security boundaries', () => {
     const value = encrypt('provider-secret', key, 'org-a/env-a');
     expect(decrypt(value, key, 'org-a/env-a')).toBe('provider-secret');
     expect(() => decrypt(value, key, 'org-b/env-b')).toThrow();
-    expect(() => decrypt(value.replace(/.$/, 'x'), key, 'org-a/env-a')).toThrow();
+    const parts = value.split('.');
+    const altered = Buffer.from(parts[3]!, 'base64url');
+    altered[0] = altered[0]! ^ 1;
+    parts[3] = altered.toString('base64url');
+    expect(() => decrypt(parts.join('.'), key, 'org-a/env-a')).toThrow();
   });
   it('salts passwords and rejects wrong passwords', async () => {
     const hash = await hashPassword('long-test-password');

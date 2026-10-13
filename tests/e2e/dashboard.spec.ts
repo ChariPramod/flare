@@ -283,3 +283,53 @@ test('inbound envelope, sandboxed HTML and authenticated downloads', async ({ pa
   expect((await downloaded).suggestedFilename()).toBe('note.txt');
   await page.screenshot({ path: 'test-results/inbound-detail.png', fullPage: true });
 });
+
+test('layout versions and translation dictionary import/export', async ({ page }) => {
+  await login(page);
+  await page.getByRole('link', { name: 'Layouts', exact: true }).click();
+  await page.getByRole('button', { name: 'Create layout', exact: true }).click();
+  await page.getByLabel('Layout name', { exact: true }).fill('Company wrapper');
+  await page.getByLabel('Layout identifier', { exact: true }).fill('company-wrapper');
+  await page.getByRole('button', { name: 'Create wrapper', exact: true }).click();
+  await page.getByRole('link', { name: 'Company wrapper', exact: true }).click();
+  await page
+    .getByLabel('Layout HTML')
+    .fill('<header>Company</header><main>{{{body}}}</main><footer>Thank you</footer>');
+  await page.getByRole('button', { name: 'Save layout version', exact: true }).click();
+  await expect(page.getByText('Version 2 · company-wrapper', { exact: true })).toBeVisible();
+  await expect(
+    page
+      .frameLocator('iframe[title="Layout preview"]')
+      .getByText('Your email content appears here.'),
+  ).toBeVisible();
+  await page.screenshot({ path: 'test-results/layout-editor.png', fullPage: true });
+  await page.getByRole('link', { name: 'Workflows', exact: true }).click();
+  await page.getByRole('button', { name: 'Create workflow', exact: true }).click();
+  await page.getByLabel('Workflow name', { exact: true }).fill('Localized welcome');
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Create workflow', exact: true })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Localized welcome', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Translations', exact: true }).click();
+  await page
+    .getByRole('combobox', { name: /Translation workflow/ })
+    .selectOption({ label: 'Localized welcome' });
+  await page
+    .getByRole('textbox', { name: 'Dictionary JSON', exact: true })
+    .fill('{"greeting":"Hello"}');
+  await page.getByRole('button', { name: 'Save dictionary version', exact: true }).click();
+  await expect(page.getByText(/Version 1 · Reference entries/)).toBeVisible();
+  await page.getByLabel('Locale', { exact: true }).fill('fr_FR');
+  await page.getByLabel('Import JSON', { exact: true }).setInputFiles({
+    name: 'fr_FR.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from('{"greeting":"Bonjour"}'),
+  });
+  await expect(page.getByRole('textbox', { name: 'Dictionary JSON', exact: true })).toHaveValue(
+    /Bonjour/,
+  );
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export JSON', exact: true }).click();
+  expect((await downloaded).suggestedFilename()).toBe('localized-welcome.fr_FR.json');
+});

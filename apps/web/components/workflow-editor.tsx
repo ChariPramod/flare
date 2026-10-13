@@ -70,6 +70,8 @@ const kinds = [
   ['http_request', 'HTTP request', 'Call an endpoint.'],
 ];
 export function WorkflowEditor({ id, editable }: { id: string; editable: boolean }) {
+  const layouts =
+    useApi<{ identifier: string; name: string; current_version: number }[]>('layouts');
   const query = useApi<WorkflowRow>(`workflows/${encodeURIComponent(id)}`),
     save = useAction<WorkflowRow>(`workflows/${encodeURIComponent(id)}`, 'PUT');
   const [workflow, setWorkflow] = useState<Workflow | null>(null),
@@ -79,15 +81,20 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
     [settings, setSettings] = useState(false),
     [error, setError] = useState<unknown>(),
     [preview, setPreview] = useState(false),
+    [previewLocale, setPreviewLocale] = useState('en_US'),
+    [compiledPreview, setCompiledPreview] = useState<Workflow | null>(null),
     [invalidEditors, setInvalidEditors] = useState<Record<string, boolean>>({});
   const valid = (editor: string, ok: boolean) =>
     setInvalidEditors((previous) => ({ ...previous, [editor]: !ok }));
   const invalidJson = Object.values(invalidEditors).some(Boolean);
   useEffect(() => {
-    if (query.data && !workflow) setWorkflow(query.data.definition);
+    if (query.data && !workflow) setWorkflow(query.data.source_definition ?? query.data.definition);
   }, [query.data, workflow]);
   const dirty = Boolean(
-    workflow && query.data && JSON.stringify(workflow) !== JSON.stringify(query.data.definition),
+    workflow &&
+    query.data &&
+    JSON.stringify(workflow) !==
+      JSON.stringify(query.data.source_definition ?? query.data.definition),
   );
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
@@ -210,7 +217,9 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
             className="primary compact"
             disabled={!editable || !dirty || save.isPending || invalidJson}
             onClick={() =>
-              save.mutate(workflow, { onSuccess: (row) => setWorkflow(row.definition) })
+              save.mutate(workflow, {
+                onSuccess: (row) => setWorkflow(row.source_definition ?? row.definition),
+              })
             }
           >
             <Save size={14} />
@@ -360,6 +369,56 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
                     Edit the channel content and control values passed to Novu. Use Liquid variables
                     such as {'{{subscriber.firstName}}'}.
                   </p>
+                  {step.type === 'email' && (
+                    <Field label="Email layout">
+                      <select
+                        disabled={!editable}
+                        value={String(step.controlValues.layoutIdentifier ?? '')}
+                        onChange={(e) => {
+                          const {
+                            layoutIdentifier: _layout,
+                            layoutVersion: _version,
+                            ...controls
+                          } = step.controlValues;
+                          const layout = layouts.data?.find((v) => v.identifier === e.target.value);
+                          change({
+                            controlValues: layout
+                              ? {
+                                  ...controls,
+                                  layoutIdentifier: layout.identifier,
+                                  layoutVersion: layout.current_version,
+                                }
+                              : controls,
+                          });
+                        }}
+                      >
+                        <option value="">No layout</option>
+                        {layouts.data?.map((v) => (
+                          <option key={v.identifier} value={v.identifier}>
+                            {v.name} · latest v{v.current_version}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  )}
+                  {step.type === 'email' && step.controlValues.layoutIdentifier !== undefined && (
+                    <Field label="Pinned layout version">
+                      <input
+                        type="number"
+                        min="1"
+                        disabled={!editable}
+                        value={Number(step.controlValues.layoutVersion ?? 1)}
+                        onChange={(e) =>
+                          change({
+                            controlValues: {
+                              ...step.controlValues,
+                              layoutVersion: Number(e.target.value),
+                            },
+                          })
+                        }
+                      />
+                    </Field>
+                  )}
                   <ControlEditor
                     key={step.stepId}
                     value={step.controlValues}
@@ -367,7 +426,34 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
                     onValidity={(ok) => valid('content', ok)}
                     onChange={(controlValues) => change({ controlValues })}
                   />
-                  <Button className="compact" onClick={() => setPreview(true)}>
+                  <Field label="Preview locale">
+                    <input
+                      value={previewLocale}
+                      onChange={(e) => setPreviewLocale(e.target.value)}
+                    />
+                  </Field>
+                  <Button
+                    className="compact"
+                    onClick={async () => {
+                      try {
+                        const result = await api<{
+                          definition: Workflow;
+                          resolved: Record<string, string>;
+                        }>('content/preview', 'POST', { workflow, locale: previewLocale });
+                        const resolved = JSON.parse(
+                          JSON.stringify(result.definition).replace(
+                            /{{payload\.__flare_i18n\.([a-z0-9_]+)}}/g,
+                            (_m, key: string) =>
+                              JSON.stringify(result.resolved[key] ?? '').slice(1, -1),
+                          ),
+                        ) as Workflow;
+                        setCompiledPreview(resolved);
+                        setPreview(true);
+                      } catch (e) {
+                        setError(e);
+                      }
+                    }}
+                  >
                     <Eye size={15} />
                     Preview content
                   </Button>
@@ -520,10 +606,16 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
             className="email-preview"
             sandbox=""
             title="Step preview"
-            srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">${String(step.controlValues.body ?? '')}`}
+            srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">${String(compiledPreview?.steps[selected]?.controlValues.body ?? step.controlValues.body ?? '')}`}
           />
         ) : (
-          <pre className="text-preview">{String(step?.controlValues.body ?? '')}</pre>
+          <pre className="text-preview">
+            {String(
+              compiledPreview?.steps[selected]?.controlValues.body ??
+                step?.controlValues.body ??
+                '',
+            )}
+          </pre>
         )}
       </Modal>
       {testing && (

@@ -39,3 +39,9 @@
 - Added native signed Postal receipt, raw MIME storage, bounded asynchronous parsing, attachment retrieval, tenant/domain isolation and metadata-only received events.
 - Added durable forwarding through the existing mail pipeline, Reply-To preservation, suppression and loop prevention, plus sandboxed message previews and downloads.
 - Added database/signature/browser regressions and real concurrent receipt/queue-loss recovery coverage; Docker and live Postal verification remain pending.
+
+## Content checkpoint — 2026-10-12
+
+- Added immutable layout wrappers and workflow locale dictionaries with source preservation, pinned dependencies, per-key default fallback and durable translated trigger payloads.
+- Added content editing/import/export, workflow layout/version selection and locale previews.
+- Hardened inbound/layout previews by rebuilding resource-free HTML before sandboxing; fixed dynamic iframe rendering and dictionary draft refresh behavior.
