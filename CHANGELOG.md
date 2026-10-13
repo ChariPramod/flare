@@ -113,3 +113,4 @@
 - Wait for worker readiness before checking recovery after Redis loss.
 - Verified signed inbound receipt, SMTP authentication/Bcc handling, suppression and four live dashboard flows against the full stack in CI. The final workflow browser and load stages remain under verification.
 - Made the GitHub repository public at the owner's request and updated access instructions.
+- Added real-service coverage for four SMTP 421 rejections followed by one Mailpit submission, with ordered persisted attempts and provider acceptance kept separate from delivery.

@@ -93,3 +93,5 @@ Continue Phase 8 with container acceptance, load tests and operational documenta
 - Acceptance fixture metadata is created privately by the host before container writes, preserving ownership for the host browser. Full checkpoint passes with 136 tests; all 11 production-build browser flows pass locally.
 
 - 2026-10-13: CI `38437876860` passed standard checks, all 11 real-service tests, the complete API/SMTP/signed-inbound scenarios, and four live browser flows (email, inbound, content publication and dead-letter redrive). The workflow browser exposed a delayed redundant environment switch that navigated away during editing; reproduced locally and fixed by ignoring the active selection. Worker restart now waits for readiness before load recovery assertions. Full-stack workflow/load verification continues; Docker is still unavailable on this Mac.
+
+- Added a PostgreSQL/MinIO/Mailpit case for transient SMTP retry exhaustion followed by priority failover. The actual SMTP adapter classifies the fixture's 421 refusal as transient in a local protocol check; the complete real-service case awaits CI. Unit retry/failover and ambiguity coverage remains in place.

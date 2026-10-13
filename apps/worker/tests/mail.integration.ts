@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { createServer } from 'node:net';
 import { beforeAll, afterAll, it, expect } from 'vitest';
 import { Redis } from 'ioredis';
 import { connectDatabase } from '@flare/db';
@@ -11,6 +12,7 @@ import {
   recordEvent,
   changeSchedule,
   deliverEmail,
+  SmtpAdapter,
 } from '@flare/mail';
 import { startMailWorker } from '../src/mail.js';
 const url =
@@ -131,6 +133,63 @@ it('serializes cancel against a live delivery claim on independent connections',
     await delivery;
   }
 });
+it('persists transient SMTP retries before failing over to Mailpit', async () => {
+  let refusals = 0;
+  const busy = createServer((socket) => {
+    refusals++;
+    socket.end('421 Try again later\r\n');
+  });
+  await new Promise<void>((resolve) => busy.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = busy.address();
+    if (!address || typeof address === 'string') throw new Error('Missing SMTP listener');
+    const first = new SmtpAdapter({
+      host: '127.0.0.1',
+      port: address.port,
+      secure: false,
+      deliveryTlsRequired: false,
+    });
+    first.name = 'busy-smtp';
+    const options = {
+      sql,
+      store: objectStore(),
+      encryptionKey: key,
+      trackingKey: key,
+      transports: [first, ...configuredTransports()],
+    };
+    const subject = `SMTP failover ${randomUUID()}`;
+    const id = (
+      await submitEmails(options, principal, [
+        { from: 'sender@example.com', to: 'retry@example.net', subject, text: 'Retry acceptance' },
+      ])
+    ).data[0]!.id;
+    await deliverEmail(options, id);
+    expect(refusals).toBe(4);
+    expect(
+      (
+        await sql`select provider,status from transport_attempts where message_id=${id} order by ordinal`
+      ).map((attempt) => [attempt.provider, attempt.status]),
+    ).toEqual([
+      ['busy-smtp', 'transient_failure'],
+      ['busy-smtp', 'transient_failure'],
+      ['busy-smtp', 'transient_failure'],
+      ['busy-smtp', 'transient_failure'],
+      ['smtp', 'accepted'],
+    ]);
+    expect((await sql`select status from messages where id=${id}`)[0]!.status).toBe('sent');
+    const mailpit = (await fetch('http://127.0.0.1:18025/api/v1/messages').then((r) =>
+      r.json(),
+    )) as {
+      messages: { Subject: string }[];
+    };
+    expect(mailpit.messages.filter((message) => message.Subject === subject)).toHaveLength(1);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      busy.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+}, 20000);
+
 it('recovers accepted messages after queue loss, sends through Mailpit, and records delivery separately', async () => {
   const store = objectStore();
   const options = {
