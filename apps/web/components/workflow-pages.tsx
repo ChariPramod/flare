@@ -429,13 +429,28 @@ type Run = {
   updated_at: string;
   engine?: unknown;
   engine_observation?: {
-    status: 'available' | 'unavailable' | 'not_requested';
+    status: 'available' | 'unavailable' | 'not_found' | 'not_requested';
     checked_at: string | null;
+    partial?: boolean;
+    notifications?: {
+      id: string;
+      status: string;
+      created_at: string | null;
+      updated_at: string | null;
+      jobs: {
+        id: string | null;
+        type: string;
+        status: string;
+        created_at: string | null;
+        updated_at: string | null;
+      }[];
+    }[];
   };
+  cancellation?: { eligible: boolean; transaction_id: string; scope: 'trigger'; reason: string };
   cancellation_status?: 'none' | 'pending' | 'confirmed' | 'failed';
   payload?: unknown;
 };
-export function ActivityPage({ id }: { id?: string }) {
+export function ActivityPage({ id, writable = true }: { id?: string; writable?: boolean }) {
   const query = useApi<{ data: Run[] }>('activity?limit=100', 5000);
   return (
     <>
@@ -451,7 +466,7 @@ export function ActivityPage({ id }: { id?: string }) {
       />
       <ErrorBox error={query.error} />
       {id ? (
-        <RunDetail id={id} />
+        <RunDetail id={id} writable={writable} />
       ) : query.isPending ? (
         <Loading />
       ) : (
@@ -490,9 +505,13 @@ export function ActivityPage({ id }: { id?: string }) {
     </>
   );
 }
-function RunDetail({ id }: { id: string }) {
+function RunDetail({ id, writable }: { id: string; writable: boolean }) {
   const query = useApi<Run>(`activity/${id}`, 3000);
-  const transaction = query.data?.parent_transaction_id ?? query.data?.transaction_id ?? '';
+  const transaction =
+    query.data?.cancellation?.transaction_id ??
+    query.data?.parent_transaction_id ??
+    query.data?.transaction_id ??
+    '';
   const wholeTrigger = Boolean(query.data && transaction !== query.data.transaction_id);
   const cancel = useAction(`events/trigger/${encodeURIComponent(transaction)}`, 'DELETE');
   return (
@@ -529,16 +548,71 @@ function RunDetail({ id }: { id: string }) {
               )}
             </div>
             <ErrorBox error={query.data.error} />
-            {query.data.status === 'queued' && (
-              <>
-                <Button onClick={() => cancel.mutate({})} disabled={cancel.isPending}>
-                  {wholeTrigger ? 'Cancel trigger' : 'Cancel run'}
-                </Button>
-                {wholeTrigger && <p className="muted small">Cancels all runs from this trigger.</p>}
-              </>
-            )}
+            {writable &&
+              (query.data.status === 'queued' ||
+                (query.data.status === 'accepted' && query.data.cancellation?.eligible)) && (
+                <>
+                  <Button onClick={() => cancel.mutate({})} disabled={cancel.isPending}>
+                    {query.data.status === 'accepted'
+                      ? 'Request cancellation'
+                      : wholeTrigger
+                        ? 'Cancel trigger'
+                        : 'Cancel run'}
+                  </Button>
+                  {wholeTrigger && (
+                    <p className="muted small">Cancels all runs from this trigger.</p>
+                  )}
+                  {query.data.status === 'accepted' && (
+                    <p className="muted small">
+                      Requests cancellation of pending work across this trigger. Work may finish
+                      before cancellation reaches the engine; messages already sent cannot be
+                      recalled.
+                    </p>
+                  )}
+                </>
+              )}
           </section>
           <section className="panel">
+            <h2>Native job progress</h2>
+            <p className="muted small">
+              Flare’s accepted state records engine submission. Native job completion does not prove
+              external delivery.
+            </p>
+            {query.data.engine_observation?.checked_at && (
+              <p className="muted small">
+                Last checked: {date(query.data.engine_observation.checked_at)}
+              </p>
+            )}
+            {query.data.engine_observation?.status === 'not_found' && (
+              <p role="status">
+                No native notifications were found. Processing may not be visible yet, or engine
+                records may have expired. Flare will not automatically resubmit this run.
+              </p>
+            )}
+            {query.data.engine_observation?.partial && (
+              <p role="status">
+                Only part of the native progress is available. Cancellation controls require
+                complete evidence of pending work.
+              </p>
+            )}
+            {query.data.engine_observation?.notifications?.map((notification) => (
+              <div key={notification.id} className="panel">
+                <strong>Notification: {notification.status}</strong>
+                <div className="timeline">
+                  {notification.jobs.map((job, index) => (
+                    <div key={job.id ?? index}>
+                      <i />
+                      <strong>
+                        {job.type}: {job.status}
+                      </strong>
+                      <small>
+                        {job.updated_at ? date(job.updated_at) : 'Update time unavailable'}
+                      </small>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
             <h2>Payload & engine trace</h2>
             {query.data.engine_observation?.status === 'unavailable' && (
               <p role="status">

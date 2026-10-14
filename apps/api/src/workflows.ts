@@ -301,8 +301,28 @@ export class WorkflowController {
     }));
   }
   @Get('activity/:id') async activityDetail(@Req() req: AuthRequest, @Param('id') id: string) {
-    return workflowActivity(sql, req.principal, parse(z.string().uuid(), id), (transactionId) =>
-      novu(req.principal, `/v1/notifications?transactionId=${encodeURIComponent(transactionId)}`),
+    return workflowActivity(
+      sql,
+      req.principal,
+      parse(z.string().uuid(), id),
+      (transactionId, signal) =>
+        novu(
+          req.principal,
+          `/v1/notifications?transactionId=${encodeURIComponent(transactionId)}&limit=11`,
+          'GET',
+          undefined,
+          undefined,
+          signal,
+        ),
+      (notificationId, signal) =>
+        novu(
+          req.principal,
+          `/v1/notifications/${encodeURIComponent(notificationId)}`,
+          'GET',
+          undefined,
+          undefined,
+          signal,
+        ),
     );
   }
   @Get('subscribers') async subscribers(@Req() req: AuthRequest, @Query() query: unknown) {

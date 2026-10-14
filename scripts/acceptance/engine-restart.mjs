@@ -121,6 +121,17 @@ try {
       'both native delays persisted before worker stop',
       60000,
     );
+    for (const run of fixture.runs) {
+      const state = await api(`/activity/${run.id}`);
+      assert.equal(state.engine_observation.status, 'available');
+      assert.equal(state.engine_observation.partial, false);
+      assert.ok(Number.isFinite(Date.parse(state.engine_observation.checked_at)));
+      const jobs = state.engine_observation.notifications.flatMap((item) => item.jobs);
+      assert.ok(jobs.some((job) => job.type === 'delay' && job.status === 'delayed'));
+      assert.ok(jobs.some((job) => job.type === 'in_app' && job.status === 'pending'));
+      assert.equal(state.cancellation.eligible, true);
+      assert.equal(state.cancellation.transaction_id, run.transactionId);
+    }
     writeFileSync(fixturePath, JSON.stringify(fixture), { mode: 0o600 });
     console.log('Native restart fixture: two accepted delayed jobs persisted before interruption.');
   } else {
@@ -234,6 +245,16 @@ try {
     };
     if (phase === 'verify') {
       await until(check, 'one delayed Inbox delivery after native Redis/worker restart', 240000);
+      const survivor = fixture.runs.find((run) => run.label === 'survive');
+      const state = await api(`/activity/${survivor.id}`);
+      assert.equal(state.status, 'accepted', 'Dispatch acceptance remains distinct from delivery');
+      assert.equal(state.engine_observation.status, 'available');
+      assert.equal(state.engine_observation.partial, false);
+      assert.ok(state.engine_observation.notifications.length > 0);
+      assert.ok(
+        state.engine_observation.notifications.every((item) => item.status === 'completed'),
+      );
+      assert.equal(state.cancellation.eligible, false);
       console.log(
         'Native restart fixture: one surviving Inbox delivery; canceled delivery absent.',
       );

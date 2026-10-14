@@ -172,7 +172,7 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
       <Workflows editable={writable && !data.principal.production} />
     );
   else if (section === 'subscribers') content = <Subscribers id={id} writable={writable} />;
-  else if (section === 'activity') content = <ActivityPage id={id} />;
+  else if (section === 'activity') content = <ActivityPage id={id} writable={writable} />;
   else if (section === 'domains') content = <Domains id={id} writable={writable} />;
   else if (section === 'emails') content = <Emails id={id} writable={writable} />;
   else if (section === 'audience') content = <AudiencePage id={id} writable={writable} />;

@@ -38045,6 +38045,7 @@
                           "enum": [
                             "available",
                             "unavailable",
+                            "not_found",
                             "not_requested"
                           ]
                         },
@@ -38052,11 +38053,138 @@
                           "type": "string",
                           "format": "date-time",
                           "nullable": true
+                        },
+                        "partial": {
+                          "type": "boolean"
+                        },
+                        "notifications": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "pending",
+                                  "running",
+                                  "completed",
+                                  "failed",
+                                  "canceled",
+                                  "unknown"
+                                ]
+                              },
+                              "created_at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true
+                              },
+                              "updated_at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "nullable": true
+                              },
+                              "jobs": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "nullable": true
+                                    },
+                                    "type": {
+                                      "type": "string"
+                                    },
+                                    "status": {
+                                      "type": "string",
+                                      "enum": [
+                                        "pending",
+                                        "queued",
+                                        "running",
+                                        "completed",
+                                        "failed",
+                                        "delayed",
+                                        "canceled",
+                                        "merged",
+                                        "skipped",
+                                        "unknown"
+                                      ]
+                                    },
+                                    "created_at": {
+                                      "type": "string",
+                                      "format": "date-time",
+                                      "nullable": true
+                                    },
+                                    "updated_at": {
+                                      "type": "string",
+                                      "format": "date-time",
+                                      "nullable": true
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "type",
+                                    "status",
+                                    "created_at",
+                                    "updated_at"
+                                  ],
+                                  "additionalProperties": true
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "status",
+                              "created_at",
+                              "updated_at",
+                              "jobs"
+                            ],
+                            "additionalProperties": true
+                          }
                         }
                       },
                       "required": [
                         "status",
-                        "checked_at"
+                        "checked_at",
+                        "partial",
+                        "notifications"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "cancellation": {
+                      "type": "object",
+                      "properties": {
+                        "eligible": {
+                          "type": "boolean"
+                        },
+                        "transaction_id": {
+                          "type": "string"
+                        },
+                        "scope": {
+                          "type": "string",
+                          "enum": [
+                            "trigger"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "pending_action",
+                            "local_state",
+                            "unknown",
+                            "no_pending_action"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "eligible",
+                        "transaction_id",
+                        "scope",
+                        "reason"
                       ],
                       "additionalProperties": true
                     }
@@ -38074,7 +38202,8 @@
                     "updated_at",
                     "payload",
                     "engine",
-                    "engine_observation"
+                    "engine_observation",
+                    "cancellation"
                   ],
                   "additionalProperties": true
                 }

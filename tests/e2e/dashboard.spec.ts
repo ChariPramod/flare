@@ -139,6 +139,42 @@ test('activity retains saved state during engine outages and cancels a fanout pa
   await expect(page.locator('pre')).toContainText('Queued child payload');
   await expect(page.getByRole('button', { name: 'Cancel trigger', exact: true })).toHaveCount(0);
 });
+test('native delayed progress offers parent cancellation while completed and missing evidence do not', async ({
+  page,
+  request,
+}) => {
+  const fixture = await (await request.post('http://127.0.0.1:4311/fixtures/activity')).json();
+  await login(page);
+  for (const [id, label] of [
+    [fixture.completed, 'Notification: completed'],
+    [fixture.missing, 'No native notifications were found.'],
+    [fixture.partial, 'Only part of the native progress is available.'],
+  ]) {
+    await page.goto(`/activity/${id}`);
+    await expect(page.getByText(label, { exact: false })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Request cancellation', exact: true }),
+    ).toHaveCount(0);
+    await expect(page.getByText('accepted', { exact: true })).toBeVisible();
+  }
+  await page.goto(`/activity/${fixture.delayed}`);
+  await expect(page.getByRole('heading', { name: 'Native job progress' })).toBeVisible();
+  await expect(page.getByText('delay: delayed', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('messages already sent cannot be recalled.', { exact: false }),
+  ).toBeVisible();
+  const canceled = page.waitForRequest(
+    (req) =>
+      req.method() === 'DELETE' &&
+      new URL(req.url()).pathname === `/api/events/trigger/${fixture.parent}`,
+  );
+  await page.getByRole('button', { name: 'Request cancellation', exact: true }).click();
+  await canceled;
+  await expect(page.getByText('Engine cancellation: pending', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Request cancellation', exact: true })).toHaveCount(
+    0,
+  );
+});
 test('domain DNS records, verification contract, email submission and raw source', async ({
   page,
 }) => {

@@ -23,6 +23,7 @@ export async function novu(
   method = 'GET',
   body?: unknown,
   idempotencyKey?: string,
+  signal?: AbortSignal,
 ): Promise<unknown> {
   const secret = await novuKey(tenant);
   let response: Response;
@@ -35,7 +36,9 @@ export async function novu(
         ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(15000),
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(15000)])
+        : AbortSignal.timeout(15000),
       redirect: 'error',
     });
   } catch {

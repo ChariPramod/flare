@@ -109,7 +109,61 @@ const server = createServer(async (req, res) => {
         payload: { message: 'Saved payload survives engine outage' },
         ...timestamps,
       });
-      return reply({ queued, accepted, parent });
+      const delayed = randomUUID(),
+        completed = randomUUID(),
+        missing = randomUUID(),
+        partial = randomUUID();
+      for (const [id, state, partialEvidence] of [
+        [delayed, 'pending', false],
+        [completed, 'completed', false],
+        [missing, 'not_found', false],
+        [partial, 'pending', true],
+      ] as const) {
+        runs.set(id, {
+          id,
+          workflow_id: 'native-progress-fixture',
+          transaction_id: `${parent}-${id}`,
+          parent_transaction_id: parent,
+          status: 'accepted',
+          attempts: 1,
+          cancellation_status: 'none',
+          engine: [],
+          payload: {},
+          ...timestamps,
+          engine_observation: {
+            status: state === 'not_found' ? 'not_found' : 'available',
+            checked_at: timestamps.updated_at,
+            partial: partialEvidence,
+            notifications:
+              state === 'not_found'
+                ? []
+                : [
+                    {
+                      id: `native-${id}`,
+                      status: state,
+                      created_at: timestamps.created_at,
+                      updated_at: timestamps.updated_at,
+                      jobs: [
+                        {
+                          id: 'job',
+                          type: 'delay',
+                          status: state === 'pending' ? 'delayed' : 'completed',
+                          created_at: timestamps.created_at,
+                          updated_at: timestamps.updated_at,
+                        },
+                      ],
+                    },
+                  ],
+          },
+          cancellation: {
+            eligible: state === 'pending' && !partialEvidence,
+            transaction_id: parent,
+            scope: 'trigger',
+            reason: state === 'pending' && !partialEvidence ? 'pending_action' : 'unknown',
+          },
+        });
+      }
+      return reply({ queued, accepted, parent, delayed, completed, missing, partial });
     }
     if (path === 'auth/config') return reply({ oidc_url: null });
     if (path === 'auth/login') {
@@ -368,6 +422,7 @@ const server = createServer(async (req, res) => {
       if (!matching.length) return reply({ message: 'Unknown parent trigger' }, 404);
       for (const run of matching) {
         run.status = 'canceled';
+        if (run.cancellation) (run.cancellation as { eligible: boolean }).eligible = false;
         run.cancellation_status = 'pending';
         run.updated_at = new Date().toISOString();
       }
@@ -466,6 +521,7 @@ const server = createServer(async (req, res) => {
           source: `From: ${row.from}\r\nSubject: ${row.subject}\r\n\r\nBrowser fixture MIME`,
         });
       if (action === 'cancel') row.status = 'canceled';
+      if (row.cancellation) (row.cancellation as { eligible: boolean }).eligible = false;
       if (method === 'PATCH') row.scheduled_at = body.scheduled_at;
       return reply(row);
     }
@@ -548,6 +604,7 @@ const server = createServer(async (req, res) => {
         row.scheduled_at = new Date(Date.now() + 7200000).toISOString();
       }
       if (action === 'cancel') row.status = 'canceled';
+      if (row.cancellation) (row.cancellation as { eligible: boolean }).eligible = false;
       return reply(row);
     }
     if (path === 'automations' && method === 'POST') {
@@ -612,6 +669,7 @@ const server = createServer(async (req, res) => {
         row = automationRuns.get(id!);
       if (!row) return reply({ message: 'Not found' }, 404);
       if (action === 'cancel') row.status = 'canceled';
+      if (row.cancellation) (row.cancellation as { eligible: boolean }).eligible = false;
       return reply(row);
     }
     if (path === 'operation-alerts') return reply([]);

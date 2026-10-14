@@ -92,8 +92,52 @@ const mappings = {
     payload: json,
     engine: {},
     engine_observation: obj({
-      status: { type: 'string', enum: ['available', 'unavailable', 'not_requested'] },
+      status: { type: 'string', enum: ['available', 'unavailable', 'not_found', 'not_requested'] },
       checked_at: { type: 'string', format: 'date-time', nullable: true },
+      partial: { type: 'boolean' },
+      notifications: arr(
+        obj({
+          id: str,
+          status: {
+            type: 'string',
+            enum: ['pending', 'running', 'completed', 'failed', 'canceled', 'unknown'],
+          },
+          created_at: { type: 'string', format: 'date-time', nullable: true },
+          updated_at: { type: 'string', format: 'date-time', nullable: true },
+          jobs: arr(
+            obj({
+              id: { type: 'string', nullable: true },
+              type: str,
+              status: {
+                type: 'string',
+                enum: [
+                  'pending',
+                  'queued',
+                  'running',
+                  'completed',
+                  'failed',
+                  'delayed',
+                  'canceled',
+                  'merged',
+                  'skipped',
+                  'unknown',
+                ],
+              },
+              created_at: { type: 'string', format: 'date-time', nullable: true },
+              updated_at: { type: 'string', format: 'date-time', nullable: true },
+            }),
+          ),
+        }),
+      ),
+    }),
+    cancellation: obj({
+      eligible: { type: 'boolean' },
+      transaction_id: str,
+      scope: { type: 'string', enum: ['trigger'] },
+      reason: {
+        type: 'string',
+        enum: ['queued', 'pending_action', 'local_state', 'unknown', 'no_pending_action'],
+      },
     }),
   }),
   WorkflowController_subscribers: page(

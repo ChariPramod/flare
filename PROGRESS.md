@@ -29,6 +29,8 @@ Updated: 2026-10-14, America/Los_Angeles.
 
 ## Checkpoint log
 
+- 2026-10-14: Added normalized native job progress, observation timestamps, bounded/partial/missing-engine evidence and parent-trigger cancellation controls for accepted delay/digest work. Kept dispatch acceptance separate from native completion and restricted viewer controls. Added 11 database regressions, a browser contract, typed OpenAPI/SDK responses and live native browser/API assertions. Local checkpoint checks pass; new container assertions await CI.
+
 - 2026-10-14: Fixed activity visibility during native API outages and queued fan-out cancellation identifiers. The API preserves local evidence, reports engine observation availability without leaking upstream errors, and keeps accepted work ineligible for automatic resubmission. Dashboard shows saved activity and cancellation compensation. Local lint/types/OpenAPI/build/gitleaks passed with 158 unit/database tests, 25 evals and all 13 browser contracts. The real API-outage and native restart phases passed with all five jobs in CI `38619875142` on `1a743b5`.
 
 - 2026-10-14: Added a separately scoped native engine restart/cancellation scenario and test-authoring guidance. It uses real Flare cancellation, persisted native notification IDs and Inbox side effects, preserves Redis AOF, and observes a second worker restart for duplicates. Local lint/types/OpenAPI/149 unit tests/25 evals/build/gitleaks and shell syntax pass. All five jobs passed in CI `38619037497` on `6b841e2`; this does not claim abrupt-crash or total native Redis-loss recovery.

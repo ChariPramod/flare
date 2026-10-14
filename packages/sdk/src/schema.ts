@@ -21124,9 +21124,43 @@ export interface operations {
                         engine: unknown;
                         engine_observation: {
                             /** @enum {string} */
-                            status: "available" | "unavailable" | "not_requested";
+                            status: "available" | "unavailable" | "not_found" | "not_requested";
                             /** Format: date-time */
                             checked_at: string | null;
+                            partial: boolean;
+                            notifications: ({
+                                id: string;
+                                /** @enum {string} */
+                                status: "pending" | "running" | "completed" | "failed" | "canceled" | "unknown";
+                                /** Format: date-time */
+                                created_at: string | null;
+                                /** Format: date-time */
+                                updated_at: string | null;
+                                jobs: ({
+                                    id: string | null;
+                                    type: string;
+                                    /** @enum {string} */
+                                    status: "pending" | "queued" | "running" | "completed" | "failed" | "delayed" | "canceled" | "merged" | "skipped" | "unknown";
+                                    /** Format: date-time */
+                                    created_at: string | null;
+                                    /** Format: date-time */
+                                    updated_at: string | null;
+                                } & {
+                                    [key: string]: unknown;
+                                })[];
+                            } & {
+                                [key: string]: unknown;
+                            })[];
+                        } & {
+                            [key: string]: unknown;
+                        };
+                        cancellation: {
+                            eligible: boolean;
+                            transaction_id: string;
+                            /** @enum {string} */
+                            scope: "trigger";
+                            /** @enum {string} */
+                            reason: "queued" | "pending_action" | "local_state" | "unknown" | "no_pending_action";
                         } & {
                             [key: string]: unknown;
                         };
