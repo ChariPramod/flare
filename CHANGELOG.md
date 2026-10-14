@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a real Flare dispatcher SIGKILL scenario after native acceptance but before local persistence. A disposable internal proxy creates the uncertainty window; actual lease expiry must quarantine the attempt without replay or duplicate delivery.
+
 - Added disposable native worker SIGKILL and complete native queue-loss acceptance. The latter observes pending delay/digest work beyond its deadlines, rejects unsafe redrive and verifies explicit cancellation; it does not claim automatic delivery recovery after destroyed queues.
 
 - Added real-browser MFA/account-recovery and viewer restrictions acceptance. Revoked sessions now return users to login and clear cached protected data without treating normal role denials as logout; test diagnostics suppress private authentication values.

@@ -29,6 +29,8 @@ Updated: 2026-10-14, America/Los_Angeles.
 
 ## Checkpoint log
 
+- 2026-10-14: Added the Flare dispatcher acceptance-uncertainty crash window: an internal disposable proxy forwards one real Novu trigger and holds its response, then the runner kills Flare before local persistence. Assertions require real lease expiry, one quarantined ambiguous attempt/event, stable native identity, one Inbox side effect and rejected redrive across another restart. No production fault hooks or database state/lease mutations. Local verification and runtime evidence are tracked below.
+
 - 2026-10-14: Extended the disposable native recovery scenario with a verified SIGKILL exit (137), preserved AOF, cancellation while stopped and duplicate checks. Added a separate complete native Redis DB2-loss characterization for accepted delay/digest work, stable identities, redrive rejection and explicit cancellation. The harness preserves Mongo and Flare Redis and is restricted to generated acceptance projects. Local checks pass; new destructive scenarios await CI.
 
 - 2026-10-14: Added real-browser MFA enrollment, single-use recovery/re-enrollment, revoked/expired-session and viewer-denial coverage with private diagnostics. Fixed revoked session handling in the dashboard proxy and cleared protected cached data before returning to login; ordinary resource permission denials preserve valid sessions. Local checks and 14 contract flows pass; live MFA verification awaits CI.

@@ -57,6 +57,7 @@ printf 'Worker drained and exited cleanly before queue-loss recovery.\n'
 "${compose[@]}" up -d --no-deps --no-recreate --wait --wait-timeout 120 flare-worker
 "${compose[@]}" exec -T flare-api node scripts/acceptance/load.mjs verify
 check_independent native-queue-loss bash scripts/acceptance/crash-recovery.sh "$acceptance_dir" "$project"
+check_independent dispatcher-crash bash scripts/acceptance/dispatch-crash.sh "$acceptance_dir" "$project"
 check_independent restore bash scripts/acceptance/restore.sh "$acceptance_dir" "$project"
 if [[ ${#failed_checks[@]} -gt 0 ]]; then
   printf 'Acceptance checks failed: %s\n' "${failed_checks[*]}" >&2
