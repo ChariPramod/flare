@@ -4,25 +4,25 @@ Updated: 2026-10-14, America/Los_Angeles.
 
 ## Resume point — 2026-10-14
 
-- This note follows a clean `main`/`origin/main` at `7124578` (`docs(acceptance): record green full-stack verification and deployment gates`); resume from the current `main` tip.
-- The repository is public: [ChariPramod/flare](https://github.com/ChariPramod/flare). The latest implementation commit covered by full-stack CI is `63c655d`; the current `7124578` commit only records its verified evidence and deployment handoff.
-- [CI run `38442762577`](https://github.com/ChariPramod/flare/actions/runs/38442762577) passed lint, typecheck, OpenAPI drift checks, 136 unit/database tests, package installation, gitleaks, 11 browser contract flows, 12 PostgreSQL/Redis/MinIO/Mailpit integration tests, and the pinned full-stack acceptance suite.
+- Resume from current `main`; the latest implementation checkpoint is `7d91b54`, pushed to the public [ChariPramod/flare](https://github.com/ChariPramod/flare) repository.
+- [CI run `38538818077`](https://github.com/ChariPramod/flare/actions/runs/38538818077) passed all three jobs: lint/types/OpenAPI/build/packages/gitleaks, 137 unit/database tests, 11 browser contract flows, 12 real-service integration tests, and six live browser flows against the pinned stack.
+- Native Inbox delivery/isolation/read state, local MFA enrollment/concurrent replay rejection, delay/digest/throttle/HTTP execution, queue-loss recovery, and the isolated multi-store restore drill all passed. The restore took 44 seconds for the synthetic fixture; this is not a production recovery objective.
 - Docker installation on this Mac is still pending. Once Docker is running, execute `bash scripts/integration.sh` and `bash scripts/acceptance.sh` from the repository root; the CI result does not replace those local runs.
-- Keep deployment acceptance open until controlled public-DNS/DKIM and provider checks, Postal routing/native callback checks, SES/SNS/SMS checks, external OIDC/MFA, the remaining Novu channel/action matrix, and an isolated backup/restore drill have evidence.
+- Keep deployment acceptance open until the local container run, controlled public-DNS/DKIM/provider checks, Postal routing/native callbacks, SES/SNS/SMS, external OIDC, credentialed push/chat, and production backup custody/provider reconciliation have evidence.
 
 ## Phase status
 
-| Phase                                           | Status                                                          |
-| ----------------------------------------------- | --------------------------------------------------------------- |
-| 0 — Scaffold, CI, Compose                       | CI startup/upgrade/seed passed; Mac Docker run pending          |
-| 1 — Auth, RBAC, environments, keys              | Unit and real HTTP/browser flows passed; external OIDC pending  |
-| 2 — Novu wrapper                                | Pinned core flows passed; additional channel/action checks open |
-| 3 — Email pipeline                              | CI SMTP/TLS/DKIM/recovery passed; external providers pending    |
-| 4 — Dashboard                                   | 11 contract flows and 5 full-stack browser flows passed         |
-| 5 — Webhooks, logs, metrics                     | Unit and real-service recovery passed; native callbacks pending |
-| 6 — Audience, broadcasts, templates             | Unit/browser and PostgreSQL/Redis recovery passed               |
-| 7 — Automations, inbound, translations, layouts | Implemented; pinned-stack content/inbound/publication passed    |
-| 8 — Hardening, SDK, CLI                         | Packages, load and CI recovery passed; deployment gates remain  |
+| Phase                                           | Status                                                                        |
+| ----------------------------------------------- | ----------------------------------------------------------------------------- |
+| 0 — Scaffold, CI, Compose                       | CI startup/upgrade/seed passed; Mac Docker run pending                        |
+| 1 — Auth, RBAC, environments, keys              | Unit and real HTTP/browser flows passed; external OIDC pending                |
+| 2 — Novu wrapper                                | Pinned Inbox/email/action checks passed; credentialed channels pending        |
+| 3 — Email pipeline                              | CI SMTP/TLS/DKIM/recovery passed; external providers pending                  |
+| 4 — Dashboard                                   | 11 contract flows and 6 full-stack browser flows passed                       |
+| 5 — Webhooks, logs, metrics                     | Unit and real-service recovery passed; native callbacks pending               |
+| 6 — Audience, broadcasts, templates             | Unit/browser and PostgreSQL/Redis recovery passed                             |
+| 7 — Automations, inbound, translations, layouts | Implemented; pinned-stack content/inbound/publication passed                  |
+| 8 — Hardening, SDK, CLI                         | Packages, load, recovery and isolated restore passed; deployment gates remain |
 
 ## Checkpoint log
 
@@ -55,9 +55,9 @@ Updated: 2026-10-14, America/Los_Angeles.
 ## Known issues and verification limits
 
 - This host has no Docker runtime. Full-stack startup, official image pulls and container integration tests cannot be validated here yet.
-- CI on `63c655d` passed all 12 PostgreSQL/Redis/MinIO/Mailpit tests and the full pinned-stack acceptance job. The equivalent local Docker runs remain pending.
+- CI on `7d91b54` passed all 12 PostgreSQL/Redis/MinIO/Mailpit tests and the expanded pinned-stack acceptance job. The equivalent local Docker runs remain pending.
 - Postal/SES identities require provider-side authorization. Native callback interoperability, public DNS and external deliverability remain unverified. Novu → authenticated STARTTLS relay → Mailpit delivery passed.
-- Password/session and tenant-aware HTTP/browser flows passed against the stack. External OIDC/MFA interoperability, the remaining native channel/action matrix in `docs/novu-gaps.md`, and an isolated backup/restore drill remain open.
+- Password/session, local TOTP/recovery, tenant-aware HTTP/browser flows and isolated restore passed against the stack. External OIDC, credentialed channel delivery, and production restore/provider reconciliation remain open. Advanced action variants outside the tested matrix are listed in `docs/novu-gaps.md`.
 
 ## GitHub delivery
 
@@ -67,7 +67,7 @@ Updated: 2026-10-14, America/Los_Angeles.
 
 ## Next
 
-### Active execution plan — 2026-10-14
+### Completed acceptance checkpoint — 2026-10-14
 
 Baseline: clean `459029e`, verified by [CI 38530994814](https://github.com/ChariPramod/flare/actions/runs/38530994814), with all three jobs green. Continue implementation and acceptance from this baseline; do not rebuild completed modules.
 
@@ -77,9 +77,18 @@ Baseline: clean `459029e`, verified by [CI 38530994814](https://github.com/Chari
 4. **Authentication acceptance:** add real HTTP checks for local TOTP enrollment, replay rejection, session revocation and single-use recovery. External OIDC interoperability stays a separate credentialed gate.
 5. **Review and verification:** integrate independent changes, run lint/types/unit/build/secret scan and browser contracts, then commit and push a coherent checkpoint. Run the expanded Compose suite in CI, diagnose failures and repeat affected checks until green. Update this file, changelog and acceptance ledger with observed evidence, not predictions.
 
-The Inbox, action and restore tasks run in separate subagents with nonoverlapping ownership. The primary agent owns shared harness wiring, authentication checks, review, checkpoint commits and CI follow-through.
+All five steps above are complete for the controlled CI environment, verified on `7d91b54`. Three subagents implemented and reviewed independent Inbox, action and restore work; the primary agent integrated, tested and pushed it. One runtime mismatch exposed Novu's default 30-second throttle retention buffer; acceptance now verifies both buffered rejection and eventual renewal.
 
-Run `scripts/integration.sh` and `scripts/acceptance.sh` on this Mac once Docker is available (installation remains user-managed and pending). Complete controlled provider/public-DNS/OIDC checks and the remaining credentialed channel matrix before declaring deployment acceptance complete. Registry publication is outside scope.
+### Larger roadmap — deployment validation and internal pilot
+
+1. **Reproduce locally:** install/start Docker, then run `bash scripts/integration.sh` and `E2E_BROWSER_CHANNEL=chrome bash scripts/acceptance.sh`. Preserve the same pinned versions and disposable data boundary. Exit: both scripts pass on this Mac. Docker installation remains user-managed and pending.
+2. **Provision controlled staging:** choose the staging host and owned sending/receiving domain; configure HTTPS, protected secrets, separate Development/Production credentials, storage and backups following `docs/deployment.md`. Exit: private administration, public application access and dependency readiness work on the real host.
+3. **Verify real integrations:** use controlled recipients to verify public DNS/DKIM, Postal routing and native signatures, SES/SNS callbacks, SMS and any intended push/chat providers, plus the actual OIDC issuer. Record provider IDs and authenticated delivered/bounced events separately from acceptance. Exit: each enabled channel has reproducible evidence; unsupported/unverified channels stay visibly pending.
+4. **Prove operations on staging:** exercise alerts and dead-letter recovery, restore an encrypted off-host backup with independently recovered secrets, reconcile uncertain provider outcomes, and test upgrades/rollback. Exit: documented recovery ownership and measured recovery/data-loss targets on the intended infrastructure. The 44-second CI fixture does not certify those targets.
+5. **Run a limited Pareto Labs pilot:** connect a small set of real application workflows, validate preferences/suppression and publication with actual operators, and measure delivery latency, failures, cost and support needs under expected traffic. Fix observed product gaps before expanding volume.
+6. **Roll out deliberately:** enable the verified channels/workflows, establish on-call and backup ownership, monitor capacity and provider health, and expand after pilot evidence is satisfactory. Registry publication remains outside the current plan.
+
+The next dependencies are infrastructure and provider access, not a new scaffold. Do not label full deployment acceptance complete until the open gates above have evidence.
 
 ## Acceptance execution history
 
@@ -88,6 +97,8 @@ Entries below record each checkpoint at its execution time; the latest result is
 - 2026-10-14: Expanded acceptance with native Inbox delivery/isolation/read state and a sixth live browser flow, delay/digest/throttle/HTTP execution and failure controls, real HTTP MFA enrollment/concurrent replay protection, and an isolated PostgreSQL/MongoDB/Postal/Redis/MinIO restore drill. Independent review corrected Redis RDB-to-AOF restoration before execution. Local lint, typecheck, OpenAPI checks, 136 tests, build, gitleaks and all 11 browser contract flows pass. Expanded container scenarios await CI; local Docker and external-provider gates remain open.
 
 - CI `38534097037` on `4721c51` passed the standard and integration jobs, the real HTTP MFA scenario, and native Inbox delivery/isolation/read-state checks. Native delay, digest merge, concurrent throttle, HTTP failure cancellation and explicit continuation passed; the renewed throttle trigger remained skipped after the expected window. This failure stopped the first expanded run before browser/restore checks. Investigating the pinned throttle duration contract; independent action/browser/restore groups now report combined failures so one group cannot conceal results from the others.
+
+- [CI `38538818077`](https://github.com/ChariPramod/flare/actions/runs/38538818077) is fully green on `7d91b54`: 137 unit/database tests, 11 browser contracts, 12 real-service tests, six live browser flows, all native action/Inbox and local MFA scenarios, baseline upgrade/repeated seed, and isolated multi-store restore. Load accepted 54 logical sends, recorded 30 expected throttles and 185,323,520 bytes peak API RSS; queue-loss recovery lost no accepted sends and duplicated no logical/provider submissions. Restore passed in 44 seconds, including tenant policies, decryptable keys, native workflow mappings, Postal data, Redis RDB-to-AOF persistence and MinIO bytes/metadata. External deployment and local Docker gates remain open.
 
 - Tooling checkpoint `4fd2267` is pushed. Its standard CI job passed all checks and 11 browser flows. Official pinned MinIO sources built successfully; integration startup then failed because Compose waited on the completed initializer. The runner now initializes the bucket separately.
 - Added a disposable full-stack CI/local runner with isolated secrets/data, baseline upgrade and repeatable seed assertions, local authoritative DNS, pinned Novu and SMTP flows, signed inbound simulation, content publication, browser recovery and bounded load/queue-loss checks. Added operational deployment and restore documentation.

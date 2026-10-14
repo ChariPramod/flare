@@ -12,7 +12,7 @@ Reference: [Novu releases](https://github.com/novuhq/novu/releases/tag/v3.19.0),
 
 ## Flare implementations
 
-Topics and subscription conditions are stored and expanded in Flare before trigger dispatch. This supplies exact context matching and actor exclusion independently of community topics availability. Flare promotes selected workflows, layouts and translations through durable publication operations with pinned dependencies and engine reconciliation. Novu transport acceptance is labeled `accepted`, not delivered. Step execution and engine-derived timelines still need tests against running 3.19.0 images.
+Topics and subscription conditions are stored and expanded in Flare before trigger dispatch. This supplies exact context matching and actor exclusion independently of community topics availability. Flare promotes selected workflows, layouts and translations through durable publication operations with pinned dependencies and engine reconciliation. Novu transport acceptance is labeled `accepted`, not delivered. Native job execution is verified for the bounded action matrix below; production callback/timeline integration still needs provider evidence.
 
 ## Runtime evidence
 
@@ -20,16 +20,18 @@ Topics and subscription conditions are stored and expanded in Flare before trigg
 
 [CI run 38442762577](https://github.com/ChariPramod/flare/actions/runs/38442762577) subsequently passed the entire pinned-stack acceptance script, including translated email relay delivery, preference updates, verified content publication, Production automation execution and all five real browser flows. External provider delivery and the remaining matrix below are not certified by that run.
 
-| Channel or action                     | Verified boundary                                                     | Remaining runtime check                                     |
-| ------------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Inbox                                 | Provider adoption, seed, UI workflow creation and trigger acceptance  | Feed delivery and browser Inbox                             |
-| Email                                 | Novu → authenticated TLS relay → Mailpit; retry/failover and recovery | External provider delivery                                  |
-| SMS                                   | Twilio/Plivo configuration exposed through Flare                      | Credentialed provider acceptance/delivery                   |
-| Push                                  | FCM/APNs configuration exposed through Flare                          | Credentialed device delivery                                |
-| Chat                                  | Slack/Discord configuration exposed through Flare                     | Credentialed destination delivery                           |
-| Delay, digest, throttle, HTTP request | Editor/API request support                                            | Execution, timing and failure behavior in the pinned engine |
+[CI run 38538818077](https://github.com/ChariPramod/flare/actions/runs/38538818077) on `7d91b54` also passed native Inbox delivery/subscriber isolation/read-state persistence, the actual dashboard Inbox, and the delay/digest/throttle/HTTP assertions described below. All six live browser flows passed.
 
-`scripts/acceptance/actions.mjs` adds runtime assertions for the action row; its presence alone is not evidence of a passing run. It creates workflows through Flare and reads the pinned engine's notification/job API. The isolated HTTP listener is reachable only inside the disposable Compose network, with a per-run random route and a 4 KiB request limit. The acceptance override permits precisely `flare-api` alongside the existing relay hostname; production SSRF configuration is unchanged.
+| Channel or action                     | Verified boundary                                                     | Remaining runtime check                                |
+| ------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------ |
+| Inbox                                 | Feed delivery, subscriber isolation, read/unread and browser Inbox    | Production deployment/real application usage           |
+| Email                                 | Novu → authenticated TLS relay → Mailpit; retry/failover and recovery | External provider delivery                             |
+| SMS                                   | Twilio/Plivo configuration exposed through Flare                      | Credentialed provider acceptance/delivery              |
+| Push                                  | FCM/APNs configuration exposed through Flare                          | Credentialed device delivery                           |
+| Chat                                  | Slack/Discord configuration exposed through Flare                     | Credentialed destination delivery                      |
+| Delay, digest, throttle, HTTP request | Native jobs, timing/merge/throttle, HTTP halt/continuation passed     | Advanced variants and native Redis-loss recovery below |
+
+`scripts/acceptance/actions.mjs` supplies the passing runtime assertions for the action row. It creates workflows through Flare and reads the pinned engine's notification/job API. The isolated HTTP listener is reachable only inside the disposable Compose network, with a per-run random route and a 4 KiB request limit. The acceptance override permits precisely `flare-api` alongside the existing relay hostname; production SSRF configuration is unchanged.
 
 The action checks require a two-second delay before downstream execution, two concurrent events merged into one digest with both payloads retained, one winner among four concurrent throttle attempts, skipped throttle children, and renewed execution after the native reservation expires. HTTP checks require rendered JSON, the native signature header, persisted failure plus canceled children, and explicit continuation with the failure retained. This does not certify cron schedules, dynamic throttles, HTTP signature verification by an external receiver, arbitrary third-party endpoints, or action recovery after loss of Novu's own Redis data.
 

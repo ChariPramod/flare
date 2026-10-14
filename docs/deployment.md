@@ -34,6 +34,8 @@ The drill restores into fresh volumes in a second Compose project whose network 
 
 The printed elapsed time measures this small synthetic fixture, not a production recovery-time objective. A passing drill establishes restoration and data consistency for the pinned local stores; it does not establish encrypted off-host backup custody, secret-store disaster recovery, external-provider reconciliation, or safe reactivation of delivery after a real outage. Keep those deployment checks separate. The restored project never starts Flare/Novu/Postal delivery processes; run the operator smoke tests and reconcile ambiguous provider acceptance before enabling outbound delivery in a real recovery.
 
+[CI 38538818077](https://github.com/ChariPramod/flare/actions/runs/38538818077) passed this drill on `7d91b54` in 44 seconds, including the Redis RDB-to-AOF conversion/restart. The same local Mac run and production infrastructure drill remain pending.
+
 ## Troubleshooting
 
 | Symptom                          | First checks                                                                                                      |
