@@ -20,26 +20,28 @@ The script includes native Inbox delivery/read-state and a sixth live browser fl
 
 The staging-preparation candidate `daa76f7` passed four jobs in [CI 38543738466](https://github.com/ChariPramod/flare/actions/runs/38543738466): standard checks (143 unit/database tests, 25 deterministic evals, 11 browser contracts and package installation), all 12 integration tests, synthetic Compose/Caddy configuration validation, and the expanded full-stack acceptance with all six live browser flows. Native Inbox/actions, local MFA, translated SMTP, publication and simulated inbound passed. Load accepted 54 logical sends with 30 expected throttles and 188,473,344 bytes peak API RSS; queue-loss recovery lost no accepted sends and duplicated no logical/provider submissions. The isolated restore passed in 38 seconds. The overall workflow failed solely because Python 3.12's mapped-IPv6 loopback classification differed from the local Python 3.9 behavior; the following checkpoint repairs this policy. This candidate is not an all-green release.
 
-| Check                                   | Evidence required                                        | Current boundary                                                           |
-| --------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------- |
-| lint/types/unit/build/secrets           | checkpoint and CI check job                              | Passed on 7d91b54 in CI                                                    |
-| browser contract tests                  | 11 Playwright flows                                      | Passed on 7d91b54 in CI                                                    |
-| real-service integration                | CI integration job and same script locally               | 12 tests passed in CI on 7d91b54; Mac run pending                          |
-| pinned full stack                       | CI acceptance job and same script locally                | All API scenarios and 6/6 browser flows passed on 7d91b54; Mac run pending |
-| migration/seed/upgrade                  | acceptance scenario                                      | Clean startup, baseline upgrade and repeated seed passed on 7d91b54        |
-| load/queue-loss recovery                | acceptance scenario                                      | Passed on 7d91b54 in CI; Mac run pending                                   |
-| native Inbox/actions                    | runtime matrix in novu-gaps.md                           | Feed/browser, delay/digest/throttle and HTTP failure controls passed       |
-| credentialed push/chat                  | controlled provider/device/destination                   | Pending                                                                    |
-| public DNS and DKIM delivery            | controlled external sending/receiving domain             | Credentials/infrastructure pending                                         |
-| Postal routing/native delivery callback | real Postal server/domain routing                        | Pending; signed fixtures do not substitute                                 |
-| SES/SNS and SMS                         | verified identity/topic/provider account                 | Pending                                                                    |
-| local MFA                               | real HTTP enrollment, replay and session revocation      | Passed on 7d91b54 in CI                                                    |
-| external OIDC login                     | actual configured issuer                                 | Pending                                                                    |
-| isolated backup restore                 | stores/security/keys/native mappings on fresh volumes    | Passed on 7d91b54 in CI in 44s; Mac run pending                            |
-| production recovery                     | off-host backup/key recovery and provider reconciliation | Pending; synthetic restore does not certify production recovery targets    |
-| deterministic product evals             | fixture cases against current source                     | 25 passed on daa76f7 in CI                                                 |
-| Python tooling                          | Python runtime checks and Ruff                           | 3.12 portability repair pending CI; local 3.9 tests pass                   |
-| staging ingress configuration           | merged Compose boundaries and native Caddy validation    | Passed on daa76f7; isolated route/header runtime checks added next         |
+Latest: [CI 38613630116](https://github.com/ChariPramod/flare/actions/runs/38613630116) is fully green across all five jobs on `82ec8c9`. It verified 144 unit/database tests, 25 evals, 45 Python tests (four external staging cases intentionally skipped), 12 integration tests, 11 browser contracts and six live browser flows. Both Compose variants and native Caddy configuration passed, as did isolated runtime checks for 43 private-route denials, four upstream routes and client-IP spoof rejection. The full stack again passed native Inbox/actions, MFA replay protection, SMTP, publication and simulated inbound. Load accepted 54 logical sends with 30 expected throttles and 177,680,384 bytes peak API RSS; queue recovery lost no accepted sends and duplicated no logical/provider submissions. The isolated multi-store restore completed in 44 seconds. This is controlled CI evidence; infrastructure choices and real deployment remain deferred.
+
+| Check                                   | Evidence required                                        | Current boundary                                                               |
+| --------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| lint/types/unit/build/secrets           | checkpoint and CI check job                              | Passed on 82ec8c9 in CI                                                        |
+| browser contract tests                  | 11 Playwright flows                                      | Passed on 82ec8c9 in CI                                                        |
+| real-service integration                | CI integration job and same script locally               | 12 tests passed in CI on 82ec8c9; Mac run pending                              |
+| pinned full stack                       | CI acceptance job and same script locally                | All API scenarios and 6/6 browser flows passed on 82ec8c9; Mac run pending     |
+| migration/seed/upgrade                  | acceptance scenario                                      | Clean startup, baseline upgrade and repeated seed passed on 82ec8c9            |
+| load/queue-loss recovery                | acceptance scenario                                      | Passed on 82ec8c9 in CI; Mac run pending                                       |
+| native Inbox/actions                    | runtime matrix in novu-gaps.md                           | Feed/browser, delay/digest/throttle and HTTP failure controls passed           |
+| credentialed push/chat                  | controlled provider/device/destination                   | Pending                                                                        |
+| public DNS and DKIM delivery            | controlled external sending/receiving domain             | Credentials/infrastructure pending                                             |
+| Postal routing/native delivery callback | real Postal server/domain routing                        | Pending; signed fixtures do not substitute                                     |
+| SES/SNS and SMS                         | verified identity/topic/provider account                 | Pending                                                                        |
+| local MFA                               | real HTTP enrollment, replay and session revocation      | Passed on 82ec8c9 in CI                                                        |
+| external OIDC login                     | actual configured issuer                                 | Pending                                                                        |
+| isolated backup restore                 | stores/security/keys/native mappings on fresh volumes    | Passed on 82ec8c9 in CI in 44s; Mac run pending                                |
+| production recovery                     | off-host backup/key recovery and provider reconciliation | Pending; synthetic restore does not certify production recovery targets        |
+| deterministic product evals             | fixture cases against current source                     | 25 passed on 82ec8c9 in CI                                                     |
+| Python tooling                          | Python runtime checks and Ruff                           | 45 pass on Python 3.12 in CI and local 3.9; four external skips                |
+| staging ingress configuration           | merged Compose boundaries and native Caddy validation    | Config plus 43 private routes, four upstream routes and spoof rejection passed |
 
 The first pilot is Postal email, Inbox and password/MFA. SES/SNS, SMS, push/chat and external OIDC remain deferred beyond that pilot. A passing staging configuration check is not public HTTPS issuance, a host reboot drill or actual provider delivery.
 

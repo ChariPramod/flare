@@ -4,12 +4,13 @@ Updated: 2026-10-14, America/Los_Angeles.
 
 ## Resume point — 2026-10-14
 
-- Resume from current `main` in the public [ChariPramod/flare](https://github.com/ChariPramod/flare) repository. Staging preparation is pushed as `daa76f7`. Its full-stack, standard, integration and staging-config jobs passed in [CI 38543738466](https://github.com/ChariPramod/flare/actions/runs/38543738466); the Python job exposed a cross-version loopback classification mismatch. The repair and additional ingress/restart checks are the current checkpoint.
-- [CI run `38538818077`](https://github.com/ChariPramod/flare/actions/runs/38538818077) passed all three jobs: lint/types/OpenAPI/build/packages/gitleaks, 137 unit/database tests, 11 browser contract flows, 12 real-service integration tests, and six live browser flows against the pinned stack.
+- Resume from current `main` in the public [ChariPramod/flare](https://github.com/ChariPramod/flare) repository. Latest implementation checkpoint: `82ec8c9`, with all five jobs green in [CI 38613630116](https://github.com/ChariPramod/flare/actions/runs/38613630116).
+- Verified: lint/types/OpenAPI/build/packages/gitleaks/Ruff, 144 unit/database tests, 25 deterministic evals, 45 Python tests (four external staging checks intentionally skipped), 11 browser contracts, 12 real-service tests and six live browser flows. Caddy runtime checks passed 43 private-route denials, four upstream routes and client-IP spoof rejection, alongside merged Compose/config validation.
 - Native Inbox delivery/isolation/read state, local MFA enrollment/concurrent replay rejection, delay/digest/throttle/HTTP execution, queue-loss recovery, and the isolated multi-store restore drill all passed. The restore took 44 seconds for the synthetic fixture; this is not a production recovery objective.
 - Docker installation on this Mac is still pending. Once Docker is running, execute `bash scripts/integration.sh` and `bash scripts/acceptance.sh` from the repository root; the CI result does not replace those local runs.
 - User selected **self-hosted Postal + Email + Inbox + password/MFA** for the first pilot. No host, DNS zone or domain is provisioned. SES, OIDC, SMS, push and chat remain deferred; they are not first-pilot prerequisites.
-- Current work adds HTTPS staging ingress and offline configuration preflight, fixes dashboard client-IP forwarding through the trusted ingress, and adds optional Python smoke checks and deterministic product evals. See `docs/staging.md` for infrastructure/access and `docs/testing.md` for test locations and commands. No real deployment or provider credentials are available yet.
+- User explicitly deferred hosting budget, region and domain decisions on 2026-10-14: “We'll do that later.” Do not provision or buy infrastructure. Resume deployment planning when the user supplies those decisions; preserve the selected pilot scope.
+- Staging ingress/preflight, per-client dashboard forwarding, persistent-store restart policies, bootstrap-key validation and portable Python smoke checks are implemented. See `docs/staging.md` for infrastructure/access and `docs/testing.md` for test locations and commands. No real deployment or provider credentials are available yet.
 - Keep first-pilot acceptance open until local containers, public HTTPS/DNS/DKIM, Postal authorization/routing/native callbacks, browser Inbox/MFA and off-host backup custody/restoration/provider reconciliation have evidence. Broader channel acceptance remains separate.
 
 ## Phase status
@@ -28,7 +29,7 @@ Updated: 2026-10-14, America/Los_Angeles.
 
 ## Checkpoint log
 
-- 2026-10-14: Integrated the Python portability repair, persistent-store restart policies, bootstrap-key validation and isolated ingress route/header tests. Local lint/typecheck/OpenAPI/build/gitleaks, 144 unit/database tests, 25 evals and 45 Python tests pass; four external staging checks remain intentionally skipped. The new Docker runtime ingress scenario and Python 3.12 repair await CI.
+- 2026-10-14: Integrated the Python portability repair, persistent-store restart policies, bootstrap-key validation and isolated ingress route/header tests in `82ec8c9`. Local checks and all five jobs in CI `38613630116` pass: 144 unit/database tests, 25 evals, 45 Python tests, 12 integration tests, 11 browser contracts, six live flows and 43 Caddy private-route checks. Four external staging Python checks are intentionally skipped. Load recovered all 54 logical sends after queue loss with no duplicate submission, 30 expected throttles and 177,680,384 bytes peak API RSS; the isolated restore passed in 44 seconds. Infrastructure decisions are deferred by the user, and real deployment acceptance remains open.
 
 - 2026-10-14: Prepared a provider-neutral staging overlay for the selected Postal/Inbox/password-MFA pilot, explicit receiving-port opt-in, relay CA trust, and redacted offline preflight. Added exact ingress client-IP forwarding, 25 fixture-driven product evals, and an optional Python smoke harness with separate public and loopback-only readiness modes. Local checkpoint passed with 143 unit/database tests, all 25 evals, 38 Python tests (four staging tests intentionally skipped), clean Ruff checks and 11 browser contract flows. CI `38543738466` confirmed the standard, integration, staging configuration and full-stack jobs; Python failed because 3.12 and 3.9 classify mapped IPv6 loopback differently. The repair explicitly defines allowed loopback addresses, adds regression cases, restart policies for persistent stores, a bootstrap-key preflight check and an isolated Caddy runtime boundary test. No staging resources exist yet.
 
@@ -61,7 +62,7 @@ Updated: 2026-10-14, America/Los_Angeles.
 ## Known issues and verification limits
 
 - This host has no Docker runtime. Full-stack startup, official image pulls and container integration tests cannot be validated here yet.
-- CI on `7d91b54` passed all 12 PostgreSQL/Redis/MinIO/Mailpit tests and the expanded pinned-stack acceptance job. The equivalent local Docker runs remain pending.
+- CI on `82ec8c9` passed all 12 PostgreSQL/Redis/MinIO/Mailpit tests, the expanded pinned-stack acceptance job and isolated ingress checks. The equivalent local Docker runs remain pending.
 - Postal/SES identities require provider-side authorization. Native callback interoperability, public DNS and external deliverability remain unverified. Novu → authenticated STARTTLS relay → Mailpit delivery passed.
 - Password/session, local TOTP/recovery, tenant-aware HTTP/browser flows and isolated restore passed against the stack. External OIDC, credentialed channel delivery, and production restore/provider reconciliation remain open. Advanced action variants outside the tested matrix are listed in `docs/novu-gaps.md`.
 

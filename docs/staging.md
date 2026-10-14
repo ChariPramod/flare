@@ -2,6 +2,8 @@
 
 No staging host, domain or DNS zone has been provisioned. These files prepare a provider-neutral single-host deployment; they do not deploy resources or certify external delivery. The initial pilot uses self-hosted Postal, email and Inbox, with password login and MFA. OIDC, SES, SMS, push and chat remain separate future checks.
 
+Hosting budget, region and domain decisions were explicitly deferred by the owner on 2026-10-14. The latest implementation checkpoint, `82ec8c9`, passed all five jobs in [CI 38613630116](https://github.com/ChariPramod/flare/actions/runs/38613630116), including isolated Caddy routing/header checks. Resume provisioning only after those infrastructure decisions and access are available.
+
 ## Provisioning checklist
 
 - Choose a dedicated host with a stable public IPv4 address, permitted outbound TCP 25 and control of its reverse-DNS/PTR record. Confirm these capabilities with the hosting provider before purchase; a generic VM does not imply mail egress is allowed. An initial planning allocation is 8 vCPU, 16 GiB RAM and 150 GiB SSD on Ubuntu 24.04 amd64, matching CI's OS family. This allocation has not been capacity benchmarked.
