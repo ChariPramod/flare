@@ -530,7 +530,19 @@ function Account({ session }: { session: Session }) {
             <Button
               className="danger"
               disabled={disable.isPending}
-              onClick={() => disable.mutate({ password, code })}
+              onClick={() =>
+                disable.mutate(
+                  { password, code },
+                  {
+                    onSuccess: () => {
+                      setup.reset();
+                      enable.reset();
+                      setPassword('');
+                      setCode('');
+                    },
+                  },
+                )
+              }
             >
               Disable two-factor authentication
             </Button>
@@ -538,7 +550,18 @@ function Account({ session }: { session: Session }) {
             <Button
               className="primary"
               disabled={enable.isPending}
-              onClick={() => enable.mutate({ code })}
+              onClick={() =>
+                enable.mutate(
+                  { code },
+                  {
+                    onSuccess: () => {
+                      setup.reset();
+                      setPassword('');
+                      setCode('');
+                    },
+                  },
+                )
+              }
             >
               Enable two-factor authentication
             </Button>

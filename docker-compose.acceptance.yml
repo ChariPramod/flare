@@ -13,8 +13,13 @@ services:
         './acceptance:/acceptance',
         './ops/postal/config/signing.key:/acceptance-postal.key:ro',
         './ops/certs/relay.crt:/app/ops/certs/relay.crt:ro',
+        './ops/certs/relay.key:/app/ops/certs/relay.key:ro',
       ]
     user: root
+  postal:
+    volumes:
+      - ./acceptance:/acceptance:ro
+      - ./scripts/acceptance/postal-native.rb:/acceptance-postal-native.rb:ro
   flare-migrate:
     volumes: ['./acceptance:/acceptance']
   novu-api:

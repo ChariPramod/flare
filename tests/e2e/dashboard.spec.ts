@@ -10,6 +10,59 @@ async function login(page: Page) {
 test.beforeEach(async ({ request }) => {
   await request.post('http://127.0.0.1:4311/reset');
 });
+test('enrolls MFA, shows recovery codes once, requires recovery on login and clears disabled setup', async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto('/settings');
+  await page.getByLabel('Current password').fill('browser-test-password');
+  await page.getByRole('button', { name: 'Set up authenticator', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Copy authenticator secret' })).toBeVisible();
+  await page.getByLabel('Authenticator or recovery code').fill('123456');
+  await page.getByRole('button', { name: 'Enable two-factor authentication', exact: true }).click();
+  await expect(page.getByText('Enabled', { exact: true })).toBeVisible();
+  await expect(page.getByText('Save these recovery codes')).toBeVisible();
+  await expect(page.getByText('browser-recovery-one', { exact: false })).toBeVisible();
+  await page.getByLabel('Current password').fill('browser-test-password');
+  await page.getByLabel('Authenticator or recovery code').fill('browser-recovery-two');
+  await page
+    .getByRole('button', { name: 'Disable two-factor authentication', exact: true })
+    .click();
+  await expect(
+    page.getByRole('button', { name: 'Set up authenticator', exact: true }),
+  ).toBeDisabled();
+  await expect(page.getByText('Save these recovery codes')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Copy authenticator secret' })).toHaveCount(0);
+  await page.getByLabel('Current password').fill('browser-test-password');
+  await page.getByRole('button', { name: 'Set up authenticator', exact: true }).click();
+  await page.getByLabel('Authenticator or recovery code').fill('123456');
+  await page.getByRole('button', { name: 'Enable two-factor authentication', exact: true }).click();
+  await expect(page.getByText('Enabled', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText('Enabled', { exact: true })).toBeVisible();
+  await expect(page.getByText('Save these recovery codes')).toHaveCount(0);
+  await page.context().clearCookies();
+  await page.goto('/login');
+  await page.getByLabel('Work email').fill('tester@example.test');
+  await page.getByLabel('Password', { exact: true }).fill('browser-test-password');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toHaveCount(0);
+  await page.getByLabel('Authenticator or recovery code').fill('browser-recovery-one');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+  await page.goto('/settings');
+  await page.getByLabel('Current password').fill('browser-test-password');
+  await page.getByLabel('Authenticator or recovery code').fill('browser-recovery-two');
+  await page
+    .getByRole('button', { name: 'Disable two-factor authentication', exact: true })
+    .click();
+  await expect(page.getByText('Not enabled', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Set up authenticator', exact: true }),
+  ).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Copy authenticator secret' })).toHaveCount(0);
+  await expect(page.getByText('Save these recovery codes')).toHaveCount(0);
+});
 test('sign in, create and edit a workflow, trigger it, and inspect activity', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

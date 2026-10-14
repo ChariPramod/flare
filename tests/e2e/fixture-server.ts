@@ -26,6 +26,7 @@ const user = {
   mfa_enabled: false,
 };
 const token = 'browser-contract-session';
+const mfaRecovery = new Set<string>();
 const workflows = new Map<string, Record<string, unknown>>(),
   domains = new Map<string, Record<string, unknown>>(),
   emails = new Map<string, Record<string, unknown>>(),
@@ -53,6 +54,8 @@ const server = createServer(async (req, res) => {
       method = req.method;
     if (path === '/health') return reply({ status: 'ok' });
     if (path === '/reset') {
+      user.mfa_enabled = false;
+      mfaRecovery.clear();
       workflows.clear();
       layouts.clear();
       publications.clear();
@@ -74,10 +77,13 @@ const server = createServer(async (req, res) => {
     for await (const chunk of req) text += String(chunk);
     const body = text ? JSON.parse(text) : {};
     if (path === 'auth/config') return reply({ oidc_url: null });
-    if (path === 'auth/login')
-      return body.email === user.email && body.password === 'browser-test-password'
-        ? reply({ token, user, organizations })
-        : reply({ message: 'Invalid credentials' }, 401);
+    if (path === 'auth/login') {
+      if (body.email !== user.email || body.password !== 'browser-test-password')
+        return reply({ message: 'Invalid credentials' }, 401);
+      if (user.mfa_enabled && !mfaRecovery.delete(body.code))
+        return reply({ message: 'Authenticator or recovery code required' }, 401);
+      return reply({ token, user, organizations });
+    }
     if (path === 'preferences/browser-fixture-link') {
       const contact = [...contacts.values()][0];
       if (!contact) return reply({ message: 'Not found' }, 404);
@@ -92,6 +98,22 @@ const server = createServer(async (req, res) => {
     )
       return reply({ message: 'No tenant access' }, 403);
     const production = req.headers['x-environment-id'] === prod;
+    if (path === 'auth/mfa/setup')
+      return reply({ secret: 'BROWSER-CONTRACT-SETUP-KEY', uri: 'otpauth://totp/fixture' });
+    if (path === 'auth/mfa/enable') {
+      if (body.code !== '123456') return reply({ message: 'Invalid authenticator code' }, 400);
+      user.mfa_enabled = true;
+      mfaRecovery.add('browser-recovery-one');
+      mfaRecovery.add('browser-recovery-two');
+      return reply({ recovery_codes: [...mfaRecovery] });
+    }
+    if (path === 'auth/mfa/disable') {
+      if (body.password !== 'browser-test-password' || !mfaRecovery.delete(body.code))
+        return reply({ message: 'Invalid authenticator or recovery code' }, 400);
+      user.mfa_enabled = false;
+      mfaRecovery.clear();
+      return reply({ disabled: true });
+    }
     if (path === 'api-keys')
       return reply(
         method === 'POST'

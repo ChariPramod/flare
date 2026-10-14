@@ -183,11 +183,19 @@ let oidcConfiguration: Promise<oidc.Configuration> | undefined;
 function getOidc() {
   if (!process.env.OIDC_ISSUER || !process.env.OIDC_CLIENT_ID || !process.env.OIDC_CLIENT_SECRET)
     throw new BadRequestException('OIDC is not configured');
-  return (oidcConfiguration ??= oidc.discovery(
-    new URL(process.env.OIDC_ISSUER),
-    process.env.OIDC_CLIENT_ID,
-    process.env.OIDC_CLIENT_SECRET,
-  ));
+  return (oidcConfiguration ??= oidc
+    .discovery(
+      new URL(process.env.OIDC_ISSUER),
+      process.env.OIDC_CLIENT_ID,
+      process.env.OIDC_CLIENT_SECRET,
+      undefined,
+      { execute: [oidc.enableNonRepudiationChecks] },
+    )
+    .catch((error: unknown) => {
+      // A temporary discovery outage must not poison every subsequent login.
+      oidcConfiguration = undefined;
+      throw error;
+    }));
 }
 
 @Controller('v1/auth')
@@ -323,16 +331,17 @@ export class AuthController {
     if (!saved) throw new UnauthorizedException('OIDC state expired');
     const { nonce, verifier } = JSON.parse(saved) as { nonce: string; verifier: string };
     const configuration = await getOidc();
-    const tokens = await oidc.authorizationCodeGrant(
-      configuration,
-      new URL(req.originalUrl, process.env.PUBLIC_API_URL),
-      {
+    const tokens = await oidc
+      .authorizationCodeGrant(configuration, new URL(req.originalUrl, process.env.PUBLIC_API_URL), {
         pkceCodeVerifier: verifier,
         expectedState: state,
         expectedNonce: nonce,
         idTokenExpected: true,
-      },
-    );
+      })
+      .catch(() => {
+        // Provider errors can contain tokens or claims; expose only a fixed message.
+        throw new UnauthorizedException('Invalid OIDC authorization response');
+      });
     const claims = tokens.claims();
     if (!claims || claims.email_verified !== true || typeof claims.email !== 'string')
       throw new UnauthorizedException('OIDC must return a verified email');

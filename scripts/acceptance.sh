@@ -35,12 +35,22 @@ if [[ "${GITHUB_ACTIONS:-false}" == true ]]; then docker builder prune --force; 
 "${compose[@]}" exec -T flare-api pnpm seed
 "${compose[@]}" exec -T flare-api pnpm seed
 "${compose[@]}" exec -T flare-api node scripts/acceptance/auth.mjs
+check_independent local-oidc "${compose[@]}" exec -T flare-api node scripts/acceptance/oidc.mjs
 "${compose[@]}" exec -T flare-api node scripts/acceptance/scenarios.mjs
+"${compose[@]}" exec -T flare-api node scripts/acceptance/postal-native.mjs prepare
+check_independent postal-native-runtime "${compose[@]}" exec -T -u root -e FLARE_ACCEPTANCE=true postal bundle exec rails runner /acceptance-postal-native.rb
+check_independent postal-native-persistence "${compose[@]}" exec -T flare-api node scripts/acceptance/postal-native.mjs verify
 "${compose[@]}" exec -T flare-api node scripts/acceptance/inbox.mjs
 check_independent native-actions "${compose[@]}" exec -T flare-api node scripts/acceptance/actions.mjs
 # Execute browsers on the host; credentials are read from the private generated env file.
 check_independent live-browser node scripts/acceptance/browser.mjs "$acceptance_dir/.env"
-"${compose[@]}" stop flare-worker
+"${compose[@]}" stop --timeout 40 flare-worker
+worker_container=$("${compose[@]}" ps --all -q flare-worker)
+if [[ "$(docker inspect --format '{{.State.ExitCode}}' "$worker_container")" != 0 ]]; then
+  echo 'Worker did not complete graceful shutdown before the load recovery scenario.' >&2
+  exit 1
+fi
+printf 'Worker drained and exited cleanly before queue-loss recovery.\n'
 "${compose[@]}" exec -T flare-api node scripts/acceptance/load.mjs accept
 "${compose[@]}" exec -T redis redis-cli FLUSHDB
 "${compose[@]}" up -d --no-deps --no-recreate --wait --wait-timeout 120 flare-worker
