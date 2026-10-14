@@ -4,9 +4,9 @@ Updated: 2026-10-14, America/Los_Angeles.
 
 ## Resume point — 2026-10-14
 
-- Resume from current `main` in the public [ChariPramod/flare](https://github.com/ChariPramod/flare) repository. Latest implementation checkpoint: `82ec8c9`, with all five jobs green in [CI 38613630116](https://github.com/ChariPramod/flare/actions/runs/38613630116).
-- Verified: lint/types/OpenAPI/build/packages/gitleaks/Ruff, 144 unit/database tests, 25 deterministic evals, 45 Python tests (four external staging checks intentionally skipped), 11 browser contracts, 12 real-service tests and six live browser flows. Caddy runtime checks passed 43 private-route denials, four upstream routes and client-IP spoof rejection, alongside merged Compose/config validation.
-- Native Inbox delivery/isolation/read state, local MFA enrollment/concurrent replay rejection, delay/digest/throttle/HTTP execution, queue-loss recovery, and the isolated multi-store restore drill all passed. The restore took 44 seconds for the synthetic fixture; this is not a production recovery objective.
+- Resume from current `main` in the public [ChariPramod/flare](https://github.com/ChariPramod/flare) repository. Latest implementation: `1a743b5`, with all five jobs green in [CI 38619875142](https://github.com/ChariPramod/flare/actions/runs/38619875142). The preceding `abaa551` and `6b841e2` checkpoints also passed all five jobs independently.
+- Verified on `1a743b5`: lint/types/OpenAPI/build/packages/gitleaks/Ruff, 158 unit/database tests, 25 deterministic evals, 45 Python tests (four external staging checks intentionally skipped), 13 browser contracts, 12 real-service tests and six live browser flows. Local TLS OIDC, native Postal callbacks with synthetic outcomes, clean worker shutdown, native Redis/worker restart, cancellation and native API-outage visibility passed. Caddy checks passed 43 private-route denials, four upstream routes and client-IP spoof rejection.
+- Native Inbox delivery/isolation/read state, MFA replay protection, delay/digest/throttle/HTTP execution and the isolated multi-store restore passed. Load recovered all 54 logical sends after Flare Redis loss, with 30 expected throttles, no duplicate submissions and 182,730,752 bytes peak API RSS. Restore took 41 seconds for the synthetic fixture; this is not a production recovery objective. Native Redis AOF was preserved during restart; total native queue loss remains unverified.
 - Docker installation on this Mac is still pending. Once Docker is running, execute `bash scripts/integration.sh` and `bash scripts/acceptance.sh` from the repository root; the CI result does not replace those local runs.
 - User selected **self-hosted Postal + Email + Inbox + password/MFA** for the first pilot. No host, DNS zone or domain is provisioned. SES, OIDC, SMS, push and chat remain deferred; they are not first-pilot prerequisites.
 - User explicitly deferred hosting budget, region and domain decisions on 2026-10-14: “We'll do that later.” Do not provision or buy infrastructure. Resume deployment planning when the user supplies those decisions; preserve the selected pilot scope.
@@ -15,25 +15,25 @@ Updated: 2026-10-14, America/Los_Angeles.
 
 ## Phase status
 
-| Phase                                           | Status                                                                        |
-| ----------------------------------------------- | ----------------------------------------------------------------------------- |
-| 0 — Scaffold, CI, Compose                       | CI startup/upgrade/seed passed; Mac Docker run pending                        |
-| 1 — Auth, RBAC, environments, keys              | Unit and real HTTP/browser flows passed; external OIDC pending                |
-| 2 — Novu wrapper                                | Pinned Inbox/email/action checks passed; credentialed channels pending        |
-| 3 — Email pipeline                              | CI SMTP/TLS/DKIM/recovery passed; external providers pending                  |
-| 4 — Dashboard                                   | 11 contract flows and 6 full-stack browser flows passed                       |
-| 5 — Webhooks, logs, metrics                     | Unit and real-service recovery passed; native callbacks pending               |
-| 6 — Audience, broadcasts, templates             | Unit/browser and PostgreSQL/Redis recovery passed                             |
-| 7 — Automations, inbound, translations, layouts | Implemented; pinned-stack content/inbound/publication passed                  |
-| 8 — Hardening, SDK, CLI                         | Packages, load, recovery and isolated restore passed; deployment gates remain |
+| Phase                                           | Status                                                                             |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------- |
+| 0 — Scaffold, CI, Compose                       | CI startup/upgrade/seed passed; Mac Docker run pending                             |
+| 1 — Auth, RBAC, environments, keys              | Unit and real HTTP/browser flows passed; external OIDC pending                     |
+| 2 — Novu wrapper                                | Pinned Inbox/email/action checks passed; credentialed channels pending             |
+| 3 — Email pipeline                              | CI SMTP/TLS/DKIM/recovery passed; external providers pending                       |
+| 4 — Dashboard                                   | 13 contract flows and 6 full-stack browser flows passed                            |
+| 5 — Webhooks, logs, metrics                     | Native Postal callbacks and real-service recovery passed; external routing pending |
+| 6 — Audience, broadcasts, templates             | Unit/browser and PostgreSQL/Redis recovery passed                                  |
+| 7 — Automations, inbound, translations, layouts | Implemented; pinned-stack content/inbound/publication passed                       |
+| 8 — Hardening, SDK, CLI                         | Packages, load, recovery and isolated restore passed; deployment gates remain      |
 
 ## Checkpoint log
 
-- 2026-10-14: Fixed activity visibility during native API outages and queued fan-out cancellation identifiers. The API preserves local evidence, reports engine observation availability without leaking upstream errors, and keeps accepted work ineligible for automatic resubmission. Dashboard shows saved activity and cancellation compensation. Local lint/types/OpenAPI/build/gitleaks passed with 158 unit/database tests, 25 evals and all 13 browser contracts. Added a real API-outage phase to the native restart suite; expanded container verification is pending.
+- 2026-10-14: Fixed activity visibility during native API outages and queued fan-out cancellation identifiers. The API preserves local evidence, reports engine observation availability without leaking upstream errors, and keeps accepted work ineligible for automatic resubmission. Dashboard shows saved activity and cancellation compensation. Local lint/types/OpenAPI/build/gitleaks passed with 158 unit/database tests, 25 evals and all 13 browser contracts. The real API-outage and native restart phases passed with all five jobs in CI `38619875142` on `1a743b5`.
 
-- 2026-10-14: Added a separately scoped native engine restart/cancellation scenario and test-authoring guidance. It uses real Flare cancellation, persisted native notification IDs and Inbox side effects, preserves Redis AOF, and observes a second worker restart for duplicates. Local lint/types/OpenAPI/149 unit tests/25 evals/build/gitleaks and shell syntax pass. Container execution is pending; this does not claim abrupt-crash or total native Redis-loss recovery. The preceding `abaa551` checkpoint has four CI jobs green in `38618186115`, with full-stack acceptance still running.
+- 2026-10-14: Added a separately scoped native engine restart/cancellation scenario and test-authoring guidance. It uses real Flare cancellation, persisted native notification IDs and Inbox side effects, preserves Redis AOF, and observes a second worker restart for duplicates. Local lint/types/OpenAPI/149 unit tests/25 evals/build/gitleaks and shell syntax pass. All five jobs passed in CI `38619037497` on `6b841e2`; this does not claim abrupt-crash or total native Redis-loss recovery.
 
-- 2026-10-14: Hosting-independent hardening: added local HTTPS OIDC discovery/JWKS/state/PKCE/MFA acceptance, actual pinned Postal serializer/signer callbacks with synthetic outcomes, tracked worker polling shutdown, HTTP-log drain tests, and a browser MFA enrollment/recovery/reset flow. Local lint/types/OpenAPI/build/gitleaks passed with 149 unit/database tests, 25 evals, 45 Python tests (four staging skips), and all 12 browser contracts. Fixed failed-discovery caching, explicit ID-token signature verification, invalid-grant error sanitization, polling shutdown races and stale MFA setup/recovery UI state. External accounts, DNS and hosting remain deferred. Expanded Docker runtime claims stay pending until CI passes.
+- 2026-10-14: Hosting-independent hardening: added local HTTPS OIDC discovery/JWKS/state/PKCE/MFA acceptance, actual pinned Postal serializer/signer callbacks with synthetic outcomes, tracked worker polling shutdown, HTTP-log drain tests, and a browser MFA enrollment/recovery/reset flow. Local lint/types/OpenAPI/build/gitleaks passed with 149 unit/database tests, 25 evals, 45 Python tests (four staging skips), and all 12 browser contracts. Fixed failed-discovery caching, explicit ID-token signature verification, invalid-grant error sanitization, polling shutdown races and stale MFA setup/recovery UI state. External accounts, DNS and hosting remain deferred. All five jobs, including these Docker runtime scenarios, passed in CI `38618186115` on `abaa551`.
 
 - 2026-10-14: Integrated the Python portability repair, persistent-store restart policies, bootstrap-key validation and isolated ingress route/header tests in `82ec8c9`. Local checks and all five jobs in CI `38613630116` pass: 144 unit/database tests, 25 evals, 45 Python tests, 12 integration tests, 11 browser contracts, six live flows and 43 Caddy private-route checks. Four external staging Python checks are intentionally skipped. Load recovered all 54 logical sends after queue loss with no duplicate submission, 30 expected throttles and 177,680,384 bytes peak API RSS; the isolated restore passed in 44 seconds. Infrastructure decisions are deferred by the user, and real deployment acceptance remains open.
 
@@ -68,8 +68,8 @@ Updated: 2026-10-14, America/Los_Angeles.
 ## Known issues and verification limits
 
 - This host has no Docker runtime. Full-stack startup, official image pulls and container integration tests cannot be validated here yet.
-- CI on `82ec8c9` passed all 12 PostgreSQL/Redis/MinIO/Mailpit tests, the expanded pinned-stack acceptance job and isolated ingress checks. The equivalent local Docker runs remain pending.
-- Postal/SES identities require provider-side authorization. Native callback interoperability, public DNS and external deliverability remain unverified. Novu → authenticated STARTTLS relay → Mailpit delivery passed.
+- CI on `1a743b5` passed all 12 PostgreSQL/Redis/MinIO/Mailpit tests, the expanded pinned-stack acceptance job and isolated ingress checks. The equivalent local Docker runs remain pending.
+- Postal/SES identities require provider-side authorization. Native Postal callback interoperability passed with synthetic outcomes; public routing, DNS and external deliverability remain unverified. Novu → authenticated STARTTLS relay → Mailpit delivery passed.
 - Password/session, local TOTP/recovery, tenant-aware HTTP/browser flows and isolated restore passed against the stack. External OIDC, credentialed channel delivery, and production restore/provider reconciliation remain open. Advanced action variants outside the tested matrix are listed in `docs/novu-gaps.md`.
 
 ## GitHub delivery
@@ -82,7 +82,7 @@ Updated: 2026-10-14, America/Los_Angeles.
 
 ### Completed acceptance checkpoint — 2026-10-14
 
-Baseline: clean `459029e`, verified by [CI 38530994814](https://github.com/ChariPramod/flare/actions/runs/38530994814), with all three jobs green. Continue implementation and acceptance from this baseline; do not rebuild completed modules.
+Historical baseline: clean `459029e`, verified by [CI 38530994814](https://github.com/ChariPramod/flare/actions/runs/38530994814), with all three jobs green. Current work resumes from the latest checkpoint at the top of this file; do not rebuild completed modules.
 
 1. **Native Inbox:** exercise delivery into the pinned Novu feed and the authenticated dashboard Inbox. Check subscriber isolation, read state and the session proxy; repair contract mismatches exposed by execution.
 2. **Native actions:** exercise delay, digest, throttle and HTTP request against Novu 3.19.0 with bounded timing and isolated destinations. Record actual community capabilities and failure behavior, including unsupported cases, rather than treating accepted workflow definitions as execution evidence.
@@ -91,6 +91,15 @@ Baseline: clean `459029e`, verified by [CI 38530994814](https://github.com/Chari
 5. **Review and verification:** integrate independent changes, run lint/types/unit/build/secret scan and browser contracts, then commit and push a coherent checkpoint. Run the expanded Compose suite in CI, diagnose failures and repeat affected checks until green. Update this file, changelog and acceptance ledger with observed evidence, not predictions.
 
 All five steps above are complete for the controlled CI environment, verified on `7d91b54`. Three subagents implemented and reviewed independent Inbox, action and restore work; the primary agent integrated, tested and pushed it. One runtime mismatch exposed Novu's default 30-second throttle retention buffer; acceptance now verifies both buffered rejection and eventual renewal.
+
+### Next work that does not require hosting
+
+1. **Native job inspection:** normalize observed Novu job states and check timestamps in Activity, distinguish a reachable engine with no matching notification from an unreachable engine, and expose accepted delayed-work cancellation using the parent trigger. Keep local `accepted` distinct from delivery. Missing or old engine evidence must not automatically resend a trigger.
+2. **Abrupt failure and total native queue loss:** inject worker termination during active work and characterize accepted delayed/digest work after loss of Novu Redis data. Define operator reconciliation and visibility before implementing any recovery action; the graceful AOF-preserving restart test does not establish this behavior.
+3. **Real-browser account recovery:** extend the live stack browser suite with MFA enrollment/recovery, expired sessions and role restrictions. Current MFA browser coverage uses a controlled API fixture; cryptographic/replay/session behavior is independently tested over real HTTP.
+4. **Longer workload and upgrade drills:** increase the duration and mix of email/inbound/Inbox traffic, observe memory/backlogs and retry bounds, and test rollback constraints against representative data. Current bounded load and baseline upgrade tests establish a narrower boundary.
+
+All four can use disposable CI containers before a hosting account or domain exists. Keep new work in independently verified checkpoints and retain the external gates below.
 
 ### Larger roadmap — deployment validation and internal pilot
 
@@ -101,7 +110,7 @@ All five steps above are complete for the controlled CI environment, verified on
 5. **Run a limited Pareto Labs pilot:** connect a small set of real application workflows, validate preferences/suppression and publication with actual operators, and measure delivery latency, failures, cost and support needs under expected traffic. Fix observed product gaps before expanding volume.
 6. **Roll out deliberately:** enable the verified channels/workflows, establish on-call and backup ownership, monitor capacity and provider health, and expand after pilot evidence is satisfactory. Registry publication remains outside the current plan.
 
-The next dependencies are infrastructure and provider access, not a new scaffold. Do not label full deployment acceptance complete until the open gates above have evidence.
+The feature modules are implemented; further local hardening is listed above. Deployment requires infrastructure and provider access. Do not label full deployment acceptance complete until the open gates above have evidence.
 
 ## Acceptance execution history
 

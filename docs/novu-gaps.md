@@ -22,14 +22,14 @@ Topics and subscription conditions are stored and expanded in Flare before trigg
 
 [CI run 38538818077](https://github.com/ChariPramod/flare/actions/runs/38538818077) on `7d91b54` also passed native Inbox delivery/subscriber isolation/read-state persistence, the actual dashboard Inbox, and the delay/digest/throttle/HTTP assertions described below. All six live browser flows passed.
 
-| Channel or action                     | Verified boundary                                                     | Remaining runtime check                                |
-| ------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------ |
-| Inbox                                 | Feed delivery, subscriber isolation, read/unread and browser Inbox    | Production deployment/real application usage           |
-| Email                                 | Novu → authenticated TLS relay → Mailpit; retry/failover and recovery | External provider delivery                             |
-| SMS                                   | Twilio/Plivo configuration exposed through Flare                      | Credentialed provider acceptance/delivery              |
-| Push                                  | FCM/APNs configuration exposed through Flare                          | Credentialed device delivery                           |
-| Chat                                  | Slack/Discord configuration exposed through Flare                     | Credentialed destination delivery                      |
-| Delay, digest, throttle, HTTP request | Native jobs, timing/merge/throttle, HTTP halt/continuation passed     | Advanced variants and native Redis-loss recovery below |
+| Channel or action                     | Verified boundary                                                                      | Remaining runtime check                                |
+| ------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Inbox                                 | Feed delivery, subscriber isolation, read/unread and browser Inbox                     | Production deployment/real application usage           |
+| Email                                 | Novu → authenticated TLS relay → Mailpit; retry/failover and recovery                  | External provider delivery                             |
+| SMS                                   | Twilio/Plivo configuration exposed through Flare                                       | Credentialed provider acceptance/delivery              |
+| Push                                  | FCM/APNs configuration exposed through Flare                                           | Credentialed device delivery                           |
+| Chat                                  | Slack/Discord configuration exposed through Flare                                      | Credentialed destination delivery                      |
+| Delay, digest, throttle, HTTP request | Native jobs, timing/merge/throttle, HTTP halt/continuation and graceful restart passed | Advanced variants and native Redis-loss recovery below |
 
 `scripts/acceptance/actions.mjs` supplies the passing runtime assertions for the action row. It creates workflows through Flare and reads the pinned engine's notification/job API. The isolated HTTP listener is reachable only inside the disposable Compose network, with a per-run random route and a 4 KiB request limit. The acceptance override permits precisely `flare-api` alongside the existing relay hostname; production SSRF configuration is unchanged.
 
@@ -41,7 +41,7 @@ Flare emits HTML explicitly for its email editor and precompiled templates/layou
 
 ## Retry ownership and failure semantics
 
-The hosting-independent `engine-restart.mjs`/`.sh` scenario is also implemented, with its first CI runtime execution pending. It stops the native worker after two delayed Inbox jobs have persisted, cancels one through Flare, restarts native Redis without deleting its AOF volume, and requires one surviving notification and no canceled delivery. It also checks original notification IDs, one Flare dispatch and no duplicate after a second worker restart. This is a graceful-restart test; abrupt crashes and complete loss of native Redis data remain separate gaps.
+The hosting-independent `engine-restart.mjs`/`.sh` scenario passed in [CI 38619037497](https://github.com/ChariPramod/flare/actions/runs/38619037497) on `6b841e2`. It stops the native worker after two delayed Inbox jobs have persisted, cancels one through Flare, restarts native Redis without deleting its AOF volume, and requires one surviving notification and no canceled delivery. It also checks original notification IDs, one Flare dispatch and no duplicate after a second worker restart. This is a graceful-restart test; abrupt crashes and complete loss of native Redis data remain separate gaps. The subsequent API-outage phase passed on `1a743b5` in [CI 38619875142](https://github.com/ChariPramod/flare/actions/runs/38619875142): local activity remained available while the native API was stopped, and the delayed survivor resumed once after restoration.
 
 Flare retries definitively rejected workflow submissions and recovers its own queued work. Once Novu accepts a trigger, downstream SMS, push, chat and action execution belongs to Novu; Flare does not provide generic provider failover for those channels. Email accepted by the Flare relay enters the shared durable email pipeline and its configured transport priority.
 

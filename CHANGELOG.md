@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- All five CI jobs passed on `1a743b5` in run `38619875142`: 158 unit/database tests, 25 evals, 45 Python tests, 12 integration tests, 13 browser contracts and six live flows. Local TLS OIDC, native Postal, restart/cancellation, API-outage visibility and shutdown checks passed. Load recovered 54 sends without duplicates; isolated restore passed in 41 seconds. Local Mac Docker and external deployment/provider checks remain pending.
+
 - Preserved tenant-isolated workflow activity during Novu outages, with explicit engine observation availability and unchanged dispatch state. Fixed queued fan-out cancellation to address its parent trigger and display cancellation compensation. Added nine database regression tests, a browser flow, typed API responses and a real native API-outage acceptance phase.
 
 - Added a disposable native-engine restart scenario: preserve Novu Redis AOF, cancel delayed work through Flare while the native worker is stopped, then verify one surviving Inbox delivery and no canceled or duplicate delivery across two worker restarts. Runtime verification is tracked separately in the acceptance ledger.
