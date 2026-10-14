@@ -12,7 +12,7 @@ python3 -m venv .venv
 .venv/bin/ruff format --check tests/python
 ```
 
-The default pytest run executes 38 local client tests and skips all four staging checks. It needs no Docker, running Flare API, account, or credentials. The redirect test uses a temporary loopback HTTP server and verifies that Authorization is never forwarded.
+The default pytest run executes 45 local client tests and skips all four staging checks. It needs no Docker, running Flare API, account, or credentials. The redirect test uses a temporary loopback HTTP server and verifies that Authorization is never forwarded.
 
 ## Public staging checks
 
@@ -36,7 +36,7 @@ FLARE_TEST_BASE_URL=http://127.0.0.1:14000 \
   .venv/bin/python -m pytest --staging --staging-internal -m staging
 ```
 
-Internal mode accepts only `localhost` or a literal loopback IP such as `127.0.0.1` or `::1`. It rejects remote, private-network, and other hostname origins even over HTTPS. The client does not establish an SSH tunnel or expose the API itself. For a local development API, the same flags can target `http://127.0.0.1:4000`.
+Internal mode accepts only `localhost`, native IPv4 addresses in `127.0.0.0/8`, or native IPv6 `::1` (including its expanded spelling). It rejects IPv4-mapped IPv6 and scoped IPv6 addresses consistently across Python versions, along with remote, private-network, and other hostname origins even over HTTPS. The client does not establish an SSH tunnel or expose the API itself. For a local development API, the same flags can target `http://127.0.0.1:4000`.
 
 Here `/health` must return the API identity and `/ready` must confirm dependency readiness with **200**. Domain authentication checks remain the same: three passes and one optional skip without a key, or four passes with a key. A readiness **503** fails this run. `--staging-internal` without `--staging` is rejected.
 

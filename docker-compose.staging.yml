@@ -1,5 +1,18 @@
 # Merge after docker-compose.yml. Existing administration ports remain loopback-only.
 services:
+  # Keep durable dependencies available after host/daemon restart. Init jobs stay one-shot.
+  postgres:
+    restart: unless-stopped
+  redis:
+    restart: unless-stopped
+  minio:
+    restart: unless-stopped
+  postal-mariadb:
+    restart: unless-stopped
+  novu-mongodb:
+    restart: unless-stopped
+  novu-redis:
+    restart: unless-stopped
   ingress:
     image: caddy:2.10.2-alpine
     restart: unless-stopped

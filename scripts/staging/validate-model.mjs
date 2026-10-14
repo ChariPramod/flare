@@ -6,6 +6,16 @@ try {
   const requireCondition = (condition, message) => {
     if (!condition) throw new Error(message);
   };
+  for (const name of ['postgres', 'redis', 'minio', 'postal-mariadb', 'novu-mongodb', 'novu-redis'])
+    requireCondition(
+      model.services[name].restart === 'unless-stopped',
+      'Durable dependency restart policy missing',
+    );
+  for (const name of ['minio-init', 'postal-config', 'postal-init', 'flare-migrate'])
+    requireCondition(
+      !model.services[name].restart || model.services[name].restart === 'no',
+      'Initialization jobs must remain one-shot',
+    );
   requireCondition(
     model.services.ingress.image === 'caddy:2.10.2-alpine',
     'Unexpected ingress image',

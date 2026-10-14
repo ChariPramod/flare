@@ -61,7 +61,12 @@ class FlareClient:
         ):
             raise SmokeError("API base URL must be an origin without credentials or a path")
         try:
-            loopback = ipaddress.ip_address(hostname).is_loopback
+            address = ipaddress.ip_address(hostname)
+            # Keep this policy independent of Python's changing classification
+            # of IPv4-mapped IPv6 addresses. Only native loopback literals qualify.
+            loopback = (
+                address.version == 4 and address in ipaddress.IPv4Network("127.0.0.0/8")
+            ) or address == ipaddress.IPv6Address("::1")
         except ValueError:
             loopback = hostname == "localhost"
         if internal and not loopback:

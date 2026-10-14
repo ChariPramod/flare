@@ -27,6 +27,7 @@ function environment() {
   return {
     ...env,
     NODE_ENV: 'production',
+    SEED_API_KEY: `fl_${'k'.repeat(40)}`,
     FLARE_ENCRYPTION_KEY: Buffer.alloc(32, 17).toString('base64'),
     DATABASE_URL: `postgres://flare:${env.POSTGRES_PASSWORD}@postgres:5432/flare`,
     STAGING_DASHBOARD_HOST: 'flare.staging.pareto.dev',
@@ -98,6 +99,17 @@ describe('staging offline preflight', () => {
         'oidc-setting-required',
         'https-required',
       ]),
+    );
+  });
+  it('rejects seed keys that would prevent owner and tenant bootstrap', () => {
+    for (const key of ['k'.repeat(64), `fl_${'k'.repeat(36)}`]) {
+      expect(validateStagingEnv({ ...environment(), SEED_API_KEY: key })).toContainEqual({
+        code: 'seed-key-format-invalid',
+        field: 'SEED_API_KEY',
+      });
+    }
+    expect(validateStagingEnv({ ...environment(), SEED_API_KEY: `fl_${'k'.repeat(37)}` })).toEqual(
+      [],
     );
   });
   it('checks real certificate trust, private files and matching PostgreSQL/Postal credentials entirely offline', () => {

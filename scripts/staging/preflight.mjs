@@ -62,6 +62,8 @@ export function validateStagingEnv(env) {
   ];
   for (const field of secrets)
     if (placeholder(env[field]) || env[field].length < 32) fail('strong-secret-required', field);
+  if (!env.SEED_API_KEY?.startsWith('fl_') || env.SEED_API_KEY.length < 40)
+    fail('seed-key-format-invalid', 'SEED_API_KEY');
   if (Buffer.from(env.FLARE_ENCRYPTION_KEY ?? '', 'base64').length !== 32)
     fail('key-format-invalid', 'FLARE_ENCRYPTION_KEY');
   if (env.STORE_ENCRYPTION_KEY?.length !== 32) fail('key-format-invalid', 'STORE_ENCRYPTION_KEY');

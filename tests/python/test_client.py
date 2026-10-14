@@ -27,6 +27,9 @@ class StubResponse(io.BytesIO):
         "http://127.0.0.1.evil.test",
         "https://example.com:invalid",
         "https://example.com\n",
+        "http://[::ffff:127.0.0.1]",
+        "http://[::ffff:7f00:1]",
+        "http://[::1%25eth0]",
     ],
 )
 def test_rejects_unsafe_base_urls(base):
@@ -57,6 +60,8 @@ def test_allows_secure_and_loopback_origins(base):
         "https://192.168.1.1",
         "https://127.1",
         "https://[::ffff:127.0.0.1]",
+        "https://[::ffff:7f00:1]",
+        "https://[::1%25eth0]",
     ],
 )
 def test_internal_mode_rejects_non_loopback_origins(base):
@@ -70,6 +75,8 @@ def test_internal_mode_rejects_non_loopback_origins(base):
         "http://127.0.0.1:14000",
         "http://localhost:14000",
         "http://[::1]:14000",
+        "http://[0:0:0:0:0:0:0:1]:14000",
+        "http://127.0.0.2:14000",
     ],
 )
 def test_internal_mode_accepts_explicit_loopback_origins(base):

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed Python smoke-test loopback policy across Python 3.9/3.12, added persistent-store restart policies and bootstrap API-key validation for staging, and added an isolated runtime test for Caddy private routes and client-IP spoof rejection.
 - Prepared the Postal + Inbox/password-MFA staging pilot with pinned Caddy HTTPS ingress, private administration, explicit optional inbound SMTP exposure, internal relay CA trust, and redacted offline configuration checks. Deployment and external-provider verification remain pending infrastructure.
 - Preserved per-client authentication limits through the staging dashboard proxy by forwarding only a validated ingress-owned client address through exact trusted container addresses.
 - Added optional pytest API smoke checks with explicit staging opt-in, Python linting, and 25 deterministic product evals for content, schedules and email input. Added CI gates and a guide to writing tests, lint rules and eval criteria.

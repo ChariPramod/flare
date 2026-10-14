@@ -32,3 +32,4 @@ docker run --rm --network none \
   -v "$staging_fixture/ops/staging/Caddyfile:/etc/caddy/Caddyfile:ro" \
   caddy:2.10.2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 printf 'Staging Compose boundaries and pinned Caddy configuration validated with isolated synthetic configuration.\n'
+bash scripts/staging/check-ingress.sh
