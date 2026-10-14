@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { connectDatabase, withTenant } from '../../packages/db/dist/index.js';
 import { decrypt } from '../../packages/shared/dist/index.js';
+import { recordRestoreFailure } from './restore-diagnostics.mjs';
 const require = createRequire(new URL('../../packages/mail/package.json', import.meta.url));
 const {
   S3Client,
@@ -27,6 +28,7 @@ const s3 = new S3Client({
   },
 });
 const hash = (input) => createHash('sha256').update(input).digest('hex');
+let phase = 'postgres-fingerprints';
 try {
   const tables =
     await sql`select tablename from pg_tables where schemaname='public' order by tablename`;
@@ -36,6 +38,7 @@ try {
       await sql`select to_jsonb(t)::text as value from public.${sql(tablename)} t order by 1`;
     data[tablename] = { count: rows.length, hash: hash(rows.map((r) => r.value).join('\n')) };
   }
+  phase = 'postgres-fixtures';
   for (const required of [
     'flare_migrations',
     'organizations',
@@ -45,6 +48,7 @@ try {
     'inbound_messages',
   ])
     assert.ok(data[required]?.count > 0, `Restore fixture needs nonempty ${required}`);
+  phase = 'postgres-schema';
   const policies =
     await sql`select schemaname,tablename,policyname,permissive,roles,cmd,qual,with_check from pg_policies where schemaname='public' order by tablename,policyname`;
   const constraints =
@@ -53,6 +57,7 @@ try {
     await sql`select grantee,table_name,privilege_type from information_schema.table_privileges where table_schema='public' and grantee in ('flare','flare_tenant') order by grantee,table_name,privilege_type`;
   const rls =
     await sql`select relname,relrowsecurity,relforcerowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' order by relname`;
+  phase = 'tenant-role';
   const [role] =
     await sql`select rolcanlogin,rolsuper,rolbypassrls from pg_roles where rolname='flare_tenant'`;
   assert.deepEqual(role, { rolcanlogin: false, rolsuper: false, rolbypassrls: false });
@@ -61,11 +66,14 @@ try {
     sql,
     { orgId: domain.org_id, environmentId: domain.environment_id },
     async (tx) => {
+      phase = 'tenant-visible';
       assert.ok((await tx`select id from domains`).length > 0);
+      phase = 'tenant-isolation';
       await tx`select set_config('flare.org_id',${randomUUID()},true)`;
       assert.equal((await tx`select id from domains`).length, 0, 'Restored tenant isolation');
     },
   );
+  phase = 'dkim-decryption';
   for (const row of await sql`select * from domains`) {
     createPrivateKey(
       decrypt(
@@ -75,17 +83,21 @@ try {
       ),
     );
   }
+  phase = 'novu-manifest';
   const native = JSON.parse(readFileSync(`/restore/mongo-${mode}.json`, 'utf8'));
   let mappedWorkflows = 0;
   for (const row of await sql`select * from environments where novu_key_cipher is not null`) {
+    phase = 'novu-decryption';
     assert.ok(
       decrypt(row.novu_key_cipher, process.env.FLARE_ENCRYPTION_KEY, `${row.org_id}/${row.id}`)
         .length > 0,
     );
+    phase = 'novu-environment-map';
     const environment = native.environments?.documents.find(
       (e) => e.identifier === row.novu_application_id,
     );
     assert.ok(environment, 'Flare environment must resolve to restored Novu environment');
+    phase = 'novu-workflow-map';
     for (const workflow of await sql`select identifier from workflows where org_id=${row.org_id} and environment_id=${row.id}`) {
       assert.ok(
         native.notificationtemplates?.documents.some(
@@ -98,11 +110,14 @@ try {
       mappedWorkflows++;
     }
   }
+  phase = 'novu-workflow-fixture';
   assert.ok(mappedWorkflows > 0, 'Restore must exercise workflow mappings');
+  phase = 'object-buckets';
   const buckets = (await s3.send(new ListBucketsCommand({}))).Buckets.map((b) => b.Name).sort();
   assert.ok(buckets.includes('flare') && buckets.includes('novu'));
   const objects = [];
   for (const Bucket of buckets) {
+    phase = 'object-upload';
     if (mode === 'capture')
       await s3.send(
         new PutObjectCommand({
@@ -115,10 +130,14 @@ try {
       );
     let ContinuationToken;
     do {
+      phase = 'object-list';
       const page = await s3.send(new ListObjectsV2Command({ Bucket, ContinuationToken }));
       for (const { Key } of page.Contents ?? []) {
+        phase = 'object-download';
         const response = await s3.send(new GetObjectCommand({ Bucket, Key }));
+        phase = 'object-size';
         assert.ok(response.ContentLength <= 30 * 1024 * 1024, 'Acceptance object size bound');
+        phase = 'object-download';
         const body = await response.Body.transformToByteArray();
         objects.push({
           Bucket,
@@ -134,6 +153,7 @@ try {
     } while (ContinuationToken);
   }
   objects.sort((a, b) => `${a.Bucket}/${a.Key}`.localeCompare(`${b.Bucket}/${b.Key}`));
+  phase = 'object-fixture';
   assert.ok(objects.some((o) => o.Bucket === 'flare' && o.Key !== 'acceptance-restore/canary.bin'));
   const manifest = {
     data,
@@ -144,19 +164,34 @@ try {
     role,
     objects,
   };
+  phase = 'manifest-write';
   if (mode === 'capture')
     writeFileSync('/restore/manifest.json', JSON.stringify(manifest), { mode: 0o600 });
   else {
     // Do not print assertion diffs containing object paths, raw database rows, or credentials.
     const expected = JSON.parse(readFileSync('/restore/manifest.json', 'utf8'));
-    assert.ok(
-      JSON.stringify(manifest) === JSON.stringify(expected),
-      'Restored tables, tenant policies, permissions and object hashes must match',
-    );
+    for (const key of [
+      'data',
+      'policies',
+      'constraints',
+      'permissions',
+      'rls',
+      'role',
+      'objects',
+    ]) {
+      phase = `compare-${key}`;
+      assert.ok(
+        JSON.stringify(manifest[key]) === JSON.stringify(expected[key]),
+        'Restored manifest section must match',
+      );
+    }
     console.log(
       `Restore verified: ${tables.length} PostgreSQL tables and ${objects.length} objects, tenant isolation and decryptable DKIM/Novu secrets.`,
     );
   }
+} catch (error) {
+  recordRestoreFailure('/diagnostics/failure.json', mode, phase, error);
+  throw error;
 } finally {
   await sql.end();
   s3.destroy();

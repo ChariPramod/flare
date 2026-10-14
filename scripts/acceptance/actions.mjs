@@ -145,6 +145,17 @@ try {
     action('throttle', { type: 'fixed', amount: 1, unit: 'minutes', threshold: 1 }),
     request('after', 'throttle-after'),
   ]);
+  const nativeThrottleWorkflow = await json(
+    `${process.env.NOVU_API_URL}/v2/workflows/acceptance-action-throttle`,
+    { headers: { Authorization: `ApiKey ${key}` } },
+  );
+  const nativeThrottleStep = nativeThrottleWorkflow.steps.find((step) => step.type === 'throttle');
+  const nativeThrottleControls =
+    nativeThrottleStep?.controlValues ?? nativeThrottleStep?.controls?.values;
+  assert.equal(nativeThrottleControls?.type, 'fixed');
+  assert.equal(nativeThrottleControls?.amount, 1);
+  assert.equal(nativeThrottleControls?.unit, 'minutes');
+  assert.equal(nativeThrottleControls?.threshold, 1);
   const throttled = await Promise.all(
     Array.from({ length: 4 }, (_, index) => trigger('acceptance-action-throttle', String(index))),
   );
@@ -197,9 +208,32 @@ try {
     );
   }, 'explicit HTTP continueOnFailure executes child and retains failed action');
 
-  // Check expiration without shortening the engine's one-minute minimum fixed window.
-  const windowEnds = received('throttle-after')[0].at + 61000;
-  await until(() => Date.now() >= windowEnds, 'native throttle window expiration', 65000);
+  // Novu 3.19.0 RedisThrottleService adds its default 30s TTL buffer to the
+  // configured 60s window. It checks set cardinality until that TTL expires,
+  // so a fresh trigger at 61s is still skipped. Preserve the native setting:
+  // assert renewal after 90s plus 1s tolerance rather than changing engine behavior.
+  // https://github.com/novuhq/novu/blob/v3.19.0/libs/application-generic/src/services/throttle/redis-throttle.service.ts
+  const firstThrottledDelivery = received('throttle-after')[0].at;
+  await until(
+    () => Date.now() >= firstThrottledDelivery + 61000,
+    'native throttle configured window elapsed',
+    65000,
+  );
+  const buffered = await trigger('acceptance-action-throttle', 'within-retention-buffer');
+  await until(
+    async () => {
+      const notification = await detail(buffered);
+      return (
+        job(notification, 'throttle')?.status === 'skipped' &&
+        job(notification, 'http_request')?.status === 'skipped'
+      );
+    },
+    'throttle retains reservation during its default buffer',
+    15000,
+  );
+  assert.equal(received('throttle-after').length, 1);
+  const windowEnds = firstThrottledDelivery + 91000;
+  await until(() => Date.now() >= windowEnds, 'native throttle reservation TTL expiration', 95000);
   const renewed = await trigger('acceptance-action-throttle', 'after-window');
   await completed(renewed, 'throttle');
   await until(() => received('throttle-after').length === 2, 'throttle permits next window');

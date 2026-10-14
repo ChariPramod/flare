@@ -14,12 +14,18 @@ api_image=$(docker inspect -f '{{.Image}}' "$source_api")
 restore_project="${source_project}-restore"
 [[ -z "$(docker ps -aq --filter "label=com.docker.compose.project=$restore_project")" ]] || { echo 'Restore project already exists; refusing reuse.' >&2; exit 1; }
 restore_dir=$(mktemp -d "$acceptance_dir/restore-XXXXXX")
+mkdir "$restore_dir/diagnostics"
+# Keep the marker host-owned even when the container verifier writes it as root.
+printf '{}\n' >"$restore_dir/diagnostics/failure.json"
 restore_compose=(docker compose --project-name "$restore_project" --project-directory "$acceptance_dir" --env-file "$acceptance_dir/.env" -f "$acceptance_dir/scripts/acceptance/restore-compose.yml")
 stage=initialization
 cleanup_restore() {
   result=$?
   trap - EXIT
   "${restore_compose[@]}" down -v --remove-orphans >>"$restore_dir/operations.log" 2>&1 || result=1
+  if [[ "$result" -ne 0 ]]; then
+    node "$acceptance_dir/scripts/acceptance/restore-diagnostics.mjs" --print "$restore_dir/diagnostics/failure.json" || true
+  fi
   # Database snapshots, generated credentials and MIME stay private and are never uploaded/logged.
   rm -rf -- "$restore_dir"
   if [[ "$result" -ne 0 ]]; then echo "Isolated restore drill failed during $stage; private store dumps were removed." >&2; fi
@@ -48,7 +54,7 @@ postal_dump() {
 stage=source-manifest
 docker cp "$acceptance_dir/scripts/acceptance/restore-mongo.js" "$("${source_compose[@]}" ps -q novu-mongodb):/tmp/restore-mongo.js" >>"$restore_dir/operations.log" 2>&1
 mongo_export "${source_compose[@]}" >"$restore_dir/mongo-capture.json" 2>>"$restore_dir/operations.log"
-docker run --rm --network "${source_project}_default" --env-file "$acceptance_dir/.env" -v "$restore_dir:/restore" --user root --entrypoint node "$api_image" scripts/acceptance/restore-manifest.mjs capture >>"$restore_dir/operations.log" 2>&1
+docker run --rm --network "${source_project}_default" --env-file "$acceptance_dir/.env" -v "$restore_dir:/restore" -v "$restore_dir/diagnostics:/diagnostics" --user root --entrypoint node "$api_image" scripts/acceptance/restore-manifest.mjs capture >>"$restore_dir/operations.log" 2>&1
 
 stage=postgres-backup
 "${source_compose[@]}" exec -T postgres pg_dumpall -U flare --roles-only >"$restore_dir/roles.sql" 2>>"$restore_dir/operations.log"
@@ -92,13 +98,15 @@ stage=mongo-restore
 stage=postal-restore
 "${restore_compose[@]}" exec -T postal-mariadb sh -ec 'export MYSQL_PWD="$MARIADB_ROOT_PASSWORD"; exec mariadb -uroot' <"$restore_dir/postal.sql" >>"$restore_dir/operations.log" 2>&1
 
-stage=store-verification
+stage=mongo-verification
 docker cp "$acceptance_dir/scripts/acceptance/restore-mongo.js" "$("${restore_compose[@]}" ps -q novu-mongodb):/tmp/restore-mongo.js" >>"$restore_dir/operations.log" 2>&1
 mongo_export "${restore_compose[@]}" >"$restore_dir/mongo-verify.json" 2>>"$restore_dir/operations.log"
 cmp -s "$restore_dir/mongo-capture.json" "$restore_dir/mongo-verify.json"
+stage=postal-verification
 postal_dump "${restore_compose[@]}" >"$restore_dir/postal-verify.sql" 2>>"$restore_dir/operations.log"
 cmp -s "$restore_dir/postal.sql" "$restore_dir/postal-verify.sql"
 for service in redis novu-redis; do
+  stage=redis-rdb-verification
   for db in 0 2; do
     [[ "$("${restore_compose[@]}" exec -T "$service" redis-cli -n "$db" GET acceptance:restore)" == "$source_project/$service/$db" ]] || exit 1
   done
@@ -123,5 +131,5 @@ for service in redis novu-redis; do
   done
 done
 stage=application-data-verification
-docker run --rm --network "${restore_project}_default" --env-file "$acceptance_dir/.env" -v "$restore_dir:/restore:ro" --user root --entrypoint node "$api_image" scripts/acceptance/restore-manifest.mjs verify >>"$restore_dir/operations.log" 2>&1
+docker run --rm --network "${restore_project}_default" --env-file "$acceptance_dir/.env" -v "$restore_dir:/restore:ro" -v "$restore_dir/diagnostics:/diagnostics" --user root --entrypoint node "$api_image" scripts/acceptance/restore-manifest.mjs verify >>"$restore_dir/operations.log" 2>&1
 printf 'Isolated restore drill passed in %ss: PostgreSQL/RLS/secrets, MongoDB/workflow mappings, Postal, both Redis stores, MinIO bytes/metadata.\n' "$((SECONDS-started))"

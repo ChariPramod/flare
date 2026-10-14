@@ -6,6 +6,12 @@ command -v docker >/dev/null || { echo 'Docker is required for full-stack accept
 docker info >/dev/null
 acceptance_dir=$(node scripts/acceptance/prepare.mjs)
 project="flare-acceptance-$(date +%s)-$$"
+failed_checks=()
+check_independent() {
+  local label=$1
+  shift
+  if ! "$@"; then failed_checks+=("$label"); fi
+}
 compose=(docker compose --project-name "$project" --project-directory "$acceptance_dir" --env-file "$acceptance_dir/.env" -f "$acceptance_dir/docker-compose.yml" -f "$acceptance_dir/docker-compose.acceptance.yml")
 cleanup() {
   result=$?
@@ -31,13 +37,17 @@ if [[ "${GITHUB_ACTIONS:-false}" == true ]]; then docker builder prune --force; 
 "${compose[@]}" exec -T flare-api node scripts/acceptance/auth.mjs
 "${compose[@]}" exec -T flare-api node scripts/acceptance/scenarios.mjs
 "${compose[@]}" exec -T flare-api node scripts/acceptance/inbox.mjs
-"${compose[@]}" exec -T flare-api node scripts/acceptance/actions.mjs
+check_independent native-actions "${compose[@]}" exec -T flare-api node scripts/acceptance/actions.mjs
 # Execute browsers on the host; credentials are read from the private generated env file.
-node scripts/acceptance/browser.mjs "$acceptance_dir/.env"
+check_independent live-browser node scripts/acceptance/browser.mjs "$acceptance_dir/.env"
 "${compose[@]}" stop flare-worker
 "${compose[@]}" exec -T flare-api node scripts/acceptance/load.mjs accept
 "${compose[@]}" exec -T redis redis-cli FLUSHDB
 "${compose[@]}" up -d --no-deps --no-recreate --wait --wait-timeout 120 flare-worker
 "${compose[@]}" exec -T flare-api node scripts/acceptance/load.mjs verify
-bash scripts/acceptance/restore.sh "$acceptance_dir" "$project"
+check_independent restore bash scripts/acceptance/restore.sh "$acceptance_dir" "$project"
+if [[ ${#failed_checks[@]} -gt 0 ]]; then
+  printf 'Acceptance checks failed: %s\n' "${failed_checks[*]}" >&2
+  exit 1
+fi
 printf 'Pinned full-stack acceptance passed (simulated local DNS/providers; external checks remain separate).\n'
