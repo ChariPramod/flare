@@ -108,10 +108,13 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
       const { token: _token, ...safe } = data;
       return NextResponse.json(safe);
     }
-    if (joined === 'auth/logout' || response.status === 401)
+    // Session validation also rejects revoked membership/context with 403.
+    // Other resource-level 403 responses must not sign out a valid viewer.
+    const sessionRejected = joined === 'session' && response.status === 403;
+    if (joined === 'auth/logout' || response.status === 401 || sessionRejected)
       for (const name of Object.values(names)) jar.delete(name);
     return new NextResponse(text || null, {
-      status: response.status,
+      status: sessionRejected ? 401 : response.status,
       headers: {
         'Content-Type': response.headers.get('Content-Type') ?? 'application/json',
         'Cache-Control': 'no-store',

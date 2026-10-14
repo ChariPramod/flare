@@ -110,6 +110,9 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
     [theme, setTheme] = useState('light'),
     [collapsed, setCollapsed] = useState(false),
     [error, setError] = useState<unknown>();
+  const sessionRejected = Boolean(
+    session.error && 'status' in session.error && session.error.status === 401,
+  );
   useEffect(() => {
     const theme = localStorage.getItem('flare-theme') ?? 'light';
     setTheme(theme);
@@ -124,10 +127,12 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
     return () => document.removeEventListener('keydown', listener);
   }, []);
   useEffect(() => {
-    if (session.error && 'status' in session.error && session.error.status === 401)
+    if (sessionRejected) {
+      client.clear();
       router.replace('/login');
-  }, [session.error, router]);
-  if (session.isPending) return <Loading />;
+    }
+  }, [sessionRejected, client, router]);
+  if (session.isPending || sessionRejected) return <Loading />;
   if (!session.data)
     return (
       <main className="page">

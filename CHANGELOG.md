@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added real-browser MFA/account-recovery and viewer restrictions acceptance. Revoked sessions now return users to login and clear cached protected data without treating normal role denials as logout; test diagnostics suppress private authentication values.
+
 - Added bounded native job progress and timestamps to Activity, with explicit partial/missing observations and parent-trigger cancellation for observed pending delay/digest work. Preserved local dispatch status, read-only access and compatibility; expanded typed API and regression/browser acceptance coverage.
 
 - All five CI jobs passed on `1a743b5` in run `38619875142`: 158 unit/database tests, 25 evals, 45 Python tests, 12 integration tests, 13 browser contracts and six live flows. Local TLS OIDC, native Postal, restart/cancellation, API-outage visibility and shutdown checks passed. Load recovered 54 sends without duplicates; isolated restore passed in 41 seconds. Local Mac Docker and external deployment/provider checks remain pending.

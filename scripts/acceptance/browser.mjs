@@ -24,6 +24,8 @@ execFileSync('pnpm', ['test:e2e:live'], {
     E2E_FROM: 'sender@acceptance.test',
     E2E_TO: values.SEED_SUBSCRIBER_EMAIL,
     E2E_ACCEPTANCE: 'true',
+    // Automatic DOM error snapshots can contain enrollment keys and recovery codes.
+    PLAYWRIGHT_NO_COPY_PROMPT: '1',
     E2E_INBOUND_ID: fixtures.inbound,
     E2E_REDRIVE_ID: fixtures.redrive,
   },
