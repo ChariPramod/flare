@@ -1,6 +1,14 @@
 # Flare progress
 
-Updated: 2026-10-13, America/Los_Angeles.
+Updated: 2026-10-14, America/Los_Angeles.
+
+## Resume point — 2026-10-14
+
+- This note follows a clean `main`/`origin/main` at `7124578` (`docs(acceptance): record green full-stack verification and deployment gates`); resume from the current `main` tip.
+- The repository is public: [ChariPramod/flare](https://github.com/ChariPramod/flare). The latest implementation commit covered by full-stack CI is `63c655d`; the current `7124578` commit only records its verified evidence and deployment handoff.
+- [CI run `38442762577`](https://github.com/ChariPramod/flare/actions/runs/38442762577) passed lint, typecheck, OpenAPI drift checks, 136 unit/database tests, package installation, gitleaks, 11 browser contract flows, 12 PostgreSQL/Redis/MinIO/Mailpit integration tests, and the pinned full-stack acceptance suite.
+- Docker installation on this Mac is still pending. Once Docker is running, execute `bash scripts/integration.sh` and `bash scripts/acceptance.sh` from the repository root; the CI result does not replace those local runs.
+- Keep deployment acceptance open until controlled public-DNS/DKIM and provider checks, Postal routing/native callback checks, SES/SNS/SMS checks, external OIDC/MFA, the remaining Novu channel/action matrix, and an isolated backup/restore drill have evidence.
 
 ## Phase status
 
