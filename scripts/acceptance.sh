@@ -42,6 +42,7 @@ check_independent postal-native-runtime "${compose[@]}" exec -T -u root -e FLARE
 check_independent postal-native-persistence "${compose[@]}" exec -T flare-api node scripts/acceptance/postal-native.mjs verify
 "${compose[@]}" exec -T flare-api node scripts/acceptance/inbox.mjs
 check_independent native-actions "${compose[@]}" exec -T flare-api node scripts/acceptance/actions.mjs
+check_independent native-engine-restart bash scripts/acceptance/engine-restart.sh "$acceptance_dir" "$project"
 # Execute browsers on the host; credentials are read from the private generated env file.
 check_independent live-browser node scripts/acceptance/browser.mjs "$acceptance_dir/.env"
 "${compose[@]}" stop --timeout 40 flare-worker

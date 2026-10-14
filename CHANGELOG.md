@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a disposable native-engine restart scenario: preserve Novu Redis AOF, cancel delayed work through Flare while the native worker is stopped, then verify one surviving Inbox delivery and no canceled or duplicate delivery across two worker restarts. Runtime verification is tracked separately in the acceptance ledger.
+
 - Added hosting-independent OIDC and native Postal callback acceptance scenarios, drained worker polling before shutdown, and tested HTTP-log flush/aborted request behavior. OIDC explicitly verifies issuer JWKS signatures, retries discovery after transient failure and sanitizes invalid-grant errors. MFA UI clears obsolete setup/recovery data and sensitive form values after account-security changes; a browser regression covers enrollment, recovery login and re-enrollment.
 - CI `38613630116` is fully green on `82ec8c9`: 144 unit/database tests, 25 evals, 45 Python tests, 12 integration tests, 11 browser contracts, six live flows and isolated Caddy routing/header checks. Hosting, budget, region and domain decisions are deferred by the user; no real deployment is claimed.
 - Fixed Python smoke-test loopback policy across Python 3.9/3.12, added persistent-store restart policies and bootstrap API-key validation for staging, and added an isolated runtime test for Caddy private routes and client-IP spoof rejection.
