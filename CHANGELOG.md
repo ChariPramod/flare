@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Expanded pinned-stack acceptance with native Inbox delivery/read-state and subscriber isolation, native action timing/failure checks, real HTTP MFA replay protection, and an isolated multi-store restore drill. Runtime results are tracked in `PROGRESS.md`.
+- Corrected workflow failure guidance to account for the HTTP action's explicit `continueOnFailure` setting and legacy channel halt controls.
 - Initial Flare workspace, service scaffold, CI and self-hosting configuration.
 - Password/OIDC sessions, TOTP with recovery codes, RBAC, invitations, tenant policies, encrypted credentials, API keys and identity seed.
 - Novu workflow control plane, durable trigger queue, subscriber/preferences APIs, Flare-managed topic fan-out, integration metadata and workflow publication.

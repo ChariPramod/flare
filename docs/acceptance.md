@@ -14,6 +14,8 @@ The load stage stops the worker, submits at the default 10 requests/second plus 
 
 Do not call acceptance complete unless every required row has evidence for the candidate commit.
 
+The next candidate extends the script with native Inbox delivery/read-state and a sixth live browser flow, delay/digest/throttle/HTTP execution, local MFA enrollment and concurrent replay rejection, and a final isolated multi-store restore drill. These new checks require a green CI run before their gates can be closed. The restore runs after load recovery, stops the disposable producers, and compares restored PostgreSQL security/data, native Novu mappings, Postal databases, Redis canaries and object bytes/metadata without starting sending workers. See [deployment restore instructions](deployment.md).
+
 [CI run 38442762577](https://github.com/ChariPramod/flare/actions/runs/38442762577) passed all three jobs on `63c655d` on 2026-10-13. It verified 136 unit/database tests, 11 browser contract flows, 12 real-service tests, package installation, and the complete pinned-stack script with all five live browser flows. The load stage accepted 54 distinct messages, observed 29 expected throttles and sampled peak API RSS of 184,688,640 bytes. All accepted messages recovered after Redis loss with exactly one provider attempt and no duplicate logical submission. Worker RSS remained below the configured 768 MiB ceiling.
 
 | Check                                   | Evidence required                                         | Current boundary                                                           |

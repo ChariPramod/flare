@@ -28,7 +28,10 @@ if [[ "${GITHUB_ACTIONS:-false}" == true ]]; then docker builder prune --force; 
 "${compose[@]}" exec -T flare-api node scripts/acceptance/bootstrap.mjs
 "${compose[@]}" exec -T flare-api pnpm seed
 "${compose[@]}" exec -T flare-api pnpm seed
+"${compose[@]}" exec -T flare-api node scripts/acceptance/auth.mjs
 "${compose[@]}" exec -T flare-api node scripts/acceptance/scenarios.mjs
+"${compose[@]}" exec -T flare-api node scripts/acceptance/inbox.mjs
+"${compose[@]}" exec -T flare-api node scripts/acceptance/actions.mjs
 # Execute browsers on the host; credentials are read from the private generated env file.
 node scripts/acceptance/browser.mjs "$acceptance_dir/.env"
 "${compose[@]}" stop flare-worker
@@ -36,4 +39,5 @@ node scripts/acceptance/browser.mjs "$acceptance_dir/.env"
 "${compose[@]}" exec -T redis redis-cli FLUSHDB
 "${compose[@]}" up -d --no-deps --no-recreate --wait --wait-timeout 120 flare-worker
 "${compose[@]}" exec -T flare-api node scripts/acceptance/load.mjs verify
+bash scripts/acceptance/restore.sh "$acceptance_dir" "$project"
 printf 'Pinned full-stack acceptance passed (simulated local DNS/providers; external checks remain separate).\n'

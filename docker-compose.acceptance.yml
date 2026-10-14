@@ -17,6 +17,12 @@ services:
     user: root
   flare-migrate:
     volumes: ['./acceptance:/acceptance']
+  novu-api:
+    environment:
+      NOVU_SAFE_OUTBOUND_ALLOW: flare-smtp-relay,flare-api
+  novu-worker:
+    environment:
+      NOVU_SAFE_OUTBOUND_ALLOW: flare-smtp-relay,flare-api
   flare-worker:
     depends_on:
       acceptance-dns: { condition: service_started }

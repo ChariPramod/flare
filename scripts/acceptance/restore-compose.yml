@@ -1,0 +1,80 @@
+# Only scripts/acceptance/restore.sh may create this disposable, egress-isolated project.
+services:
+  postgres:
+    image: postgres:17.7-alpine
+    environment:
+      POSTGRES_USER: flare_restore_root
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: flare
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD, pg_isready, -U, flare_restore_root, -d, flare]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+  novu-mongodb:
+    image: mongo:8.0.17
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: ${NOVU_MONGO_PASSWORD:?}
+    volumes: [mongo-data:/data/db]
+    healthcheck:
+      test:
+        [
+          CMD-SHELL,
+          'mongosh --quiet --username root --password "$${MONGO_INITDB_ROOT_PASSWORD}" --eval "db.adminCommand(\"ping\").ok"',
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+  postal-mariadb:
+    image: mariadb:11.4.9
+    environment:
+      MARIADB_ROOT_PASSWORD: ${POSTAL_DB_PASSWORD:?}
+    volumes: [postal-data:/var/lib/mysql]
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  minio:
+    image: flare-minio:RELEASE.2025-10-15T17-29-55Z
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-flare}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?}
+    volumes: [minio-data:/data]
+    healthcheck:
+      test: [CMD, curl, -f, http://localhost:9000/minio/health/live]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+  redis:
+    image: redis:7.4.7-alpine
+    # Start with the restored RDB; restore.sh enables/persists AOF after loading it.
+    command: [redis-server, /data/redis.conf]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  novu-redis:
+    image: redis:7.4.7-alpine
+    command: [redis-server, /data/redis.conf]
+    volumes: [novu-redis-data:/data]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+networks:
+  default:
+    internal: true
+volumes:
+  postgres-data:
+  mongo-data:
+  postal-data:
+  minio-data:
+  redis-data:
+  novu-redis-data:

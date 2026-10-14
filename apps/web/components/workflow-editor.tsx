@@ -324,9 +324,13 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
                   <div className="step-hint">
                     <strong>On failure</strong>
                     <p>
-                      {['delay', 'digest', 'throttle', 'http_request'].includes(step.type)
-                        ? 'A failed action cancels every remaining step.'
-                        : 'A failed channel step is recorded and the workflow continues.'}
+                      {step.type === 'http_request'
+                        ? step.controlValues.continueOnFailure === true
+                          ? 'A failed HTTP request is recorded and the workflow continues.'
+                          : 'A failed HTTP request cancels remaining steps. Set continueOnFailure to true in controls to continue.'
+                        : ['delay', 'digest', 'throttle'].includes(step.type)
+                          ? 'A failed action cancels every remaining step.'
+                          : 'A failed channel step is recorded and the workflow continues.'}
                     </p>
                   </div>
                   <Field label="Channel enabled">

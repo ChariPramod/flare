@@ -67,11 +67,25 @@ Updated: 2026-10-14, America/Los_Angeles.
 
 ## Next
 
-Run `scripts/integration.sh` and `scripts/acceptance.sh` on this Mac once Docker is available. Complete controlled provider/public-DNS/OIDC checks, the remaining native channel/action matrix and the restore drill before declaring deployment acceptance complete. The implementation, installable developer packages, operational documentation and CI acceptance runner are pushed to `main`; registry publication is outside scope.
+### Active execution plan — 2026-10-14
+
+Baseline: clean `459029e`, verified by [CI 38530994814](https://github.com/ChariPramod/flare/actions/runs/38530994814), with all three jobs green. Continue implementation and acceptance from this baseline; do not rebuild completed modules.
+
+1. **Native Inbox:** exercise delivery into the pinned Novu feed and the authenticated dashboard Inbox. Check subscriber isolation, read state and the session proxy; repair contract mismatches exposed by execution.
+2. **Native actions:** exercise delay, digest, throttle and HTTP request against Novu 3.19.0 with bounded timing and isolated destinations. Record actual community capabilities and failure behavior, including unsupported cases, rather than treating accepted workflow definitions as execution evidence.
+3. **Restore drill:** back up the disposable stack's PostgreSQL, MongoDB, Postal/MariaDB and object storage, restore into isolated targets, and assert durable records/content and security metadata survive. Keep restored systems disconnected from provider delivery.
+4. **Authentication acceptance:** add real HTTP checks for local TOTP enrollment, replay rejection, session revocation and single-use recovery. External OIDC interoperability stays a separate credentialed gate.
+5. **Review and verification:** integrate independent changes, run lint/types/unit/build/secret scan and browser contracts, then commit and push a coherent checkpoint. Run the expanded Compose suite in CI, diagnose failures and repeat affected checks until green. Update this file, changelog and acceptance ledger with observed evidence, not predictions.
+
+The Inbox, action and restore tasks run in separate subagents with nonoverlapping ownership. The primary agent owns shared harness wiring, authentication checks, review, checkpoint commits and CI follow-through.
+
+Run `scripts/integration.sh` and `scripts/acceptance.sh` on this Mac once Docker is available (installation remains user-managed and pending). Complete controlled provider/public-DNS/OIDC checks and the remaining credentialed channel matrix before declaring deployment acceptance complete. Registry publication is outside scope.
 
 ## Acceptance execution history
 
 Entries below record each checkpoint at its execution time; the latest result is authoritative.
+
+- 2026-10-14: Expanded acceptance with native Inbox delivery/isolation/read state and a sixth live browser flow, delay/digest/throttle/HTTP execution and failure controls, real HTTP MFA enrollment/concurrent replay protection, and an isolated PostgreSQL/MongoDB/Postal/Redis/MinIO restore drill. Independent review corrected Redis RDB-to-AOF restoration before execution. Local lint, typecheck, OpenAPI checks, 136 tests, build, gitleaks and all 11 browser contract flows pass. Expanded container scenarios await CI; local Docker and external-provider gates remain open.
 
 - Tooling checkpoint `4fd2267` is pushed. Its standard CI job passed all checks and 11 browser flows. Official pinned MinIO sources built successfully; integration startup then failed because Compose waited on the completed initializer. The runner now initializes the bucket separately.
 - Added a disposable full-stack CI/local runner with isolated secrets/data, baseline upgrade and repeatable seed assertions, local authoritative DNS, pinned Novu and SMTP flows, signed inbound simulation, content publication, browser recovery and bounded load/queue-loss checks. Added operational deployment and restore documentation.
