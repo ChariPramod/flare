@@ -112,6 +112,33 @@ test('sign in, create and edit a workflow, trigger it, and inspect activity', as
   expect(redundantSwitches).toBe(0);
   expect(errors).toEqual([]);
 });
+test('activity retains saved state during engine outages and cancels a fanout parent', async ({
+  page,
+  request,
+}) => {
+  const fixture = await (await request.post('http://127.0.0.1:4311/fixtures/activity')).json();
+  await login(page);
+  await page.goto(`/activity/${fixture.accepted}`);
+  await expect(page.getByRole('heading', { name: 'Run timeline' })).toBeVisible();
+  await expect(page.getByText('accepted', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('Engine details are temporarily unavailable.', { exact: false }),
+  ).toBeVisible();
+  await expect(page.locator('pre')).toContainText('Saved payload survives engine outage');
+  await expect(page.getByRole('button', { name: /^Cancel (run|trigger)$/ })).toHaveCount(0);
+  await page.goto(`/activity/${fixture.queued}`);
+  await expect(page.getByText('Cancels all runs from this trigger.')).toBeVisible();
+  const canceled = page.waitForRequest(
+    (req) =>
+      req.method() === 'DELETE' && new URL(req.url()).pathname.startsWith('/api/events/trigger/'),
+  );
+  await page.getByRole('button', { name: 'Cancel trigger', exact: true }).click();
+  expect(new URL((await canceled).url()).pathname).toBe(`/api/events/trigger/${fixture.parent}`);
+  await expect(page.getByText('canceled', { exact: true })).toBeVisible();
+  await expect(page.getByText('Engine cancellation: pending', { exact: true })).toBeVisible();
+  await expect(page.locator('pre')).toContainText('Queued child payload');
+  await expect(page.getByRole('button', { name: 'Cancel trigger', exact: true })).toHaveCount(0);
+});
 test('domain DNS records, verification contract, email submission and raw source', async ({
   page,
 }) => {

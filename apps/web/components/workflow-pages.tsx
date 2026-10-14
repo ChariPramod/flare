@@ -421,12 +421,18 @@ type Run = {
   id: string;
   workflow_id: string;
   transaction_id: string;
+  parent_transaction_id?: string;
   status: string;
   attempts: number;
   error: string | null;
   created_at: string;
   updated_at: string;
   engine?: unknown;
+  engine_observation?: {
+    status: 'available' | 'unavailable' | 'not_requested';
+    checked_at: string | null;
+  };
+  cancellation_status?: 'none' | 'pending' | 'confirmed' | 'failed';
   payload?: unknown;
 };
 export function ActivityPage({ id }: { id?: string }) {
@@ -486,10 +492,9 @@ export function ActivityPage({ id }: { id?: string }) {
 }
 function RunDetail({ id }: { id: string }) {
   const query = useApi<Run>(`activity/${id}`, 3000);
-  const cancel = useAction(
-    `events/trigger/${encodeURIComponent(query.data?.transaction_id ?? '')}`,
-    'DELETE',
-  );
+  const transaction = query.data?.parent_transaction_id ?? query.data?.transaction_id ?? '';
+  const wholeTrigger = Boolean(query.data && transaction !== query.data.transaction_id);
+  const cancel = useAction(`events/trigger/${encodeURIComponent(transaction)}`, 'DELETE');
   return (
     <>
       <Link className="back-link" href="/activity">
@@ -513,16 +518,33 @@ function RunDetail({ id }: { id: string }) {
                   {date(query.data.updated_at)} · {query.data.attempts} attempts
                 </small>
               </div>
+              {query.data.status === 'canceled' && query.data.cancellation_status && (
+                <div>
+                  <i />
+                  <strong>Engine cancellation: {query.data.cancellation_status}</strong>
+                  {query.data.cancellation_status === 'pending' && (
+                    <small>Flare is waiting for the engine to confirm cancellation.</small>
+                  )}
+                </div>
+              )}
             </div>
             <ErrorBox error={query.data.error} />
             {query.data.status === 'queued' && (
-              <Button onClick={() => cancel.mutate({})} disabled={cancel.isPending}>
-                Cancel run
-              </Button>
+              <>
+                <Button onClick={() => cancel.mutate({})} disabled={cancel.isPending}>
+                  {wholeTrigger ? 'Cancel trigger' : 'Cancel run'}
+                </Button>
+                {wholeTrigger && <p className="muted small">Cancels all runs from this trigger.</p>}
+              </>
             )}
           </section>
           <section className="panel">
             <h2>Payload & engine trace</h2>
+            {query.data.engine_observation?.status === 'unavailable' && (
+              <p role="status">
+                Engine details are temporarily unavailable. This timeline shows Flare’s saved state.
+              </p>
+            )}
             <pre>{pretty({ payload: query.data.payload, engine: query.data.engine })}</pre>
           </section>
         </div>

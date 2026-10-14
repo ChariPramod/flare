@@ -41,6 +41,7 @@ import { outbox } from '@flare/mail';
 import { audit } from './identity.js';
 import { idempotent } from './idempotency.js';
 import { novu, novuKey } from './novu.js';
+import { workflowActivity } from './workflow-activity.js';
 
 const ajv = new Ajv({ allErrors: true, strict: false });
 const safeId = (value: string) => parse(z.string().min(1).max(128), value);
@@ -294,28 +295,15 @@ export class WorkflowController {
       query,
     );
     return withTenant(sql, req.principal, async (tx) => ({
-      data: await tx`select id,workflow_id,transaction_id,status,attempts,error,cancellation_status,created_at,updated_at from workflow_runs where (${input.workflow ?? null}::text is null or workflow_id=${input.workflow ?? null}) and (${input.status ?? null}::text is null or status=${input.status ?? null}) and (${input.transactionId ?? null}::text is null or parent_transaction_id=${input.transactionId ?? null}) order by created_at desc limit ${input.limit} offset ${(input.page - 1) * input.limit}`,
+      data: await tx`select id,workflow_id,transaction_id,parent_transaction_id,status,attempts,error,cancellation_status,created_at,updated_at from workflow_runs where (${input.workflow ?? null}::text is null or workflow_id=${input.workflow ?? null}) and (${input.status ?? null}::text is null or status=${input.status ?? null}) and (${input.transactionId ?? null}::text is null or parent_transaction_id=${input.transactionId ?? null}) order by created_at desc limit ${input.limit} offset ${(input.page - 1) * input.limit}`,
       page: input.page,
       limit: input.limit,
     }));
   }
   @Get('activity/:id') async activityDetail(@Req() req: AuthRequest, @Param('id') id: string) {
-    const [run] = await withTenant(
-      sql,
-      req.principal,
-      (tx) => tx`select * from workflow_runs where id=${parse(z.string().uuid(), id)}`,
+    return workflowActivity(sql, req.principal, parse(z.string().uuid(), id), (transactionId) =>
+      novu(req.principal, `/v1/notifications?transactionId=${encodeURIComponent(transactionId)}`),
     );
-    if (!run) throw new NotFoundException();
-    return {
-      ...run,
-      engine:
-        run.status === 'accepted'
-          ? await novu(
-              req.principal,
-              `/v1/notifications?transactionId=${encodeURIComponent(String(run.transaction_id))}`,
-            )
-          : null,
-    };
   }
   @Get('subscribers') async subscribers(@Req() req: AuthRequest, @Query() query: unknown) {
     const { page, limit, q } = parse(listQuery, query);

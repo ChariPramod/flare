@@ -8,7 +8,10 @@ import { json, pause, session, sql, until } from './common.mjs';
 // side effect, so no listener needs to survive separate Compose exec processes.
 const fixturePath = '/acceptance/engine-restart.json';
 const phase = process.argv[2];
-assert.ok(['prepare', 'cancel', 'verify', 'observe'].includes(phase), 'Known restart phase');
+assert.ok(
+  ['prepare', 'cancel', 'unavailable', 'verify', 'observe'].includes(phase),
+  'Known restart phase',
+);
 let latestJobs = [];
 try {
   const { api, org, env } = await session();
@@ -151,6 +154,25 @@ try {
       assert.equal(job?.status, 'canceled', `Native ${type} canceled before restart`);
     }
     console.log('Native restart fixture: real Flare DELETE compensation canceled delay and child.');
+  }
+  if (phase === 'unavailable') {
+    for (const run of fixture.runs) {
+      const state = await api(`/activity/${run.id}`);
+      assert.equal(state.id, run.id, 'Local evidence survives native API outage');
+      assert.equal(state.transaction_id, run.transactionId);
+      assert.equal(state.attempts, 1, 'An observation must never resubmit work');
+      assert.equal(state.engine, null);
+      assert.equal(state.status, run.label === 'cancel' ? 'canceled' : 'accepted');
+      assert.equal(
+        state.engine_observation.status,
+        run.label === 'cancel' ? 'not_requested' : 'unavailable',
+      );
+      if (run.label === 'cancel') assert.equal(state.cancellation_status, 'confirmed');
+      else assert.ok(Number.isFinite(Date.parse(state.engine_observation.checked_at)));
+    }
+    console.log(
+      'Native API outage: Flare activity preserves local identity and cancellation evidence.',
+    );
   }
   if (phase === 'verify' || phase === 'observe') {
     const access = await api(`/subscribers/${fixture.subscriber}/inbox-token`);

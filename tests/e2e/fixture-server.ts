@@ -76,6 +76,41 @@ const server = createServer(async (req, res) => {
     let text = '';
     for await (const chunk of req) text += String(chunk);
     const body = text ? JSON.parse(text) : {};
+    if (path === '/fixtures/activity' && method === 'POST') {
+      const parent = randomUUID();
+      const queued = randomUUID();
+      const accepted = randomUUID();
+      const timestamps = {
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      runs.set(queued, {
+        id: queued,
+        workflow_id: 'fanout-fixture',
+        transaction_id: `${parent}-1`,
+        parent_transaction_id: parent,
+        status: 'queued',
+        attempts: 1,
+        cancellation_status: 'none',
+        engine: null,
+        engine_observation: { status: 'not_requested', checked_at: null },
+        payload: { message: 'Queued child payload' },
+        ...timestamps,
+      });
+      runs.set(accepted, {
+        id: accepted,
+        workflow_id: 'engine-outage-fixture',
+        transaction_id: randomUUID(),
+        status: 'accepted',
+        attempts: 1,
+        cancellation_status: 'none',
+        engine: null,
+        engine_observation: { status: 'unavailable', checked_at: timestamps.updated_at },
+        payload: { message: 'Saved payload survives engine outage' },
+        ...timestamps,
+      });
+      return reply({ queued, accepted, parent });
+    }
     if (path === 'auth/config') return reply({ oidc_url: null });
     if (path === 'auth/login') {
       if (body.email !== user.email || body.password !== 'browser-test-password')
@@ -324,6 +359,19 @@ const server = createServer(async (req, res) => {
         engine: { fixture: true },
       });
       return reply({ ids: [id], transactionId, status: 'queued', recipients: 1 }, 201);
+    }
+    if (path.startsWith('events/trigger/') && method === 'DELETE') {
+      const parent = decodeURIComponent(path.slice('events/trigger/'.length));
+      const matching = [...runs.values()].filter(
+        (run) => (run.parent_transaction_id ?? run.transaction_id) === parent,
+      );
+      if (!matching.length) return reply({ message: 'Unknown parent trigger' }, 404);
+      for (const run of matching) {
+        run.status = 'canceled';
+        run.cancellation_status = 'pending';
+        run.updated_at = new Date().toISOString();
+      }
+      return reply({ transactionId: parent, canceled: matching.length });
     }
     if (path === 'activity')
       return reply({

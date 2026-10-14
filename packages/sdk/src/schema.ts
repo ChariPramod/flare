@@ -20961,6 +20961,7 @@ export interface operations {
                             created_at: string;
                             workflow_id: string;
                             transaction_id: string;
+                            parent_transaction_id: string;
                             status: string;
                             attempts: number;
                             error: string | null;
@@ -21105,6 +21106,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        id: string;
+                        org_id?: string;
+                        environment_id?: string;
+                        created_at: string;
+                        workflow_id: string;
+                        transaction_id: string;
+                        parent_transaction_id: string;
+                        status: string;
+                        attempts: number;
+                        error: string | null;
+                        cancellation_status: string;
+                        updated_at: string;
+                        payload: {
+                            [key: string]: unknown;
+                        };
+                        engine: unknown;
+                        engine_observation: {
+                            /** @enum {string} */
+                            status: "available" | "unavailable" | "not_requested";
+                            /** Format: date-time */
+                            checked_at: string | null;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    } & {
                         [key: string]: unknown;
                     };
                 };

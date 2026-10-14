@@ -8,7 +8,7 @@ case "$acceptance_dir" in /*/flare-acceptance-*) ;; *) echo 'Disposable acceptan
 [[ "$source_project" =~ ^flare-acceptance-[0-9]+-[0-9]+$ ]] || { echo 'Disposable acceptance project required.' >&2; exit 1; }
 node -e 'const fs=require("node:fs");if(!/^FLARE_ACCEPTANCE=true$/m.test(fs.readFileSync(process.argv[1],"utf8")))process.exit(1)' "$acceptance_dir/.env"
 compose=(docker compose --project-name "$source_project" --project-directory "$acceptance_dir" --env-file "$acceptance_dir/.env" -f "$acceptance_dir/docker-compose.yml" -f "$acceptance_dir/docker-compose.acceptance.yml")
-for service in flare-api novu-worker novu-redis; do
+for service in flare-api novu-api novu-worker novu-ws novu-redis; do
   container=$("${compose[@]}" ps -q "$service")
   [[ -n "$container" && "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "$container")" == "$source_project" ]] || exit 1
 done
@@ -19,7 +19,7 @@ cleanup() {
   result=$?
   trap - EXIT
   if [[ "$restore_needed" == true ]]; then
-    "${compose[@]}" up -d --no-deps --no-recreate --wait --wait-timeout 120 novu-redis novu-worker || result=1
+    "${compose[@]}" up -d --no-deps --no-recreate --wait --wait-timeout 120 novu-redis novu-api novu-worker novu-ws || result=1
   fi
   "${compose[@]}" exec -T novu-redis redis-cli -n 2 DEL "$canary" >/dev/null || result=1
   if [[ "$result" -ne 0 ]]; then echo "Native restart acceptance failed during $stage." >&2; fi
@@ -34,6 +34,9 @@ restore_needed=true
 "${compose[@]}" stop --timeout 30 novu-worker
 stage=cancel
 "${compose[@]}" exec -T flare-api node scripts/acceptance/engine-restart.mjs cancel
+stage=engine-api-outage
+"${compose[@]}" stop --timeout 30 novu-api
+"${compose[@]}" exec -T flare-api node scripts/acceptance/engine-restart.mjs unavailable
 stage=restart-native-redis
 [[ "$("${compose[@]}" exec -T novu-redis redis-cli --raw CONFIG GET appendonly | tail -n 1 | tr -d '\r')" == yes ]] || { echo 'Native Redis must use AOF persistence.' >&2; exit 1; }
 "${compose[@]}" exec -T novu-redis redis-cli -n 2 SET "$canary" "$source_project" >/dev/null

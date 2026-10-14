@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserved tenant-isolated workflow activity during Novu outages, with explicit engine observation availability and unchanged dispatch state. Fixed queued fan-out cancellation to address its parent trigger and display cancellation compensation. Added nine database regression tests, a browser flow, typed API responses and a real native API-outage acceptance phase.
+
 - Added a disposable native-engine restart scenario: preserve Novu Redis AOF, cancel delayed work through Flare while the native worker is stopped, then verify one surviving Inbox delivery and no canceled or duplicate delivery across two worker restarts. Runtime verification is tracked separately in the acceptance ledger.
 
 - Added hosting-independent OIDC and native Postal callback acceptance scenarios, drained worker polling before shutdown, and tested HTTP-log flush/aborted request behavior. OIDC explicitly verifies issuer JWKS signatures, retries discovery after transient failure and sanitizes invalid-grant errors. MFA UI clears obsolete setup/recovery data and sensitive form values after account-security changes; a browser regression covers enrollment, recovery login and re-enrollment.
