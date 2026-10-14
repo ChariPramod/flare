@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added disposable native worker SIGKILL and complete native queue-loss acceptance. The latter observes pending delay/digest work beyond its deadlines, rejects unsafe redrive and verifies explicit cancellation; it does not claim automatic delivery recovery after destroyed queues.
+
 - Added real-browser MFA/account-recovery and viewer restrictions acceptance. Revoked sessions now return users to login and clear cached protected data without treating normal role denials as logout; test diagnostics suppress private authentication values.
 
 - Added bounded native job progress and timestamps to Activity, with explicit partial/missing observations and parent-trigger cancellation for observed pending delay/digest work. Preserved local dispatch status, read-only access and compatibility; expanded typed API and regression/browser acceptance coverage.

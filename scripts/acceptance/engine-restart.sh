@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Restart only the disposable pinned native engine; preserve its Redis AOF volume.
+# Kill only the disposable native worker; preserve its Redis AOF volume.
 set -euo pipefail
 umask 077
 acceptance_dir=${1:?Acceptance directory required}
@@ -15,9 +15,16 @@ done
 canary="acceptance:engine-restart:$source_project"
 stage=prepare
 restore_needed=false
+worker_container=$("${compose[@]}" ps -q novu-worker)
+worker_restart_policy=$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' "$worker_container")
+[[ "$worker_restart_policy" == unless-stopped ]] || { echo 'Expected native worker restart policy.' >&2; exit 1; }
+policy_changed=false
 cleanup() {
   result=$?
   trap - EXIT
+  if [[ "$policy_changed" == true ]]; then
+    docker update --restart "$worker_restart_policy" "$worker_container" >/dev/null || result=1
+  fi
   if [[ "$restore_needed" == true ]]; then
     "${compose[@]}" up -d --no-deps --no-recreate --wait --wait-timeout 120 novu-redis novu-api novu-worker novu-ws || result=1
   fi
@@ -29,9 +36,15 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 "${compose[@]}" exec -T flare-api node scripts/acceptance/engine-restart.mjs prepare
-stage=stop-worker
+stage=kill-worker
 restore_needed=true
-"${compose[@]}" stop --timeout 30 novu-worker
+# Prevent Docker's automatic restart from racing the cancellation assertion.
+docker update --restart no "$worker_container" >/dev/null
+policy_changed=true
+"${compose[@]}" kill --signal SIGKILL novu-worker
+[[ "$(docker wait "$worker_container" | tr -d '\r')" == 137 ]] || { echo 'Native worker must exit from SIGKILL.' >&2; exit 1; }
+[[ "$(docker inspect -f '{{.State.Running}}' "$worker_container")" == false ]] || exit 1
+printf 'Native worker exited 137 after SIGKILL; accepted jobs remain durable.\n'
 stage=cancel
 "${compose[@]}" exec -T flare-api node scripts/acceptance/engine-restart.mjs cancel
 stage=engine-api-outage
@@ -45,6 +58,8 @@ stage=restart-native-redis
 "${compose[@]}" up -d --no-deps --no-recreate --wait --wait-timeout 90 novu-redis
 [[ "$("${compose[@]}" exec -T novu-redis redis-cli -n 2 --raw GET "$canary" | tr -d '\r')" == "$source_project" ]] || { echo 'Native Redis AOF canary was lost.' >&2; exit 1; }
 stage=resume-worker
+docker update --restart "$worker_restart_policy" "$worker_container" >/dev/null
+policy_changed=false
 "${compose[@]}" up -d --no-deps --no-recreate --wait --wait-timeout 120 novu-api novu-worker novu-ws
 restore_needed=false
 stage=verify
