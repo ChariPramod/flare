@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
+import { clientAddressHeaders } from '../../../lib/client-address';
 const api = () => process.env.FLARE_API_URL ?? 'http://localhost:4000';
 const names = { token: 'flare_session', org: 'flare_org', env: 'flare_environment' };
 type SessionResponse = {
@@ -28,7 +29,10 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
       );
   }
   const jar = await cookies();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...clientAddressHeaders(req.headers, process.env.FLARE_FORWARD_CLIENT_IP === 'true'),
+  };
   const token = jar.get(names.token)?.value;
   if (token) headers.Authorization = `Bearer ${token}`;
   const org = jar.get(names.org)?.value,

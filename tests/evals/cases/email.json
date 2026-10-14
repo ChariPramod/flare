@@ -1,0 +1,84 @@
+[
+  {
+    "id": "email.envelope-deduplication",
+    "criterion": "The same address across To/CC/Bcc is one envelope recipient, preserving the first category.",
+    "input": {
+      "from": "sender@example.test",
+      "to": ["Ada <ADA@example.net>", "second@example.net"],
+      "cc": ["ada@example.net"],
+      "bcc": ["hidden@example.net"],
+      "subject": "Hello",
+      "text": "Body"
+    },
+    "expected": [
+      { "address": "ada@example.net", "kind": "to" },
+      { "address": "second@example.net", "kind": "to" },
+      { "address": "hidden@example.net", "kind": "bcc" }
+    ]
+  },
+  {
+    "id": "email.single-recipient",
+    "criterion": "A single recipient string is accepted and normalized for the envelope.",
+    "input": {
+      "from": "sender@example.test",
+      "to": "User@Example.net",
+      "subject": "Hello",
+      "html": "<p>Body</p>"
+    },
+    "expected": [{ "address": "user@example.net", "kind": "to" }]
+  },
+  {
+    "id": "email.header-injection",
+    "criterion": "Subject control characters cannot inject additional headers.",
+    "input": {
+      "from": "sender@example.test",
+      "to": "user@example.net",
+      "subject": "Hello\r\nBcc: injected@example.net",
+      "text": "Body"
+    },
+    "error": "Header contains a control character"
+  },
+  {
+    "id": "email.protected-bcc-header",
+    "criterion": "A custom Bcc header cannot bypass envelope handling.",
+    "input": {
+      "from": "sender@example.test",
+      "to": "user@example.net",
+      "subject": "Hello",
+      "text": "Body",
+      "headers": { "Bcc": "injected@example.net" }
+    },
+    "error": "Protected or invalid header"
+  },
+  {
+    "id": "email.missing-content",
+    "criterion": "An email without HTML, text or a template is rejected.",
+    "input": { "from": "sender@example.test", "to": "user@example.net", "subject": "Hello" },
+    "error": "Supply html, text or a template"
+  },
+  {
+    "id": "email.attachment-one-source",
+    "criterion": "An attachment cannot ambiguously specify both inline data and a remote URL.",
+    "input": {
+      "from": "sender@example.test",
+      "to": "user@example.net",
+      "subject": "Hello",
+      "text": "Body",
+      "attachments": [
+        { "filename": "a.txt", "content": "SGk=", "path": "https://example.net/a.txt" }
+      ]
+    },
+    "error": "Supply content or path"
+  },
+  {
+    "id": "email.template-content-conflict",
+    "criterion": "Template submission cannot silently override caller-provided body text.",
+    "input": {
+      "from": "sender@example.test",
+      "to": "user@example.net",
+      "text": "Body",
+      "template": { "id": "00000000-0000-4000-8000-000000000001" }
+    },
+    "error": "Do not combine a template with HTML/text"
+  }
+]

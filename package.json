@@ -12,6 +12,7 @@
     "lint": "eslint . --max-warnings 0",
     "typecheck": "turbo run typecheck",
     "test": "vitest run",
+    "test:evals": "vitest run --config vitest.evals.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
     "format": "prettier --write .",

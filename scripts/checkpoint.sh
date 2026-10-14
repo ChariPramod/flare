@@ -7,6 +7,7 @@ pnpm lint
 pnpm typecheck
 pnpm openapi:check
 pnpm test
+pnpm test:evals
 pnpm build
 gitleaks dir . --redact --config .gitleaks.toml
 printf '\nCheckpoint checks passed. Suggested scope: %s\n' "${1:-platform}"

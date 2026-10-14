@@ -1,0 +1,48 @@
+{
+ email {$STAGING_ACME_EMAIL}
+ admin off
+}
+
+(private_paths) {
+ @private path /internal /internal/* /v1/internal /v1/internal/* /api/internal /api/internal/* /metrics /ready /health /health-check
+ respond @private 404
+ header X-Content-Type-Options nosniff
+ header Referrer-Policy strict-origin-when-cross-origin
+}
+
+{$STAGING_DASHBOARD_HOST} {
+ route {
+  import private_paths
+  reverse_proxy flare-web:3000 {
+   header_up X-Flare-Client-IP {remote_host}
+  }
+ }
+}
+
+{$STAGING_API_HOST}, {$STAGING_TRACKING_HOST} {
+ # route preserves denial-before-proxy order instead of Caddy's directive sorting.
+ route {
+  import private_paths
+  # Only Flare's public API, tracking and preference routes are exposed.
+  @public path /v1/* /t/*
+  handle @public {
+   reverse_proxy flare-api:4000
+  }
+  handle {
+   respond 404
+  }
+ }
+}
+
+{$STAGING_WS_HOST} {
+ route {
+  import private_paths
+  @socket path /socket.io /socket.io/*
+  handle @socket {
+   reverse_proxy novu-ws:3002
+  }
+  handle {
+   respond 404
+  }
+ }
+}

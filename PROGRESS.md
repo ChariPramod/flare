@@ -4,11 +4,13 @@ Updated: 2026-10-14, America/Los_Angeles.
 
 ## Resume point — 2026-10-14
 
-- Resume from current `main`; the latest implementation checkpoint is `7d91b54`, pushed to the public [ChariPramod/flare](https://github.com/ChariPramod/flare) repository.
+- Resume from current `main` in the public [ChariPramod/flare](https://github.com/ChariPramod/flare) repository. The last verified full-stack baseline is `7d91b54`; the current checkpoint prepares controlled staging and developer test hooks.
 - [CI run `38538818077`](https://github.com/ChariPramod/flare/actions/runs/38538818077) passed all three jobs: lint/types/OpenAPI/build/packages/gitleaks, 137 unit/database tests, 11 browser contract flows, 12 real-service integration tests, and six live browser flows against the pinned stack.
 - Native Inbox delivery/isolation/read state, local MFA enrollment/concurrent replay rejection, delay/digest/throttle/HTTP execution, queue-loss recovery, and the isolated multi-store restore drill all passed. The restore took 44 seconds for the synthetic fixture; this is not a production recovery objective.
 - Docker installation on this Mac is still pending. Once Docker is running, execute `bash scripts/integration.sh` and `bash scripts/acceptance.sh` from the repository root; the CI result does not replace those local runs.
-- Keep deployment acceptance open until the local container run, controlled public-DNS/DKIM/provider checks, Postal routing/native callbacks, SES/SNS/SMS, external OIDC, credentialed push/chat, and production backup custody/provider reconciliation have evidence.
+- User selected **self-hosted Postal + Email + Inbox + password/MFA** for the first pilot. No host, DNS zone or domain is provisioned. SES, OIDC, SMS, push and chat remain deferred; they are not first-pilot prerequisites.
+- Current work adds HTTPS staging ingress and offline configuration preflight, fixes dashboard client-IP forwarding through the trusted ingress, and adds optional Python smoke checks and deterministic product evals. See `docs/staging.md` for infrastructure/access and `docs/testing.md` for test locations and commands. No real deployment or provider credentials are available yet.
+- Keep first-pilot acceptance open until local containers, public HTTPS/DNS/DKIM, Postal authorization/routing/native callbacks, browser Inbox/MFA and off-host backup custody/restoration/provider reconciliation have evidence. Broader channel acceptance remains separate.
 
 ## Phase status
 
@@ -25,6 +27,8 @@ Updated: 2026-10-14, America/Los_Angeles.
 | 8 — Hardening, SDK, CLI                         | Packages, load, recovery and isolated restore passed; deployment gates remain |
 
 ## Checkpoint log
+
+- 2026-10-14: Prepared a provider-neutral staging overlay for the selected Postal/Inbox/password-MFA pilot, explicit receiving-port opt-in, relay CA trust, and redacted offline preflight. Added exact ingress client-IP forwarding, 25 fixture-driven product evals, and an optional Python smoke harness with separate public and loopback-only readiness modes. Local checkpoint passes with 143 unit/database tests, all 25 evals, 38 Python tests (four staging tests intentionally skipped), clean Ruff checks and 11 browser contract flows. New Docker/ingress CI checks and repeated full-stack verification are pending the push; no staging resources exist yet.
 
 - 2026-10-12: Created strict TypeScript monorepo, NestJS/Next.js/service scaffold, committed SQL migration runner, local secret setup, isolated Compose services, CI and checkpoint scripts. Node 22.23.3 / pnpm 10.32.1 installed locally. Lint, strict typecheck, 4 tests, production build and gitleaks passed.
 
@@ -82,8 +86,8 @@ All five steps above are complete for the controlled CI environment, verified on
 ### Larger roadmap — deployment validation and internal pilot
 
 1. **Reproduce locally:** install/start Docker, then run `bash scripts/integration.sh` and `E2E_BROWSER_CHANNEL=chrome bash scripts/acceptance.sh`. Preserve the same pinned versions and disposable data boundary. Exit: both scripts pass on this Mac. Docker installation remains user-managed and pending.
-2. **Provision controlled staging:** choose the staging host and owned sending/receiving domain; configure HTTPS, protected secrets, separate Development/Production credentials, storage and backups following `docs/deployment.md`. Exit: private administration, public application access and dependency readiness work on the real host.
-3. **Verify real integrations:** use controlled recipients to verify public DNS/DKIM, Postal routing and native signatures, SES/SNS callbacks, SMS and any intended push/chat providers, plus the actual OIDC issuer. Record provider IDs and authenticated delivered/bounced events separately from acceptance. Exit: each enabled channel has reproducible evidence; unsupported/unverified channels stay visibly pending.
+2. **Provision controlled staging:** choose the host/region and owned sending/receiving domain following `docs/staging.md`. Confirm outbound TCP 25 and PTR control before buying a Postal host. Configure HTTPS, protected secrets, separate Development/Production credentials, storage and backups. Exit: private administration, public application access and dependency readiness work on the real host.
+3. **Verify the selected pilot:** use controlled recipients to verify public DNS/DKIM, Postal sending/receiving/native signatures, Inbox websocket delivery and password/MFA on the chosen host. Record provider IDs and authenticated delivered/bounced events separately from acceptance. Exit: enabled pilot capabilities have reproducible evidence; SES/SNS, SMS, push/chat and external OIDC stay deferred until selected.
 4. **Prove operations on staging:** exercise alerts and dead-letter recovery, restore an encrypted off-host backup with independently recovered secrets, reconcile uncertain provider outcomes, and test upgrades/rollback. Exit: documented recovery ownership and measured recovery/data-loss targets on the intended infrastructure. The 44-second CI fixture does not certify those targets.
 5. **Run a limited Pareto Labs pilot:** connect a small set of real application workflows, validate preferences/suppression and publication with actual operators, and measure delivery latency, failures, cost and support needs under expected traffic. Fix observed product gaps before expanding volume.
 6. **Roll out deliberately:** enable the verified channels/workflows, establish on-call and backup ownership, monitor capacity and provider health, and expand after pilot evidence is satisfactory. Registry publication remains outside the current plan.

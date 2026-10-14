@@ -1,0 +1,5 @@
+# Explicit opt-in only after Postal receiving DNS, routing and firewall approval.
+# Merge after the base and staging files. This opens native Postal SMTP, not Flare submission.
+services:
+  postal-smtp:
+    ports: ['25:25']

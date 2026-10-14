@@ -1,0 +1,3 @@
+# Optional test tooling; Python >=3.9. Runtime HTTP client uses only the standard library.
+pytest==8.4.2
+ruff==0.14.0

@@ -1,0 +1,13 @@
+[tool.pytest.ini_options]
+testpaths = ["tests/python"]
+pythonpath = ["tests/python"]
+addopts = "-ra"
+markers = ["staging: opt-in read-only checks against a running Flare API"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 96
+include = ["tests/python/**/*.py", "pyproject.toml"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

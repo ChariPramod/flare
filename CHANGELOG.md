@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Prepared the Postal + Inbox/password-MFA staging pilot with pinned Caddy HTTPS ingress, private administration, explicit optional inbound SMTP exposure, internal relay CA trust, and redacted offline configuration checks. Deployment and external-provider verification remain pending infrastructure.
+- Preserved per-client authentication limits through the staging dashboard proxy by forwarding only a validated ingress-owned client address through exact trusted container addresses.
+- Added optional pytest API smoke checks with explicit staging opt-in, Python linting, and 25 deterministic product evals for content, schedules and email input. Added CI gates and a guide to writing tests, lint rules and eval criteria.
 - Expanded pinned-stack acceptance with native Inbox delivery/read-state and subscriber isolation, native action timing/failure checks, real HTTP MFA replay protection, and an isolated multi-store restore drill. Runtime results are tracked in `PROGRESS.md`.
 - Corrected workflow failure guidance to account for the HTTP action's explicit `continueOnFailure` setting and legacy channel halt controls.
 - Pinned native throttle acceptance now checks its 30-second retention buffer and eventual renewal; independent acceptance groups report combined failures. Restore diagnostics expose only allowlisted phases/error categories, with a regression against secret-bearing markers.

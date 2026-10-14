@@ -4,3 +4,7 @@ node_modules
 dist
 .next
 coverage
+.venv
+__pycache__
+.pytest_cache
+.ruff_cache

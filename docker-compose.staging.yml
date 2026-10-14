@@ -1,0 +1,63 @@
+# Merge after docker-compose.yml. Existing administration ports remain loopback-only.
+services:
+  ingress:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    ports: ['80:80', '443:443', '443:443/udp']
+    environment:
+      STAGING_DASHBOARD_HOST: ${STAGING_DASHBOARD_HOST:?Set staging dashboard hostname}
+      STAGING_API_HOST: ${STAGING_API_HOST:?Set staging API hostname}
+      STAGING_WS_HOST: ${STAGING_WS_HOST:?Set staging websocket hostname}
+      STAGING_TRACKING_HOST: ${STAGING_TRACKING_HOST:?Set sender-domain tracking hostname}
+      STAGING_ACME_EMAIL: ${STAGING_ACME_EMAIL:?Set ACME contact}
+    volumes:
+      - ./ops/staging/Caddyfile:/etc/caddy/Caddyfile:ro
+      - staging-caddy-data:/data
+      - staging-caddy-config:/config
+    networks:
+      default:
+        ipv4_address: ${STAGING_PROXY_IP:-172.30.250.10}
+    depends_on:
+      flare-web: { condition: service_healthy }
+      flare-api: { condition: service_healthy }
+      novu-ws: { condition: service_healthy }
+    security_opt: ['no-new-privileges:true']
+  flare-api:
+    environment:
+      NODE_ENV: production
+      TRUST_PROXY: '${STAGING_PROXY_IP:-172.30.250.10},172.30.250.11'
+  flare-web:
+    environment:
+      NODE_ENV: production
+      FLARE_FORWARD_CLIENT_IP: 'true'
+    networks:
+      default:
+        ipv4_address: 172.30.250.11
+  flare-worker:
+    environment:
+      NODE_ENV: production
+  flare-smtp-relay:
+    environment:
+      NODE_ENV: production
+  novu-api:
+    environment:
+      NODE_EXTRA_CA_CERTS: /opt/flare/relay-ca.pem
+    volumes: ['./ops/certs/relay-ca.pem:/opt/flare/relay-ca.pem:ro']
+  novu-worker:
+    environment:
+      NODE_EXTRA_CA_CERTS: /opt/flare/relay-ca.pem
+    volumes: ['./ops/certs/relay-ca.pem:/opt/flare/relay-ca.pem:ro']
+  novu-ws:
+    environment:
+      NODE_EXTRA_CA_CERTS: /opt/flare/relay-ca.pem
+    volumes: ['./ops/certs/relay-ca.pem:/opt/flare/relay-ca.pem:ro']
+  mailpit:
+    profiles: [development]
+networks:
+  default:
+    ipam:
+      # Keep dynamic containers away from the explicitly trusted proxy addresses.
+      config: [{ subnet: '${STAGING_SUBNET:-172.30.250.0/24}', ip_range: 172.30.250.128/25 }]
+volumes:
+  staging-caddy-data:
+  staging-caddy-config:

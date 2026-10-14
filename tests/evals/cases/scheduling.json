@@ -1,0 +1,64 @@
+[
+  {
+    "id": "schedule.immediate",
+    "criterion": "Omitting a schedule means the supplied reference instant.",
+    "now": "2026-10-14T12:00:00.000Z",
+    "expected": "2026-10-14T12:00:00.000Z"
+  },
+  {
+    "id": "schedule.relative-utc",
+    "criterion": "Relative scheduling uses a fixed reference clock.",
+    "now": "2026-10-14T12:00:00.000Z",
+    "input": "in 2 hours",
+    "expected": "2026-10-14T14:00:00.000Z"
+  },
+  {
+    "id": "schedule.tomorrow-utc",
+    "criterion": "Natural language is interpreted in UTC, independent of the machine timezone.",
+    "now": "2026-10-14T12:00:00.000Z",
+    "input": "tomorrow at 9am",
+    "expected": "2026-10-15T09:00:00.000Z"
+  },
+  {
+    "id": "schedule.explicit-offset",
+    "criterion": "An ISO offset is converted to the correct UTC instant.",
+    "now": "2026-10-14T12:00:00.000Z",
+    "input": "2026-10-15T09:00:00+05:30",
+    "expected": "2026-10-15T03:30:00.000Z"
+  },
+  {
+    "id": "schedule.boundary-30-days",
+    "criterion": "Exactly 30 days ahead is accepted.",
+    "now": "2026-10-14T12:00:00.000Z",
+    "input": "2026-11-13T12:00:00.000Z",
+    "expected": "2026-11-13T12:00:00.000Z"
+  },
+  {
+    "id": "schedule.beyond-30-days",
+    "criterion": "A schedule one millisecond beyond the limit is rejected.",
+    "now": "2026-10-14T12:00:00.000Z",
+    "input": "2026-11-13T12:00:00.001Z",
+    "error": "Schedule must be in the next 30 days"
+  },
+  {
+    "id": "schedule.timezone-required",
+    "criterion": "ISO timestamps without a timezone cannot silently use local machine time.",
+    "now": "2026-10-14T12:00:00.000Z",
+    "input": "2026-10-15T09:00:00",
+    "error": "ISO timestamps need a timezone"
+  },
+  {
+    "id": "schedule.past-rejected",
+    "criterion": "A timestamp before the reference instant is rejected.",
+    "now": "2026-10-14T12:00:00.000Z",
+    "input": "2026-10-14T11:59:59Z",
+    "error": "Schedule must be in the next 30 days"
+  },
+  {
+    "id": "schedule.unparseable",
+    "criterion": "Unrecognized schedule text is rejected.",
+    "now": "2026-10-14T12:00:00.000Z",
+    "input": "not a date",
+    "error": "Schedule must be in the next 30 days"
+  }
+]

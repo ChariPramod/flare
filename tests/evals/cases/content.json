@@ -1,0 +1,122 @@
+[
+  {
+    "id": "content.locale-fallback",
+    "criterion": "A missing French subject falls back per key while the translated body uses French.",
+    "controls": { "subject": "{{t.subject}}", "body": "<p>{{t.greeting}}</p>" },
+    "base": { "subject": "Welcome", "greeting": "Hello" },
+    "locale": { "greeting": "Bonjour" },
+    "expected": {
+      "controls": {
+        "subject": "{{payload.__flare_i18n.text_subject}}",
+        "body": "<p>{{payload.__flare_i18n.html_greeting}}</p>",
+        "editorType": "html"
+      },
+      "resolved": { "text_subject": "Welcome", "html_greeting": "Bonjour" }
+    }
+  },
+  {
+    "id": "content.html-escaping",
+    "criterion": "Translation text is escaped in HTML but remains readable in a plain subject.",
+    "controls": { "subject": "{{t.greeting}}", "body": "<p>{{t.greeting}}</p>" },
+    "base": { "greeting": "Hello" },
+    "locale": { "greeting": "<Ada> & \"friends\"" },
+    "expected": {
+      "controls": {
+        "subject": "{{payload.__flare_i18n.text_greeting}}",
+        "body": "<p>{{payload.__flare_i18n.html_greeting}}</p>",
+        "editorType": "html"
+      },
+      "resolved": {
+        "text_greeting": "<Ada> & \"friends\"",
+        "html_greeting": "&lt;Ada&gt; &amp; &quot;friends&quot;"
+      }
+    }
+  },
+  {
+    "id": "content.empty-translation",
+    "criterion": "An intentional empty localized string does not fall back to English.",
+    "controls": { "subject": "Notice", "body": "<p>{{t.optional}}</p>" },
+    "base": { "optional": "Optional footer" },
+    "locale": { "optional": "" },
+    "expected": {
+      "controls": {
+        "subject": "Notice",
+        "body": "<p>{{payload.__flare_i18n.html_optional}}</p>",
+        "editorType": "html"
+      },
+      "resolved": { "html_optional": "" }
+    }
+  },
+  {
+    "id": "content.pinned-layout",
+    "criterion": "A layout wraps the body exactly once and preserves subscriber payload variables.",
+    "controls": {
+      "subject": "Welcome",
+      "body": "<p>{{payload.name}}</p>",
+      "layoutIdentifier": "brand"
+    },
+    "layout": {
+      "html": "<main><h1>{{t.heading}}</h1>{{{body}}}</main>",
+      "translations": true,
+      "version": 3
+    },
+    "base": { "heading": "Pareto Labs" },
+    "locale": {},
+    "expected": {
+      "controls": {
+        "subject": "Welcome",
+        "body": "<main><h1>{{payload.__flare_i18n.html_heading}}</h1><p>{{payload.name}}</p></main>",
+        "editorType": "html",
+        "layoutId": null
+      },
+      "resolved": { "html_heading": "Pareto Labs" },
+      "layoutVersion": 3
+    }
+  },
+  {
+    "id": "content.missing-default",
+    "criterion": "A localized value cannot hide a missing required en_US default.",
+    "controls": { "subject": "{{t.subject}}", "body": "<p>Hello</p>" },
+    "base": {},
+    "locale": { "subject": "Bonjour" },
+    "error": "Missing en_US translation: subject"
+  },
+  {
+    "id": "content.reserved-payload",
+    "criterion": "Caller-authored content cannot access Flare's internal resolved translation namespace.",
+    "controls": { "subject": "Notice", "body": "{{payload.__flare_i18n.html_secret}}" },
+    "base": {},
+    "locale": {},
+    "error": "__flare_i18n is reserved for Flare"
+  },
+  {
+    "id": "content.layout-payload-forbidden",
+    "criterion": "Shared layouts cannot capture caller payload variables.",
+    "controls": { "subject": "Notice", "body": "<p>Hi</p>", "layoutIdentifier": "brand" },
+    "layout": {
+      "html": "<main>{{payload.secret}}{{{body}}}</main>",
+      "translations": false,
+      "version": 1
+    },
+    "base": {},
+    "locale": {},
+    "error": "payload variables are forbidden"
+  },
+  {
+    "id": "content.layout-body-once",
+    "criterion": "Duplicating a layout body marker must be rejected instead of duplicating the email.",
+    "controls": { "subject": "Notice", "body": "<p>Hi</p>", "layoutIdentifier": "brand" },
+    "layout": { "html": "{{{body}}}{{{body}}}", "translations": false, "version": 1 },
+    "base": {},
+    "locale": {},
+    "error": "exactly one {{{body}}} marker"
+  },
+  {
+    "id": "content.dictionary-injection",
+    "criterion": "Translation values cannot introduce new template expressions.",
+    "controls": { "subject": "{{t.subject}}", "body": "<p>Hello</p>" },
+    "base": { "subject": "{{payload.secret}}" },
+    "locale": {},
+    "error": "Translations must be single-line plain text"
+  }
+]
