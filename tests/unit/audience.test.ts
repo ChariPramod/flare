@@ -93,6 +93,7 @@ beforeEach(async () => {
   await sql`truncate contacts,contact_properties,audience_topics,audience_segments,email_templates,broadcasts,messages,event_outbox,idempotency,suppressions cascade`;
   objects.clear();
   options.transports = [accepted];
+  await sql`update domains set status='verified',enforce_tls=false where id=${domainId}`;
 });
 afterAll(async () => {
   await sql.end();
@@ -455,3 +456,59 @@ it('keeps campaign approval blocks pending while permanent content failures rema
     await sql`select * from broadcast_recipients where broadcast_id=${invalid} and status='failed'`,
   ).toHaveLength(1);
 });
+
+it.each(['domain drift', 'TLS outage', 'route TLS outage'] as const)(
+  'pauses broadcast admission during %s and resumes the same recipient once',
+  async (block) => {
+    await configureMarketingFixture(options, principal);
+    await contact('recovery@example.net');
+    const id = await broadcast();
+    await scheduleBroadcast(sql, principal, id);
+    const transport = options.transports[0]!;
+    if (block === 'domain drift')
+      await sql`update domains set status='temporary_failure' where id=${domainId}`;
+    else {
+      await sql`update domains set enforce_tls=true where id=${domainId}`;
+      let checks = 0;
+      options.transports = [
+        {
+          ...transport,
+          supportsRequiredTls: async () => {
+            if (block === 'route TLS outage' && ++checks === 1) return true;
+            throw new Error('Temporary capability lookup failure');
+          },
+        },
+      ];
+    }
+    const code = block === 'domain drift' ? 'domain_unverified' : 'required_tls_unavailable';
+    expect(await dispatchBroadcast(options, id, 'https://flare.example.test')).toMatchObject({
+      paused: true,
+      processed: 0,
+      finished: false,
+    });
+    expect(
+      (
+        await sql`select status,error,next_dispatch_at>now() as deferred from broadcasts where id=${id}`
+      )[0],
+    ).toMatchObject({ status: 'sending', error: expect.stringContaining(code), deferred: true });
+    expect(
+      await sql`select status,message_id from broadcast_recipients where broadcast_id=${id}`,
+    ).toEqual([{ status: 'pending', message_id: null }]);
+    expect(await sql`select * from messages`).toHaveLength(0);
+    expect(await sql`select * from sending_quota`).toHaveLength(0);
+    expect(await sql`select * from transport_attempts`).toHaveLength(0);
+    await sql`update domains set status='verified' where id=${domainId}`;
+    options.transports = [transport];
+    await sql`update broadcasts set next_dispatch_at=now() where id=${id}`;
+    expect(await dispatchBroadcast(options, id, 'https://flare.example.test')).toMatchObject({
+      finished: true,
+      processed: 1,
+    });
+    await dispatchBroadcast(options, id, 'https://flare.example.test');
+    expect(await sql`select * from messages where broadcast_id=${id}`).toHaveLength(1);
+    expect(await sql`select * from sending_quota where state='reserved'`).toHaveLength(1);
+    expect(await sql`select status from broadcast_recipients where broadcast_id=${id}`).toEqual([
+      { status: 'queued' },
+    ]);
+  },
+);

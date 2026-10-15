@@ -93,6 +93,7 @@ beforeEach(async () => {
   await sql`truncate automations,contacts,contact_properties,audience_topics,audience_segments,email_templates,broadcasts,messages,event_outbox,idempotency,suppressions cascade`;
   objects.clear();
   options.transports = [accepted];
+  await sql`update domains set status='verified',enforce_tls=false where id=${domainId}`;
 });
 afterAll(async () => {
   await sql.end();
@@ -492,3 +493,64 @@ it('does not consume automation failure retries while operator approval remains 
     (await sql`select error,current_step from automation_runs where id=${run}`)[0],
   ).toMatchObject({ error: null, current_step: 'pause' });
 });
+
+it.each(['domain drift', 'TLS outage', 'route TLS outage'] as const)(
+  'pauses automation admission during %s without consuming retries',
+  async (block) => {
+    await configureMarketingFixture(options, principal);
+    const { run } = await setup();
+    const transport = options.transports[0]!;
+    if (block === 'domain drift')
+      await sql`update domains set status='temporary_failure' where id=${domainId}`;
+    else {
+      await sql`update domains set enforce_tls=true where id=${domainId}`;
+      let checks = 0;
+      options.transports = [
+        {
+          ...transport,
+          supportsRequiredTls: async () => {
+            if (block === 'route TLS outage') {
+              if (++checks === 1) return true;
+              throw new Error('Temporary route capability lookup failure');
+            }
+            return false;
+          },
+        },
+      ];
+    }
+    let failure: unknown;
+    try {
+      await advanceAutomation(options, run);
+    } catch (error) {
+      failure = error;
+    }
+    await failAutomation(sql, run, failure);
+    const code = block === 'domain drift' ? 'domain_unverified' : 'required_tls_unavailable';
+    expect(
+      (
+        await sql`select status,current_step,attempts,error,next_step_at>now() as deferred from automation_runs where id=${run}`
+      )[0],
+    ).toMatchObject({
+      status: 'queued',
+      current_step: 'welcome',
+      attempts: 0,
+      error: expect.stringContaining(code),
+      deferred: true,
+    });
+    expect(await sql`select * from automation_steps`).toHaveLength(0);
+    expect(await sql`select * from messages`).toHaveLength(0);
+    expect(await sql`select * from sending_quota`).toHaveLength(0);
+    expect(await sql`select * from transport_attempts`).toHaveLength(0);
+    await sql`update domains set status='verified' where id=${domainId}`;
+    options.transports = [transport];
+    await sql`update automation_runs set next_step_at=now() where id=${run}`;
+    await advanceAutomation(options, run);
+    await advanceAutomation(options, run);
+    expect(await sql`select * from messages where automation_run_id=${run}`).toHaveLength(1);
+    expect(await sql`select * from sending_quota where state='reserved'`).toHaveLength(1);
+    expect(
+      (await sql`select status from automation_steps where run_id=${run} and step_id='welcome'`)[0]
+        ?.status,
+    ).toBe('completed');
+  },
+);

@@ -7,7 +7,11 @@ import { connectDatabase } from '@flare/db';
 import type { Sql } from '@flare/db';
 import { recordEvent } from './events.js';
 import type { DeliveryEvent } from './events.js';
-import { restoreProtectedSuppression } from './sending-policy.js';
+import {
+  restoreProtectedSuppression,
+  sendingFeedback,
+  updateSendingPolicy,
+} from './sending-policy.js';
 
 const tenant = { orgId: randomUUID(), environmentId: randomUUID() };
 const domainId = randomUUID();
@@ -38,7 +42,7 @@ beforeAll(async () => {
 }, 30000);
 beforeEach(async () => {
   await sql`truncate messages,suppressions,soft_bounces,audit_logs,event_outbox cascade`;
-  await sql`update sending_policies set revision=0,state='pending_review'`;
+  await sql`update sending_policies set revision=0,state='pending_review',feedback_reviewed_at=null`;
 });
 afterAll(async () => {
   await sql?.end();
@@ -146,4 +150,57 @@ it('applies one logical outcome for concurrent fresh provider receipt IDs while 
   expect(await sql`select * from delivery_events`).toHaveLength(5);
   expect(await sql`select * from event_outbox where type='email.complained'`).toHaveLength(1);
   expect(await sql`select * from event_outbox where type='suppression.created'`).toHaveLength(1);
+});
+it('keeps a reviewed legacy complaint with no classification in the same logical feedback cohort', async () => {
+  const secondRecipient = 'new-reader@example.net';
+  const id = await message([recipient, secondRecipient]);
+  // Before 0015, authenticated SES complaints persisted data={} and a protected
+  // restriction. Preserve that historical row exactly as an upgraded database does.
+  await sql`insert into delivery_events(org_id,environment_id,message_id,source,source_id,type,recipient,data,created_at) values(${tenant.orgId},${tenant.environmentId},${id},'sns','legacy-complaint','complained',${recipient},'{}',clock_timestamp()-interval '1 minute')`;
+  await sql`insert into suppressions(org_id,address,reason,protected) values(${tenant.orgId},${recipient},'complaint',true)`;
+  await sql`update sending_policies set state='suspended' where org_id=${tenant.orgId}`;
+  await restore();
+  await updateSendingPolicy(sql, actor, tenant.orgId, {
+    expected_revision: 1,
+    state: 'approved',
+    reason: 'Operator reviewed the original legacy complaint and restored sending',
+  });
+  const [reviewed] =
+    await sql`select feedback_reviewed_at::text as watermark from sending_policies where org_id=${tenant.orgId}`;
+  const event: DeliveryEvent = {
+    source: 'sns',
+    sourceId: 'new-receipt',
+    messageId: id,
+    recipient,
+    type: 'complained',
+  };
+  expect(await recordEvent(sql, tenant, event)).toEqual({ duplicate: true });
+  expect(await sql`select * from suppressions`).toHaveLength(0);
+  expect(await sql`select * from event_outbox`).toHaveLength(0);
+  expect(await sendingFeedback(sql, tenant.orgId)).toMatchObject({
+    complaints: 1,
+    unreviewed_complaints: 0,
+  });
+  expect(
+    await sql`select state,feedback_reviewed_at::text as watermark from sending_policies where org_id=${tenant.orgId}`,
+  ).toEqual([{ state: 'approved', watermark: reviewed!.watermark }]);
+  expect(await sql`select data from delivery_events where source_id='legacy-complaint'`).toEqual([
+    { data: {} },
+  ]);
+  expect(await sql`select * from delivery_events`).toHaveLength(2);
+  expect(
+    await recordEvent(sql, tenant, {
+      ...event,
+      sourceId: 'new-recipient',
+      recipient: secondRecipient,
+    }),
+  ).toEqual({ duplicate: false });
+  expect(await sendingFeedback(sql, tenant.orgId)).toMatchObject({
+    complaints: 2,
+    unreviewed_complaints: 1,
+  });
+  expect(await sql`select address from suppressions`).toEqual([{ address: secondRecipient }]);
+  expect(
+    (await sql`select state from sending_policies where org_id=${tenant.orgId}`)[0]!.state,
+  ).toBe('suspended');
 });

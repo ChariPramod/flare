@@ -142,18 +142,22 @@ export async function submitEmails(
             : null;
           if (route) {
             let ready = false;
+            let tlsReady = !domain.enforce_tls;
             for (const instance of route.instances) {
               const transport = options.transports.find(
                 (candidate) => candidate.instance?.id === instance.id,
               )!;
-              if (domain.enforce_tls && !(await transport.supportsRequiredTls())) continue;
+              if (domain.enforce_tls && !(await requiredTls([transport]))) continue;
+              tlsReady = true;
               if ((await sendingReadiness(db, p, domain, transport)).ready) ready = true;
             }
             if (!ready)
               throw new SendingPolicyError(
                 403,
-                'sender_not_ready',
-                'No approved route has fresh sender authentication evidence',
+                tlsReady ? 'sender_not_ready' : 'required_tls_unavailable',
+                tlsReady
+                  ? 'No approved route has fresh sender authentication evidence'
+                  : 'No approved route can currently honor this domain’s delivery requirements',
               );
           }
           const at = schedule(input.scheduled_at, now);
@@ -300,14 +304,27 @@ async function sender(
     await tx`select name from environments where id=${p.environmentId} and org_id=${p.orgId}`;
   if (!environment) throw new MailError(403, 'Sending environment is unavailable');
   const [domain] = await tx`select * from domains where name=${name} for share`;
-  if (!domain || domain.status !== 'verified' || !domain.sending)
-    throw new MailError(403, `Sender domain ${name} is not verified for sending`);
+  if (!domain) throw new MailError(403, `Sender domain ${name} is not verified for sending`);
   if (!canSend(p, String(domain.id)))
     throw new MailError(403, 'API key is scoped to another domain');
-  if (!transports.length || (domain.enforce_tls && !(await requiredTls(transports))))
+  // Existing sender eligibility can recover after DNS drift or configuration
+  // repair. Durable campaigns must pause instead of discarding their audience.
+  if (domain.status !== 'verified' || !domain.sending)
+    throw new SendingPolicyError(
+      403,
+      'domain_unverified',
+      `Sender domain ${name} is not verified for sending`,
+    );
+  if (!transports.length)
     throw new MailError(
       422,
       'No configured transport can honor this domain’s delivery requirements',
+    );
+  if (domain.enforce_tls && !(await requiredTls(transports)))
+    throw new SendingPolicyError(
+      403,
+      'required_tls_unavailable',
+      'No configured transport can currently honor this domain’s delivery requirements',
     );
   return domain;
 }

@@ -4,11 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import nodemailer from 'nodemailer';
-import { beforeAll, afterAll, describe, it, expect } from 'vitest';
+import { beforeAll, beforeEach, afterAll, describe, it, expect } from 'vitest';
 import { createRelay } from './server.js';
 import type { SMTPServer } from 'smtp-server';
 import type { Principal } from '@flare/shared';
-import { MailError } from '@flare/mail';
+import { MailError, SendingPolicyError } from '@flare/mail';
 const principal: Principal = {
   orgId: randomUUID(),
   environmentId: randomUUID(),
@@ -23,6 +23,7 @@ let server: SMTPServer;
 let port: number;
 let ca: Buffer;
 let directory: string;
+let submissionError: MailError | undefined;
 const received: { input: unknown; headers: { to: string[]; cc: string[] } }[] = [];
 beforeAll(async () => {
   directory = mkdtempSync(join(tmpdir(), 'flare-smtp-test-'));
@@ -56,6 +57,7 @@ beforeAll(async () => {
       return principal;
     },
     submit: async (_p, input, headers) => {
+      if (submissionError) throw submissionError;
       received.push({ input, headers });
       return randomUUID();
     },
@@ -65,6 +67,9 @@ beforeAll(async () => {
   if (!address || typeof address === 'string') throw new Error('Missing listener');
   port = address.port;
 }, 10000);
+beforeEach(() => {
+  submissionError = undefined;
+});
 afterAll(async () => {
   if (server) await new Promise<void>((resolve) => server.close(resolve));
   if (directory) rmSync(directory, { recursive: true, force: true });
@@ -81,6 +86,30 @@ function transport(password = token, tls = true) {
   });
 }
 describe('authenticated SMTP submission', () => {
+  it.each([
+    [
+      new SendingPolicyError(403, 'required_tls_unavailable', 'Temporary TLS capability outage'),
+      451,
+    ],
+    [
+      new SendingPolicyError(429, 'recipient_quota_exhausted', 'Recipient allowance exhausted'),
+      452,
+    ],
+    [new MailError(403, 'API key is scoped to another domain'), 550],
+    [new SendingPolicyError(403, 'sending_not_approved', 'Sending requires approval'), 550],
+    [new SendingPolicyError(403, 'sender_not_ready', 'Sender proof missing'), 550],
+  ] as const)('maps submission error %s to SMTP %i', async (error, responseCode) => {
+    submissionError = error;
+    const before = received.length;
+    await expect(
+      transport().sendMail({
+        from: 'sender@example.com',
+        to: 'reader@example.net',
+        text: 'Response classification',
+      }),
+    ).rejects.toMatchObject({ responseCode });
+    expect(received).toHaveLength(before);
+  });
   it('requires STARTTLS and rejects invalid API keys', async () => {
     await expect(transport(token, false).verify()).rejects.toThrow(/STARTTLS/i);
     await expect(transport('invalid').verify()).rejects.toThrow(/Invalid API key/i);

@@ -252,3 +252,50 @@ test('viewer distinguishes verified domain ownership from blocked Production rea
   await expect(panel).toContainText('Unknown');
   await expect(panel.getByText('Readiness passes', { exact: true })).toHaveCount(0);
 });
+
+test('operator can suspend an organization while preserving its disabled route binding', async ({
+  page,
+  request,
+}) => {
+  const fixture = await request.post('http://127.0.0.1:4311/fixtures/operator', {
+    data: { allowed: true, disabled_binding: true },
+  });
+  const { org_id } = await fixture.json();
+  await login(page);
+  await page.goto('/operator');
+  await page.getByLabel('Operator authenticator or recovery code').fill('654321');
+  await page.getByRole('button', { name: 'Verify operator access' }).click();
+  await page.getByLabel('Organization sending policy').selectOption(org_id);
+  const boundId = await page.getByLabel('transactional route ID', { exact: true }).inputValue();
+  await page.getByLabel('Sending state').selectOption('suspended');
+  await page
+    .getByLabel('Policy change reason')
+    .fill('Suspend this organization during provider review.');
+  const saved = page.waitForRequest(
+    (req) =>
+      req.method() === 'PATCH' && req.url().endsWith(`/api/operator/sending-policies/${org_id}`),
+  );
+  await page.getByRole('button', { name: 'Save sending policy' }).click();
+  const savedRequest = await saved;
+  const payload = savedRequest.postDataJSON();
+  const savedResponse = await savedRequest.response();
+  expect(savedResponse?.status(), 'Suspension preserves an unchanged disabled binding').toBe(200);
+  expect(await savedResponse!.json()).toMatchObject({
+    state: 'suspended',
+    revision: 1,
+    route_bindings: { transactional: { id: boundId, revision: 1 } },
+  });
+  await expect(page.getByLabel('Sending state')).toHaveValue('suspended');
+  await expect(page.getByLabel('transactional route ID', { exact: true })).toHaveValue(boundId);
+  expect(payload).toEqual({
+    expected_revision: 0,
+    reason: 'Suspend this organization during provider review.',
+    state: 'suspended',
+  });
+  await page.getByLabel('transactional route revision', { exact: true }).fill('2');
+  await page
+    .getByLabel('Policy change reason')
+    .fill('Attempt to bind a revision that has not been reviewed.');
+  await page.getByRole('button', { name: 'Save sending policy' }).click();
+  await expect(page.locator('.error-box[role="alert"]')).toContainText('active verified revision');
+});

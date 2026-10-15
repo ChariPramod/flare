@@ -20,6 +20,7 @@ import {
   transportInstanceIdentity,
   probeNamedSesIdentity,
   providerEvidenceSchema,
+  lockSendingPolicy,
 } from '@flare/mail';
 import type { DnsRecord, DnsResolver } from '@flare/mail';
 export async function sweepSendingFeedback(
@@ -144,8 +145,14 @@ export async function refreshSesReadiness(sql: Sql, probe = probeNamedSesIdentit
       delete evidence.ses;
       if (result.evidence) evidence.ses = result.evidence;
     }
-    // Preserve the exact PostgreSQL claim, including sub-millisecond precision.
-    await sql`update domain_transport_readiness set evidence=${sql.json(toJson(evidence ?? row.evidence))},provider_checked_at=now(),provider_check_after=now()+interval '1 hour' where org_id=${row.org_id} and environment_id=${row.environment_id} and domain_id=${row.domain_id} and transport_instance=${row.transport_instance} and config_fingerprint=${row.config_fingerprint} and evidence=${sql.json(toJson(row.evidence))} and revoked_at is null and provider_check_after=${row.check_claim}::text::timestamptz`;
+    await sql.begin(async (tx) => {
+      // Share attempt admission's boundary: an existing attempt may commit first,
+      // but no later attempt may admit against evidence invalidated by this commit.
+      // Probe outside the lock and retain CAS against operator updates/revocation.
+      await lockSendingPolicy(tx, String(row.org_id));
+      // Preserve the exact PostgreSQL claim, including sub-millisecond precision.
+      await tx`update domain_transport_readiness set evidence=${tx.json(toJson(evidence ?? row.evidence))},provider_checked_at=now(),provider_check_after=now()+interval '1 hour' where org_id=${row.org_id} and environment_id=${row.environment_id} and domain_id=${row.domain_id} and transport_instance=${row.transport_instance} and config_fingerprint=${row.config_fingerprint} and evidence=${tx.json(toJson(row.evidence))} and revoked_at is null and provider_check_after=${row.check_claim}::text::timestamptz`;
+    });
   }
   return due.length;
 }

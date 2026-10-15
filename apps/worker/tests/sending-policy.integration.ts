@@ -26,7 +26,7 @@ import {
 } from '@flare/mail';
 import type { NamedTransportConfig, PipelineOptions, TransportAdapter } from '@flare/mail';
 import { startRelayFixture } from '../../smtp-relay/tests/relay-fixture.js';
-import { startMailWorker } from '../src/mail.js';
+import { refreshSesReadiness, startMailWorker } from '../src/mail.js';
 
 const url =
   process.env.TEST_DATABASE_URL ??
@@ -185,7 +185,12 @@ async function fixture(dailyLimit = 100, perMinuteLimit = 100) {
   });
   return { orgId, environmentId, first: credentials[0]!, second: credentials[1]!, change };
 }
-async function productionFixture(tenant: Awaited<ReturnType<typeof fixture>>) {
+async function productionFixture(
+  tenant: Awaited<ReturnType<typeof fixture>>,
+  providerOptions = options,
+  instanceId = config.id,
+  probe?: Parameters<typeof updateDomainReadiness>[6],
+) {
   const environmentId = randomUUID(),
     domainId = randomUUID(),
     credentialId = randomUUID(),
@@ -209,18 +214,19 @@ async function productionFixture(tenant: Awaited<ReturnType<typeof fixture>>) {
       evidence: {
         kind: 'received_headers',
         provenance: 'operator_attested_receiver_headers',
-        transport_instance: config.id,
+        transport_instance: instanceId,
         proof_reference: 'integration-fixture/not-live-receiver-evidence',
         checked_at: checkedAt,
         header_from_domain: domain,
         dkim_domain: domain,
         dkim_pass: true,
-        mail_from_domain: domain,
+        mail_from_domain: probe ? `bounce.${domain}` : domain,
         spf_pass: true,
         dmarc_pass: true,
       },
     },
-    options.transports,
+    providerOptions.transports,
+    probe,
   );
   await sql`insert into api_keys(id,org_id,environment_id,name,token_hash,prefix,permission) values(${credentialId},${orgId},${environmentId},'Production integration credential',${hashToken(`fl_${randomUUID()}`)},'fl_test','sending_access')`;
   const principal: Principal = {
@@ -229,7 +235,12 @@ async function productionFixture(tenant: Awaited<ReturnType<typeof fixture>>) {
     environmentId,
     production: true,
   };
-  return { principal, from: `sender@${domain}`, options: { ...options, sql: relaySql } };
+  return {
+    principal,
+    domainId,
+    from: `sender@${domain}`,
+    options: { ...providerOptions, sql: relaySql },
+  };
 }
 const input = (subject = `Policy integration ${randomUUID()}`) => ({
   from: 'sender@example.com',
@@ -662,4 +673,153 @@ it('serializes fresh complaint receipt IDs into one restriction and does not rep
   expect(
     await sql`select * from audit_logs where org_id=${tenant.orgId} and action='operator.suppression.restored'`,
   ).toHaveLength(1);
+});
+
+it('serializes SES invalidation with in-flight attempt admission and blocks later attempts after its commit', async () => {
+  const tenant = await fixture();
+  const sesConfig: NamedTransportConfig = {
+    id: 'policy-ses-race',
+    kind: 'ses',
+    server_id: 'fixture-aws-account',
+    pool_id: 'customer-transactional',
+    credential_version: 'fixture-v1',
+    region: 'us-east-1',
+    configuration_set: 'fixture',
+    access_key_id_env: 'SES_RACE_ACCESS',
+    secret_access_key_env: 'SES_RACE_SECRET',
+    sns_topic_arn: 'arn:aws:sns:us-east-1:123456789012:fixture',
+  };
+  vi.stubEnv('SES_RACE_ACCESS', 'fixture-access');
+  vi.stubEnv('SES_RACE_SECRET', 'fixture-secret');
+  vi.stubEnv('MAIL_TRANSPORTS', JSON.stringify([sesConfig]));
+  const refreshSql = connectDatabase(url, { max: 1 }).client;
+  refreshSql.options.onnotice = () => undefined;
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let insideAttempt: () => void = () => undefined;
+  const entered = new Promise<void>((resolve) => {
+    insideAttempt = resolve;
+  });
+  let armed = false,
+    tlsChecks = 0;
+  // Provider responses are simulated; only PostgreSQL concurrency is certified here.
+  const send = vi.fn(async (message: { to: string[] }) => ({
+    accepted: message.to,
+    rejected: [],
+    ids: Object.fromEntries(message.to.map((recipient) => [recipient, 'fixture-provider-id'])),
+  }));
+  const transport: TransportAdapter = {
+    name: 'ses',
+    instance: transportInstanceIdentity(sesConfig),
+    sandbox: false,
+    send,
+    async supportsRequiredTls() {
+      if (armed && ++tlsChecks === 2) {
+        insideAttempt();
+        await gate;
+      }
+      return true;
+    },
+  };
+  let delivery: Promise<void> | undefined;
+  let refresh: Promise<number> | undefined;
+  try {
+    await refreshSql`set application_name='flare-ses-readiness-race'`;
+    await tenant.change({
+      route_bindings: { transactional: { id: await registerRoute([transport]), revision: 1 } },
+    });
+    const production = await productionFixture(
+      tenant,
+      { ...options, transports: [transport] },
+      sesConfig.id,
+      async (_config, domain) => {
+        const checkedAt = new Date().toISOString();
+        return {
+          status: 'verified',
+          checked_at: checkedAt,
+          evidence: {
+            identity_verified: true,
+            mail_from_domain: `bounce.${domain}`,
+            status: 'SUCCESS',
+            behavior_on_mx_failure: 'REJECT_MESSAGE',
+            checked_at: checkedAt,
+          },
+        };
+      },
+    );
+    await sql`update domains set enforce_tls=true where id=${production.domainId}`;
+    const ids = [];
+    for (const subject of ['Before invalidation boundary', 'After invalidation boundary'])
+      ids.push(
+        (
+          await submitEmails(production.options, production.principal, [
+            { ...input(subject), from: production.from },
+          ])
+        ).data[0]!.id,
+      );
+    armed = true;
+    delivery = deliverEmail(production.options, ids[0]!);
+    void delivery.catch(() => undefined);
+    await Promise.race([
+      entered,
+      new Promise((_, reject) => {
+        const timer = setTimeout(
+          () => reject(new Error('Delivery did not reach its admission transaction')),
+          5000,
+        );
+        timer.unref();
+      }),
+    ]);
+    refresh = refreshSesReadiness(refreshSql, async () => ({
+      status: 'temporary_failure',
+      checked_at: new Date().toISOString(),
+      evidence: null,
+    }));
+    void refresh.catch(() => undefined);
+    // The old code commits the outage here while admission still holds its lock.
+    // Require observable database lock contention, not a timing-only sleep.
+    await expect
+      .poll(
+        async () =>
+          Boolean(
+            (
+              await sql`select exists(select 1 from pg_stat_activity where application_name='flare-ses-readiness-race' and wait_event_type='Lock' and wait_event='advisory') as blocked`
+            )[0]!.blocked,
+          ),
+        { timeout: 5000 },
+      )
+      .toBe(true);
+    expect(
+      (
+        await sql`select evidence from domain_transport_readiness where domain_id=${production.domainId}`
+      )[0]!.evidence.ses,
+    ).toBeDefined();
+    release();
+    await delivery;
+    expect(await refresh).toBe(1);
+    expect(
+      (
+        await sql`select evidence from domain_transport_readiness where domain_id=${production.domainId}`
+      )[0]!.evidence.ses,
+    ).toBeUndefined();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(await sql`select status from transport_attempts where message_id=${ids[0]!}`).toEqual([
+      { status: 'accepted' },
+    ]);
+    // The attempt already holding the policy lock may win before invalidation.
+    // A later attempt must observe the committed invalidation and remain held.
+    await deliverEmail(production.options, ids[1]!);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(await sql`select * from transport_attempts where message_id=${ids[1]!}`).toHaveLength(0);
+    expect(
+      (await sql`select status,hold_reason from messages where id=${ids[1]!}`)[0],
+    ).toMatchObject({ status: 'held', hold_reason: 'sender_not_ready' });
+  } finally {
+    release();
+    await Promise.allSettled([delivery, refresh]);
+    await refreshSql.end({ timeout: 5 });
+    vi.stubEnv('MAIL_TRANSPORTS', JSON.stringify([config]));
+  }
 });

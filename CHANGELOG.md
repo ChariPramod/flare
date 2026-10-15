@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserved campaign recipients and automation retries during known-sender DNS/TLS blocks, with retryable SMTP responses for temporary TLS capability outages. Fixed operator suspension with unchanged disabled routes, legacy complaint replay after restoration, and SES readiness invalidation racing with attempt admission. Content-bearing API routes, including publication diffs and mixed-case URLs, now omit bodies and queries from logs. Added reproducing database/SMTP/browser regressions and an independent-PostgreSQL readiness race test; candidate execution is tracked in `PROGRESS.md`.
+
 - P0 implementation checkpoint `54743f0` passed all five CI jobs: 318 unit/database tests, 21 real-service tests, 22 browser contracts, nine live browser flows, 25 evals and 45 Python tests (four external skips). Shared quotas, scheduled pacing, operator MFA and actual email SIGKILL/lease recovery passed. Full-stack load recovered 54 sends without duplicates; isolated restore passed in 41 seconds. Local Mac Docker and external provider evidence remain pending.
 
 - Added real-service acceptance for cross-domain/environment quota contention, simultaneous scheduled dispatch pacing, and outbound-email SIGKILL after SMTP acceptance with actual lease expiry. The crash scenario verifies retained usage, ambiguity quarantine and no replay across worker restarts; execution evidence is recorded in the acceptance ledger.

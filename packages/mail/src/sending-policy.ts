@@ -64,15 +64,17 @@ export async function policyAudit(
   await tx`insert into audit_logs(org_id,actor_id,action,resource_id,metadata) values(${orgId},${actor},${action},${orgId},${tx.json(toJson(metadata))})`;
 }
 export async function sendingFeedback(sql: Sql | Transaction, orgId: string) {
+  // Legacy complaints predate normalized data. Classify them by their definitive
+  // event type without rewriting history or guessing historical bounce severity.
   const [feedback] = await sql`
     with observations as (
-      select e.message_id,e.recipient,e.type,e.data->>'classification' as classification,
+      select e.message_id,e.recipient,e.type,case when e.type='complained' then 'complaint' else e.data->>'classification' end as classification,
         min(e.created_at) as first_at,max(e.created_at) as latest_at
       from delivery_events e join messages m on m.id=e.message_id and m.org_id=e.org_id and m.environment_id=e.environment_id
       where e.org_id=${orgId} and not m.sandbox
         and e.type in ('bounced','complained')
         and (e.source in ('postal','sns','ses') or e.source like 'postal:%' or e.source like 'ses:%' or e.source like 'sns:%')
-      group by e.message_id,e.recipient,e.type,e.data->>'classification'
+      group by e.message_id,e.recipient,e.type,case when e.type='complained' then 'complaint' else e.data->>'classification' end
     ), cohort as (
       select o.*,exists(select 1 from sending_quota q where q.org_id=${orgId} and q.message_id=o.message_id and q.recipient=o.recipient and q.consumed_at>now()-interval '24 hours') as recent_recipient
       from observations o where first_at>now()-interval '24 hours'

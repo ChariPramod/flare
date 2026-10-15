@@ -1,7 +1,7 @@
 import { SMTPServer } from 'smtp-server';
 import { simpleParser } from 'mailparser';
 import type { AddressObject } from 'mailparser';
-import { address, mailLimits, MailError } from '@flare/mail';
+import { address, mailLimits, MailError, SendingPolicyError } from '@flare/mail';
 import type { Principal } from '@flare/shared';
 export interface RelayDependencies {
   cert: Buffer;
@@ -116,9 +116,13 @@ export function createRelay(deps: RelayDependencies) {
               error instanceof MailError ? error.message : 'Temporary submission failure',
               error instanceof MailError && error.status === 429
                 ? 452
-                : error instanceof MailError && error.status < 500
-                  ? 550
-                  : 451,
+                : error instanceof SendingPolicyError &&
+                    error.status === 403 &&
+                    error.code === 'required_tls_unavailable'
+                  ? 451
+                  : error instanceof MailError && error.status < 500
+                    ? 550
+                    : 451,
             ),
           ),
         );

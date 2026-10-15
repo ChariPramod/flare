@@ -207,6 +207,24 @@ const server = createServer(async (req, res) => {
       if (body.revoked) operatorRevoked = true;
       if (body.expired) operatorUntil = 0;
       if (body.stale) operatorPolicy.revision++;
+      if (body.disabled_binding) {
+        const id = randomUUID();
+        operatorPolicy.state = 'approved';
+        operatorPolicy.route_bindings = { transactional: { id, revision: 1 } };
+        operatorRoutes.set(`${id}/1`, {
+          id,
+          revision: 1,
+          name: 'Previously approved route',
+          traffic_class: 'transactional',
+          trust_tier: 'customer',
+          critical: false,
+          transport_instances: ['fixture-postal'],
+          physical_ips: ['8.8.8.8'],
+          verified_at: new Date().toISOString(),
+          disabled_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+        });
+      }
       return reply({ org_id: org, domain_id: operatorEvidenceDomain });
     }
     if (path === '/fixtures/activity' && method === 'POST') {
@@ -421,6 +439,30 @@ const server = createServer(async (req, res) => {
             { message: 'Sending policy revision changed; refresh before retrying' },
             409,
           );
+        if (body.route_bindings || body.trust_tier) {
+          const bindings = (body.route_bindings ?? operatorPolicy.route_bindings) as Record<
+            string,
+            { id: string; revision: number }
+          >;
+          for (const [purpose, binding] of Object.entries(bindings)) {
+            const route = operatorRoutes.get(`${binding.id}/${binding.revision}`);
+            if (
+              !route ||
+              route.disabled_at ||
+              !route.verified_at ||
+              route.trust_tier !== (body.trust_tier ?? operatorPolicy.trust_tier) ||
+              route.traffic_class !== (purpose === 'marketing' ? 'marketing' : 'transactional') ||
+              route.critical !== (purpose === 'critical')
+            )
+              return reply(
+                {
+                  message:
+                    'Route binding must reference an active verified revision within the approved purpose and trust boundary',
+                },
+                422,
+              );
+          }
+        }
         const { expected_revision: _revision, reason, ...updates } = body;
         Object.assign(operatorPolicy, updates, { revision: operatorPolicy.revision + 1 });
         operatorAudit.push({ action: 'sending_policy.updated', reason });

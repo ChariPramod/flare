@@ -195,9 +195,7 @@ function PolicyDetail({ org }: { org: string }) {
               const id = String(form.get(`${name}_route`) ?? '').trim();
               if (id) route_bindings[name] = { id, revision: Number(form.get(`${name}_revision`)) };
             }
-            update.mutate({
-              expected_revision: policy.revision,
-              reason: form.get('reason'),
+            const values = {
               state: form.get('state'),
               daily_limit: Number(form.get('daily_limit')),
               per_minute_limit: Number(form.get('per_minute_limit')),
@@ -207,7 +205,26 @@ function PolicyDetail({ org }: { org: string }) {
               marketing_enabled: form.has('marketing_enabled'),
               default_traffic_class: form.get('default_traffic_class') || null,
               trust_tier: form.get('trust_tier'),
-              route_bindings,
+            };
+            // Keep unchanged route grants out of unrelated policy updates. A disabled
+            // binding must not prevent an operator from suspending the organization.
+            const changes = Object.fromEntries(
+              Object.entries(values).filter(
+                ([key, value]) => value !== policy[key as keyof Policy],
+              ),
+            );
+            const sameBindings =
+              Object.keys(route_bindings).length === Object.keys(policy.route_bindings).length &&
+              Object.entries(route_bindings).every(
+                ([purpose, binding]) =>
+                  policy.route_bindings[purpose]?.id === binding.id &&
+                  policy.route_bindings[purpose]?.revision === binding.revision,
+              );
+            update.mutate({
+              ...changes,
+              ...(!sameBindings ? { route_bindings } : {}),
+              expected_revision: policy.revision,
+              reason: form.get('reason'),
             });
           }}
         >
