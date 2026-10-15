@@ -3,7 +3,7 @@ import { connectDatabase } from '@flare/db';
 import { configuredTransports, objectStore } from '@flare/mail';
 import { forwardInbound, parseInbound } from '@flare/platform';
 
-integrationTargets();
+const { databaseUrl } = integrationTargets();
 const [mode, id] = process.argv.slice(2);
 if (
   process.env.FLARE_INBOUND_CRASH_TEST !== 'true' ||
@@ -18,7 +18,7 @@ if (
 )
   throw new Error('Disposable inbound crash fixture required');
 process.on('disconnect', () => process.exit(1));
-const sql = connectDatabase(process.env.TEST_DATABASE_URL, { max: 1 }).client;
+const sql = connectDatabase(databaseUrl, { max: 1 }).client;
 sql.options.onnotice = () => undefined;
 const realStore = objectStore();
 const store = {
