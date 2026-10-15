@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Sender-safety checkpoint `c307e1f` and forwarding checkpoint `a70140e` each passed all five CI jobs. Latest evidence: 351 unit/database tests, 25 evals, 45 Python tests (four external skips), 23 browser contracts, 22 real-service tests and nine live browser flows. Load recovered all 54 accepted sends without lost/duplicate submissions; isolated restore passed in 46 seconds. Local Mac containers and real staging/provider checks remain open.
+
 - Inbound forwarding now preserves accepted work through approval/suspension, quota exhaustion and recoverable sender-readiness blocks. Retry deadlines persist without consuming the failure budget; recovery submits one outbound message using the original receipt and rule. Unknown senders and malformed content retain permanent-failure behavior.
 
 - Preserved campaign recipients and automation retries during known-sender DNS/TLS blocks, with retryable SMTP responses for temporary TLS capability outages. Fixed operator suspension with unchanged disabled routes, legacy complaint replay after restoration, and SES readiness invalidation racing with attempt admission. Content-bearing API routes, including publication diffs and mixed-case URLs, now omit bodies and queries from logs. Added reproducing database/SMTP/browser regressions and an independent-PostgreSQL readiness race test; candidate execution is tracked in `PROGRESS.md`.
