@@ -105,7 +105,7 @@ With the approved host and access, Codex can perform the runbook in [staging](st
 
 Keep these acceptance gates open until their own evidence exists:
 
-- [ ] **Local Mac:** Docker is operational and local integration/full-stack scripts pass. Installing Docker alone is not a passing test.
+- [x] **Local Mac:** Docker is operational; all 23 integration tests and full-stack acceptance passed on `a7ed844`, including nine live browser flows and isolated restore. See [the evidence ledger](acceptance.md). This closes the local gate only.
 - [ ] **Host:** private administration boundaries, readiness after restart and expected firewall access are verified.
 - [ ] **Public DNS/HTTPS:** records, matching A/PTR, certificates and external routing are verified from outside the host.
 - [ ] **Real Postal:** domain authorization, actual sending IP/pool, receiver-observed SPF/DKIM/DMARC alignment, delivery callbacks and signed inbound receipt pass. Provider acceptance is distinct from final delivery or inbox placement. Correct PTR/HELO alignment is one prerequisite, not a deliverability guarantee. [Postal delivery guidance](https://docs.postalserver.io/welcome/faqs/)

@@ -4,7 +4,7 @@ Pareto Labs' self-hosted notification control plane. TypeScript, NestJS, Next.js
 
 ## Development
 
-Use Node **22**, pnpm **10.32.1**, Docker Engine with Compose v2, OpenSSL and gitleaks **8.30.1**. Allocate at least 12 GB RAM to the full stack. The current implementation and verification status is recorded in [PROGRESS.md](PROGRESS.md); this repository is under active construction.
+Use Node **22**, pnpm **10.32.1**, Docker Engine with Compose v2 or newer, OpenSSL and gitleaks **8.30.1**. Allocate at least 12 GB RAM to the full stack. The current implementation and verification status is recorded in [PROGRESS.md](PROGRESS.md); this repository is under active construction.
 
 ```sh
 corepack enable

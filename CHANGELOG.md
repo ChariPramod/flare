@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Inbound/staging checkpoint `03a7f9a` passed all five CI jobs (362 unit/database tests, 23 real-service tests, nine live flows). Installed Docker Desktop on the Mac and verified native/AMD64 execution and staging ingress. Added a fresh-shell Mac Docker PATH bootstrap and a step-by-step owner hosting/domain/DNS checklist. All 23 local integration tests passed with the Mac kept awake; full local acceptance remains running. Local run evidence is tracked separately in `PROGRESS.md`.
+- Docker Desktop 4.95.0 is operational on the Mac. Local acceptance on `a7ed844` passed all 23 integration tests, nine live browser flows, native restart/cancellation and dispatcher quarantine, private DNS/Postal callbacks, queue-loss characterization, load recovery and a 23-second isolated restore. Staging ingress passed; added fresh-shell Docker CLI discovery and the owner hosting/domain/DNS checklist. All five CI jobs passed independently on `a7ed844` (365 unit/database tests, 25 evals, 45 Python tests, 23 browser contracts, 23 integration tests and nine live flows). CI restore took 46 seconds. Real staging/provider gates remain open.
 
 - Acknowledge identical durable inbound receipts after DNS drift or receiving disablement while keeping new admission serialized with domain updates. Reject named callback keys that do not match bundled Postal. Isolate local integration cleanup by project and refuse remote Docker/custom store targets before destructive tests. Explicitly select the pinned AMD64-only Postal image for Apple Silicon emulation. Added regression and PostgreSQL race coverage; candidate execution is tracked in `PROGRESS.md`.
 

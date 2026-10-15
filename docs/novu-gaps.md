@@ -2,7 +2,7 @@
 
 Pinned target: API, worker, WS and internal dashboard 3.19.0. Never downgrade below 3.18.0.
 
-Verified against the [v3.19.0 Compose source](https://github.com/novuhq/novu/blob/v3.19.0/docker/community/docker-compose.yml): the upstream example itself still pins 3.18.0. Flare overrides these tags explicitly. Runtime images have not been pulled on this development host because Docker is unavailable.
+Verified against the [v3.19.0 Compose source](https://github.com/novuhq/novu/blob/v3.19.0/docker/community/docker-compose.yml): the upstream example itself still pins 3.18.0. Flare overrides these tags explicitly. The pinned runtime images now execute in CI and on the Apple Silicon development Mac. Novu runs natively on ARM64; Postal 3.3.7 uses AMD64 emulation. Candidate-specific results and external verification limits are recorded in [the acceptance ledger](acceptance.md).
 
 Team limits, topics, layouts, translations and webhook availability require live community-image tests. Flare does not assume cloud-only features are available. Do not present untested edition behavior as a runtime finding.
 
