@@ -75,6 +75,7 @@ function exerciseIntegration(upFails: boolean, remote = false) {
       mkdirSync(join(root, folder), { recursive: true });
     for (const file of [
       'scripts/integration.sh',
+      'scripts/docker-path.sh',
       'scripts/local-docker.mjs',
       'apps/worker/tests/targets.mjs',
     ])
@@ -155,5 +156,77 @@ describe('integration launcher cleanup ownership', () => {
     expect(result.status).toBe(1);
     expect(result.output).toContain('local-docker-required');
     expect(result.calls).toEqual([]);
+  });
+});
+
+describe('Docker Desktop PATH bootstrap', () => {
+  it.each([
+    ['Darwin', false],
+    ['Darwin', true],
+    ['Linux', false],
+  ] as const)('adds only missing Mac installation paths (%s, existing CLI=%s)', (os, existing) => {
+    const root = mkdtempSync(join(tmpdir(), 'flare-docker-path-'));
+    try {
+      const first = join(root, 'existing-bin');
+      const user = join(root, 'user install', 'bin');
+      const bundle = join(root, 'Docker.app', 'Contents', 'Resources', 'bin');
+      for (const path of [first, user, bundle]) mkdirSync(path, { recursive: true });
+      if (existing) writeFileSync(join(first, 'docker'), '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+      writeFileSync(join(user, 'docker'), '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+      writeFileSync(join(bundle, 'docker-credential-desktop'), '#!/bin/sh\nexit 0\n', {
+        mode: 0o700,
+      });
+      // Simulate Desktop's installation locations without changing HOME or any
+      // user files. Execute the same sourced helper under the system Bash.
+      const helper = join(root, 'docker-path.sh');
+      writeFileSync(
+        helper,
+        readFileSync('scripts/docker-path.sh', 'utf8')
+          .replace('${HOME:-}/.docker/bin', user)
+          .replace('/Applications/Docker.app/Contents/Resources/bin', `"${bundle}"`),
+      );
+      const initialPath = first;
+      const result = spawnSync(
+        '/bin/bash',
+        [
+          '-c',
+          `
+set -euo pipefail
+uname() { printf '%s\\n' "$FIXTURE_OS"; }
+source "$1"
+source "$1"
+printf '%s\\n' "$PATH" "$(command -v docker || true)" "$(command -v docker-credential-desktop || true)" "$DOCKER_HOST" "$DOCKER_CONTEXT" "$DOCKER_CONFIG"
+`,
+          'fixture',
+          helper,
+        ],
+        {
+          env: {
+            ...process.env,
+            PATH: initialPath,
+            FIXTURE_OS: os,
+            DOCKER_HOST: 'unix:///unchanged.sock',
+            DOCKER_CONTEXT: 'unchanged-context',
+            DOCKER_CONFIG: join(root, 'unchanged-config'),
+          },
+          encoding: 'utf8',
+          timeout: 5000,
+        },
+      );
+      expect(result.status).toBe(0);
+      const lines = result.stdout.trimEnd().split('\n');
+      expect(lines[0]).toBe(os === 'Darwin' ? `${initialPath}:${user}:${bundle}` : initialPath);
+      expect(lines[1]).toBe(
+        existing ? join(first, 'docker') : os === 'Darwin' ? join(user, 'docker') : '',
+      );
+      expect(lines[2]).toBe(os === 'Darwin' ? join(bundle, 'docker-credential-desktop') : '');
+      expect(lines.slice(3)).toEqual([
+        'unix:///unchanged.sock',
+        'unchanged-context',
+        join(root, 'unchanged-config'),
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

@@ -29,7 +29,7 @@ pnpm build
 bash scripts/checkpoint.sh scaffold
 ```
 
-See [where to write tests, lint rules and evals](docs/testing.md), including the optional [pytest harness](docs/testing-python.md) and editable [product eval cases](docs/evals.md). The [staging guide](docs/staging.md) covers the first Postal + Inbox pilot, required infrastructure/access, HTTPS ingress and offline preflight.
+See [where to write tests, lint rules and evals](docs/testing.md), including the optional [pytest harness](docs/testing-python.md) and editable [product eval cases](docs/evals.md). Start with the [staging owner checklist](docs/staging-owner-checklist.md) if you have no hosting/domain setup. The [staging guide](docs/staging.md) covers the first Postal + Inbox pilot, required infrastructure/access, HTTPS ingress and offline preflight.
 
 The checkpoint script fails when gitleaks is missing. Update PROGRESS.md and CHANGELOG.md after each coherent phase, run the checkpoint, commit once with a Conventional Commit scope, and push main. Never force push. `scripts/autopush.sh` only pushes an existing clean main branch and never creates commits. An optional developer-owned cron entry is `0 * * * * cd /absolute/path/to/flare && bash scripts/autopush.sh`; no cron is installed by this repository.
 

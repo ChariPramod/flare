@@ -14,7 +14,9 @@ The load stage stops the worker, submits at the default 10 requests/second plus 
 
 ## Completion ledger
 
-Current inbound/staging audit candidate passes local standard checks, 362 unit/database tests, 25 evals, 45 Python tests (four external skips), 23 Chrome contracts and package installation. Identical pending/parsed/failed inbound receipts survive readiness changes without new object writes; new receipt admission remains gated. Named bundled-Postal keys are checked against its signing key. Docker harness tests exercise remote-target rejection and unique-project cleanup after startup failure. The added independent-PostgreSQL receiving-disable race and candidate container execution are pending CI; Docker is still absent on this Mac.
+Inbound/staging audit checkpoint `03a7f9a` passed all five jobs in [CI 38681975740](https://github.com/ChariPramod/flare/actions/runs/38681975740): 362 unit/database tests, 25 evals, 45 Python tests (four external skips), 23 Chrome contracts, 23 real-service tests and nine live flows. The independent-PostgreSQL receipt/disable race passed. Load recovered 54 accepted sends with 30 expected throttles and 191,094,784 bytes peak API RSS; isolated restore took 42 seconds.
+
+Docker Desktop 4.95.0 is now installed on the Mac; Linux ARM64 runtime and an AMD64 emulation smoke check passed. Local staging ingress passed 43 private-route checks, four upstream routes and spoof rejection. The first integration run passed 22/23 but macOS sleep interrupted the two-minute crash lease wait; an awake rerun passed all 23 tests in 138.80s, including the unchanged lease/crash scenario in 121.376s. The Mac PATH follow-up passes 365 local unit/database tests and 25 evals; full local container acceptance is running and the follow-up's CI remains pending. Public/provider evidence remains separate.
 
 ### P0 sender-safety evidence map
 

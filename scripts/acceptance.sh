@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if [[ -x .tools/node/bin/node ]]; then export PATH="$PWD/.tools/node/bin:$PWD/.tools/pnpm/node_modules/.bin:$PWD/.tools/bin:$PATH"; fi
+source scripts/docker-path.sh
 node scripts/local-docker.mjs
 acceptance_dir=$(node scripts/acceptance/prepare.mjs)
 project="flare-acceptance-$(date +%s)-$$"

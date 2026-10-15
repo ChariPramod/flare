@@ -4,6 +4,8 @@ No staging host, domain or DNS zone has been provisioned. These files prepare a 
 
 The owner resumed staging preparation on 2026-10-14; hosting budget, region, domain and access details are still pending. The earlier infrastructure baseline, `82ec8c9`, passed all five jobs in [CI 38613630116](https://github.com/ChariPramod/flare/actions/runs/38613630116), including isolated Caddy routing/header checks. Resume provisioning only after those infrastructure decisions and access are available.
 
+Start with the [owner setup checklist](staging-owner-checklist.md) if you do not yet have hosting, a domain or DNS access. It includes a provider-support question and a handoff form without secrets.
+
 ## Provisioning checklist
 
 - Choose a dedicated host with a stable public IPv4 address, permitted outbound TCP 25 and control of its reverse-DNS/PTR record. Confirm these capabilities with the hosting provider before purchase; a generic VM does not imply mail egress is allowed. An initial planning allocation is 8 vCPU, 16 GiB RAM and 150 GiB SSD on Ubuntu 24.04 amd64, matching CI's OS family. This allocation has not been capacity benchmarked.

@@ -22,7 +22,7 @@ For sender-safety requirements, extend `tests/unit/sending-pipeline.test.ts` for
 
 Postal 3.3.7 publishes only a Linux AMD64 image; Compose explicitly selects that platform for Postal. The pinned Novu images include ARM64. On Apple Silicon, full acceptance therefore requires working AMD64 emulation in [Docker Desktop for Apple Silicon](https://docs.docker.com/desktop/setup/install/mac-install/) and may run more slowly. Registry manifests were inspected, but local emulated runtime remains unverified until Docker is installed.
 
-The container test launchers first run `node scripts/local-docker.mjs`, a read-only check for a reachable local Linux engine and Compose. Remote SSH/TCP Docker contexts are refused. Integration startup uses a unique project name and ignores the checkout's `.env`; failure cleanup removes only that invocation's project. Required loopback ports must be free: startup failure does not run schema/Redis resets or tear down a pre-existing stack. Integration tests reject custom `TEST_DATABASE_URL` and `TEST_REDIS_URL` values; use the exact disposable endpoints in `apps/worker/tests/targets.mjs`. Do not point these tests at an SSH tunnel or an existing service. Harness regressions live in `tests/unit/local-docker.test.ts`.
+The container test launchers first run `node scripts/local-docker.mjs`, a read-only check for a reachable local Linux engine and Compose. Remote SSH/TCP Docker contexts are refused. On macOS, launchers append installed Docker Desktop user/bundle paths so both the CLI and credential helpers work in an already-running desktop app; existing CLI/context selections are preserved. Integration startup uses a unique project name and ignores the checkout's `.env`; failure cleanup removes only that invocation's project. Required loopback ports must be free: startup failure does not run schema/Redis resets or tear down a pre-existing stack. Integration tests reject custom `TEST_DATABASE_URL` and `TEST_REDIS_URL` values; use the exact disposable endpoints in `apps/worker/tests/targets.mjs`. Do not point these tests at an SSH tunnel or an existing service. Harness regressions live in `tests/unit/local-docker.test.ts`.
 
 ## A useful test-writing loop
 
@@ -65,6 +65,15 @@ FLARE_TEST_BASE_URL=https://api.staging.your-domain.tld \
 ```
 
 Supply `FLARE_TEST_API_KEY` through a secret store or protected environment for authenticated reads. Never commit it. The API key selects its organization/environment; use a dedicated pilot key. Public checks verify authentication and that health/readiness endpoints remain private. Dependency readiness is checked separately through an SSH tunnel with `--staging-internal`; see the Python guide. Neither smoke mode verifies email delivery.
+
+For long container runs on a Mac, keep the lid open and prevent idle sleep only for the command's lifetime:
+
+```sh
+caffeinate -i bash scripts/integration.sh
+E2E_BROWSER_CHANNEL=chrome caffeinate -i bash scripts/acceptance.sh
+```
+
+Sleep can pause the Docker VM while host wall-clock deadlines advance. A timed-out crash/lease test after sleep is not a passing recovery result; rerun it awake without shortening leases or weakening assertions. `caffeinate -i` does not override closing the lid or an explicit sleep request.
 
 ## CI and staging gates
 

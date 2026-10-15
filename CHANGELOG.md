@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Inbound/staging checkpoint `03a7f9a` passed all five CI jobs (362 unit/database tests, 23 real-service tests, nine live flows). Installed Docker Desktop on the Mac and verified native/AMD64 execution and staging ingress. Added a fresh-shell Mac Docker PATH bootstrap and a step-by-step owner hosting/domain/DNS checklist. All 23 local integration tests passed with the Mac kept awake; full local acceptance remains running. Local run evidence is tracked separately in `PROGRESS.md`.
+
 - Acknowledge identical durable inbound receipts after DNS drift or receiving disablement while keeping new admission serialized with domain updates. Reject named callback keys that do not match bundled Postal. Isolate local integration cleanup by project and refuse remote Docker/custom store targets before destructive tests. Explicitly select the pinned AMD64-only Postal image for Apple Silicon emulation. Added regression and PostgreSQL race coverage; candidate execution is tracked in `PROGRESS.md`.
 
 - Sender-safety checkpoint `c307e1f` and forwarding checkpoint `a70140e` each passed all five CI jobs. Latest evidence: 351 unit/database tests, 25 evals, 45 Python tests (four external skips), 23 browser contracts, 22 real-service tests and nine live browser flows. Load recovered all 54 accepted sends without lost/duplicate submissions; isolated restore passed in 46 seconds. Local Mac containers and real staging/provider checks remain open.
