@@ -42,6 +42,10 @@ The printed elapsed time measures this small synthetic fixture, not a production
 
 The local Apple Silicon Mac passed the expanded drill on `953a0b5` in 27 seconds, including Redis RDB-to-AOF conversion/restart. [CI 38695595750](https://github.com/ChariPramod/flare/actions/runs/38695595750) independently passed the same checkpoint in 41 seconds; see the [acceptance ledger](acceptance.md) for the full measurements. The production infrastructure drill, encrypted off-host custody and provider reconciliation remain pending.
 
+### Unreferenced object residue after interrupted writes
+
+Inbound parsing and forwarded-message admission commit their references and logical work atomically in PostgreSQL, but MinIO writes happen before that commit. Abrupt process death can leave unreferenced body, attachment or MIME objects. There is currently no general orphan-object collector; normal error handlers cannot clean up after SIGKILL. Include this residue in storage capacity and data-retention planning. Do not apply a blanket age-based deletion policy to application objects, because accepted mail and active uncommitted uploads may still need them. Automatic cleanup requires durable upload tracking or another protocol that excludes active writers and rechecks committed references. The disposable crash tests remove only their own fixture objects; they do not provide production garbage collection.
+
 ## Troubleshooting
 
 | Symptom                          | First checks                                                                                                      |

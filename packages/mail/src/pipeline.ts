@@ -273,7 +273,9 @@ export async function submitEmails(
       ? run(settings.transaction)
       : withTenant(options.sql, p, run));
   } catch (error) {
-    // An outer transaction owns commit/rollback; preserve any objects for orphan cleanup.
+    // An outer transaction owns commit/rollback; its result is not known here.
+    // Preserve objects rather than risk deleting committed MIME. A general
+    // orphan collector is not implemented; interrupted uploads can leave residue.
     if (settings.transaction) throw error;
     // A lost COMMIT response is ambiguous too. Retain objects unless PostgreSQL
     // confirms they are unreferenced; an outage must never destroy accepted MIME.
@@ -288,7 +290,7 @@ export async function submitEmails(
           .map((k) => options.store.remove(k).catch(() => undefined)),
       );
     } catch {
-      /* Orphan cleanup can retry after storage/database recovery. */
+      /* Preserve uncertain objects; no general orphan collector runs yet. */
     }
     throw error;
   }
