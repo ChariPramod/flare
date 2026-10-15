@@ -7,6 +7,7 @@ import { fingerprint, canSend } from '@flare/shared';
 import type { Principal } from '@flare/shared';
 import { MailError, address, outbox, submitEmails, evidenceFresh } from '@flare/mail';
 import type { ObjectStore, PipelineOptions } from '@flare/mail';
+import { sendingPause } from './sending-pause.js';
 
 export function inboundLimits() {
   const limit = (name: string, fallback: number) => {
@@ -264,6 +265,13 @@ export async function forwardInbound(options: PipelineOptions, id: string) {
     });
   } catch (error) {
     await withTenant(options.sql, tenant, async (tx) => {
+      const pause = sendingPause(error);
+      if (pause) {
+        // Mail admission rolled back; retain the original receipt/rule and retry
+        // after operator remediation without spending the failure budget.
+        await tx`update inbound_forwards set error=${pause.reason},next_attempt_at=now()+${pause.seconds}*interval '1 second' where id=${id} and status='pending'`;
+        return;
+      }
       const permanent = error instanceof MailError && error.status < 500;
       await tx`update inbound_forwards set attempts=attempts+1,status=case when ${permanent} or attempts>=4 then 'failed' else 'pending' end,error=${permanent ? error.message.slice(0, 500) : 'Forwarding submission failed'},next_attempt_at=now()+interval '1 minute' where id=${id} and status='pending'`;
     });

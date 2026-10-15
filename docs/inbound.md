@@ -22,6 +22,8 @@ Create forwarding rules with `POST /v1/forwarding-rules`; list them with GET and
 
 Forwarding rewrites From, retains the original parsed From as Reply-To, preserves attachments, omits Bcc headers, and uses shared sender/TLS/suppression checks. It marks mail `Auto-Submitted: auto-generated` and `X-Flare-Forwarded`. Empty envelope senders, automatic messages and previously forwarded messages are skipped. Same receiving-domain destinations are rejected. The shared outbound limits still apply (including 50 attachments); an inbound message exceeding them remains readable and its forwarding operation fails explicitly. Forwarding submission is transactional with its outbound message ID, preventing duplicate submission on replay.
 
+Operator approval/suspension, exhausted recipient capacity and recoverable sender-readiness blocks keep the original forwarding operation `pending`. The worker records a bounded retry deadline and reason without consuming its failure budget or reserving another message. After eligibility returns, it submits the original rule/body once; disabling the rule still skips pending work. Unknown senders and malformed content remain permanent errors. Historical terminal failures are preserved rather than automatically reopened.
+
 The dashboard rebuilds received HTML as an allowlisted fragment, removes resource references and scripts, renders it in an empty sandbox with a restrictive CSP, and downloads attachments without opening them. Raw MIME is an authenticated original-source download and can include headers omitted from the parsed display.
 
 ## Verification status

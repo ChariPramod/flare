@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Inbound forwarding now preserves accepted work through approval/suspension, quota exhaustion and recoverable sender-readiness blocks. Retry deadlines persist without consuming the failure budget; recovery submits one outbound message using the original receipt and rule. Unknown senders and malformed content retain permanent-failure behavior.
+
 - Preserved campaign recipients and automation retries during known-sender DNS/TLS blocks, with retryable SMTP responses for temporary TLS capability outages. Fixed operator suspension with unchanged disabled routes, legacy complaint replay after restoration, and SES readiness invalidation racing with attempt admission. Content-bearing API routes, including publication diffs and mixed-case URLs, now omit bodies and queries from logs. Added reproducing database/SMTP/browser regressions and an independent-PostgreSQL readiness race test; candidate execution is tracked in `PROGRESS.md`.
 
 - P0 implementation checkpoint `54743f0` passed all five CI jobs: 318 unit/database tests, 21 real-service tests, 22 browser contracts, nine live browser flows, 25 evals and 45 Python tests (four external skips). Shared quotas, scheduled pacing, operator MFA and actual email SIGKILL/lease recovery passed. Full-stack load recovered 54 sends without duplicates; isolated restore passed in 41 seconds. Local Mac Docker and external provider evidence remain pending.

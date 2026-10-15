@@ -6,7 +6,13 @@ import { beforeAll, beforeEach, afterAll, it, expect } from 'vitest';
 import { connectDatabase, withTenant } from '../../packages/db/src/index.js';
 import type { Sql } from '../../packages/db/src/index.js';
 import type { Principal } from '../../packages/shared/src/index.js';
-import { generateDomain, verifyPostal } from '../../packages/mail/src/index.js';
+import {
+  generateDomain,
+  verifyPostal,
+  submitEmails,
+  changeSchedule,
+} from '../../packages/mail/src/index.js';
+import { configureMarketingFixture } from './helpers/sending-policy.js';
 import type { PipelineOptions, TransportAdapter } from '../../packages/mail/src/index.js';
 const org = randomUUID(),
   env = randomUUID(),
@@ -88,6 +94,7 @@ beforeEach(async () => {
   await sql`truncate inbound_messages,forwarding_rules cascade`;
   await sql`update domains set receiving=true,status='verified',checked_at=now(),records=${sql.json([{ purpose: 'receiving', type: 'MX', name: 'example.com', value: 'postal.example.com', status: 'verified' }])}`;
   objects.clear();
+  options.transports = [accepted];
 });
 afterAll(async () => {
   await sql.end();
@@ -301,4 +308,116 @@ it('enforces decoded attachment limits and verifies native Postal signatures aga
   expect(() =>
     verifyPostal(Buffer.concat([bytes, Buffer.from(' ')]), signature, publicKey),
   ).toThrow();
+});
+
+async function pendingForward() {
+  const rule = await withTenant(sql, principal, (tx) =>
+    validateForwardingRule(tx, principal, {
+      domain_id: domainId,
+      sender: 'forward@example.com',
+      destinations: ['destination@example.net'],
+    }),
+  );
+  await sql`insert into forwarding_rules(org_id,environment_id,domain_id,sender,destinations) values(${org},${env},${domainId},${rule.sender},${sql.json(rule.destinations)})`;
+  const receipt = await acceptInbound(sql, options.store, domainId, payload());
+  await parseInbound(sql, options.store, receipt.id);
+  return (await sql`select * from inbound_forwards where inbound_id=${receipt.id}`)[0]!;
+}
+
+it.each(['suspension', 'quota', 'domain drift'] as const)(
+  'retains accepted forwarding work during %s and resumes exactly once',
+  async (block) => {
+    const policy = await configureMarketingFixture(options, principal);
+    const job = await pendingForward();
+    const id = String(job.id);
+    const inboundBefore = (
+      await sql`select * from inbound_messages where id=${job.inbound_id}`
+    )[0]!;
+    const bodyBefore = Buffer.from(objects.get(String(inboundBefore.body_key))!);
+    let prior: string | undefined;
+    if (block === 'suspension') await policy.change({ state: 'suspended' });
+    else if (block === 'domain drift')
+      await sql`update domains set status='temporary_failure' where id=${domainId}`;
+    else
+      prior = (
+        await submitEmails(options, { ...principal, kind: 'session' }, [
+          {
+            from: 'sender@example.com',
+            to: ['prior@example.net'],
+            subject: 'Prior reservation',
+            text: 'Capacity',
+          },
+        ])
+      ).data[0]!.id;
+    const code =
+      block === 'quota'
+        ? 'recipient_quota_exhausted'
+        : block === 'domain drift'
+          ? 'domain_unverified'
+          : 'sending_not_approved';
+    await expect(forwardInbound(options, id)).rejects.toMatchObject({ code });
+    const [paused] =
+      await sql`select *,next_attempt_at>now() as deferred from inbound_forwards where id=${id}`;
+    expect(paused).toMatchObject({
+      id: job.id,
+      inbound_id: job.inbound_id,
+      rule_id: job.rule_id,
+      rule: job.rule,
+      status: 'pending',
+      attempts: 0,
+      message_id: null,
+      deferred: true,
+      error: expect.stringContaining(code),
+    });
+    expect(objects.get(String(inboundBefore.body_key))).toEqual(bodyBefore);
+    expect((await sql`select * from inbound_messages where id=${job.inbound_id}`)[0]).toEqual(
+      inboundBefore,
+    );
+    expect(await sql`select * from messages`).toHaveLength(prior ? 1 : 0);
+    expect(await sql`select * from sending_quota`).toHaveLength(prior ? 1 : 0);
+    expect(await sql`select * from transport_attempts`).toHaveLength(0);
+    await forwardInbound(options, id);
+    expect((await sql`select attempts from inbound_forwards where id=${id}`)[0]?.attempts).toBe(0);
+    if (prior) await changeSchedule(sql, { ...principal, kind: 'session' }, prior, null);
+    else if (block === 'domain drift')
+      await sql`update domains set status='verified' where id=${domainId}`;
+    else await policy.change({ state: 'approved' });
+    await sql`update inbound_forwards set next_attempt_at=now() where id=${id}`;
+    await forwardInbound(options, id);
+    await forwardInbound(options, id);
+    const [submitted] = await sql`select * from inbound_forwards where id=${id}`;
+    expect(submitted).toMatchObject({
+      status: 'submitted',
+      attempts: 1,
+      error: null,
+      inbound_id: job.inbound_id,
+      rule: job.rule,
+    });
+    expect(await sql`select * from messages where id=${submitted!.message_id}`).toHaveLength(1);
+    expect(await sql`select * from messages`).toHaveLength(prior ? 2 : 1);
+    expect(await sql`select * from sending_quota where state='reserved'`).toHaveLength(1);
+    const [outbound] = await sql`select mime_key from messages where id=${submitted!.message_id}`;
+    const mime = objects.get(String(outbound!.mime_key))!.toString();
+    expect(mime).toContain('Reply-To: original@example.net');
+    expect(mime).toContain('Hello inbound');
+    expect(mime).toContain(`X-Flare-Forwarded: ${id}`);
+  },
+);
+
+it('keeps an unknown saved forwarding sender permanently failed', async () => {
+  await configureMarketingFixture(options, principal);
+  const job = await pendingForward();
+  // A historical saved rule may refer to a sender domain that no longer exists.
+  await sql`update inbound_forwards set rule=${sql.json({ ...job.rule, sender: 'forward@unknown.example' })} where id=${job.id}`;
+  await expect(forwardInbound(options, String(job.id))).rejects.toMatchObject({ status: 403 });
+  expect(
+    (await sql`select status,attempts,error from inbound_forwards where id=${job.id}`)[0],
+  ).toMatchObject({
+    status: 'failed',
+    attempts: 1,
+    error: expect.stringContaining('not verified'),
+  });
+  await forwardInbound(options, String(job.id));
+  expect(await sql`select * from messages`).toHaveLength(0);
+  expect(await sql`select * from sending_quota`).toHaveLength(0);
 });
