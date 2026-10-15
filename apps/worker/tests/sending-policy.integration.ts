@@ -21,6 +21,8 @@ import {
   updateSendingPolicy,
   recordEvent,
   restoreProtectedSuppression,
+  updateDomainReadiness,
+  protectSuppression,
 } from '@flare/mail';
 import type { NamedTransportConfig, PipelineOptions, TransportAdapter } from '@flare/mail';
 import { startRelayFixture } from '../../smtp-relay/tests/relay-fixture.js';
@@ -183,6 +185,52 @@ async function fixture(dailyLimit = 100, perMinuteLimit = 100) {
   });
   return { orgId, environmentId, first: credentials[0]!, second: credentials[1]!, change };
 }
+async function productionFixture(tenant: Awaited<ReturnType<typeof fixture>>) {
+  const environmentId = randomUUID(),
+    domainId = randomUUID(),
+    credentialId = randomUUID(),
+    domain = 'production.example.net';
+  const { orgId } = tenant;
+  await sql`insert into environments(id,org_id,name) values(${environmentId},${orgId},'Production')`;
+  const keys = generateDomain(domain, `${orgId}/${environmentId}`, key);
+  const checkedAt = new Date(Date.now() - 1000).toISOString();
+  // Synthetic DNS and operator-reviewed headers permit Production policy testing
+  // against Mailpit. They are not evidence of live DNS or receiver authentication.
+  await sql`insert into domains(id,org_id,environment_id,name,status,dkim_selector,dkim_public,dkim_private_cipher,checked_at,records,dmarc_evidence,next_check_at) values(${domainId},${orgId},${environmentId},${domain},'verified',${keys.selector},${keys.publicKey},${keys.cipher},now(),${sql.json([{ purpose: 'dkim', status: 'verified' }])},${sql.json({ status: 'verified', record_domain: domain, checked_at: checkedAt, inherited: false, policy: 'none', adkim: 'r', aspf: 'r' })},now()+interval '1 day')`;
+  const [policy] = await sql`select revision from sending_policies where org_id=${orgId}`;
+  await updateDomainReadiness(
+    sql,
+    actor,
+    orgId,
+    domainId,
+    {
+      expected_revision: Number(policy!.revision),
+      reason: 'Fixture operator records synthetic receiver evidence for concurrency tests',
+      evidence: {
+        kind: 'received_headers',
+        provenance: 'operator_attested_receiver_headers',
+        transport_instance: config.id,
+        proof_reference: 'integration-fixture/not-live-receiver-evidence',
+        checked_at: checkedAt,
+        header_from_domain: domain,
+        dkim_domain: domain,
+        dkim_pass: true,
+        mail_from_domain: domain,
+        spf_pass: true,
+        dmarc_pass: true,
+      },
+    },
+    options.transports,
+  );
+  await sql`insert into api_keys(id,org_id,environment_id,name,token_hash,prefix,permission) values(${credentialId},${orgId},${environmentId},'Production integration credential',${hashToken(`fl_${randomUUID()}`)},'fl_test','sending_access')`;
+  const principal: Principal = {
+    ...tenant.first.principal,
+    actorId: credentialId,
+    environmentId,
+    production: true,
+  };
+  return { principal, from: `sender@${domain}`, options: { ...options, sql: relaySql } };
+}
 const input = (subject = `Policy integration ${randomUUID()}`) => ({
   from: 'sender@example.com',
   to: ['reader@example.net'],
@@ -274,6 +322,145 @@ it('rolls back a strict batch and releases canceled reservations before another 
     await sql`select * from sending_quota where org_id=${tenant.orgId} and state='reserved'`,
   ).toHaveLength(1);
   await cancelUnstarted(tenant);
+});
+
+it('shares daily reservations across domains and environments and releases canceled or suppressed work', async () => {
+  const tenant = await fixture(1);
+  const production = await productionFixture(tenant);
+  const contexts = [
+    { principal: tenant.first.principal, from: 'sender@example.com', options },
+    production,
+  ];
+  const outcomes = await Promise.allSettled(
+    contexts.map((context) =>
+      submitEmails(context.options, context.principal, [{ ...input(), from: context.from }]),
+    ),
+  );
+  expect(outcomes.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+  const rejected = outcomes.find((result) => result.status === 'rejected');
+  expect(rejected).toMatchObject({ status: 'rejected', reason: { status: 429 } });
+  const winnerIndex = outcomes.findIndex((result) => result.status === 'fulfilled');
+  const winner = outcomes[winnerIndex]!;
+  if (winner.status !== 'fulfilled') throw new Error('Missing accepted quota competitor');
+  const winnerContext = contexts[winnerIndex]!,
+    loserContext = contexts[1 - winnerIndex]!;
+  expect(await sql`select * from sending_quota where org_id=${tenant.orgId}`).toHaveLength(1);
+  expect(await sql`select * from messages where org_id=${tenant.orgId}`).toHaveLength(1);
+  await changeSchedule(
+    winnerContext.options.sql,
+    winnerContext.principal,
+    winner.value.data[0]!.id,
+    null,
+  );
+  const next = (
+    await submitEmails(loserContext.options, loserContext.principal, [
+      { ...input(), from: loserContext.from },
+    ])
+  ).data[0]!.id;
+  expect(
+    await sql`select * from sending_quota where org_id=${tenant.orgId} and state='reserved'`,
+  ).toHaveLength(1);
+  // A restriction created in the other environment must suppress this domain too.
+  await withTenant(winnerContext.options.sql, winnerContext.principal, (tx) =>
+    protectSuppression(tx, winnerContext.principal, 'reader@example.net', 'manual'),
+  );
+  await deliverEmail(loserContext.options, next);
+  expect((await sql`select status from messages where id=${next}`)[0]?.status).toBe('suppressed');
+  expect(await sql`select state from sending_quota where org_id=${tenant.orgId}`).toEqual([
+    { state: 'released' },
+    { state: 'released' },
+  ]);
+  expect(await sql`select * from transport_attempts where org_id=${tenant.orgId}`).toHaveLength(0);
+  // Released slots are usable again, even from the previously rejected environment.
+  const replacement = (
+    await submitEmails(loserContext.options, loserContext.principal, [
+      { ...input(), from: loserContext.from, to: ['replacement@example.net'] },
+    ])
+  ).data[0]!.id;
+  await changeSchedule(loserContext.options.sql, loserContext.principal, replacement, null);
+});
+
+it('serializes simultaneous due schedules across environments into one paced dispatch and durable holds', async () => {
+  const tenant = await fixture(2, 1);
+  const production = await productionFixture(tenant);
+  const contexts = [
+    { principal: tenant.first.principal, from: 'sender@example.com', options },
+    production,
+  ];
+  const subjects = contexts.map(() => `Scheduled cross-environment ${randomUUID()}`);
+  const ids = await Promise.all(
+    contexts.map(
+      async (context, index) =>
+        (
+          await submitEmails(context.options, context.principal, [
+            {
+              ...input(subjects[index]),
+              from: context.from,
+              scheduled_at: new Date(Date.now() + 3600000).toISOString(),
+            },
+          ])
+        ).data[0]!.id,
+    ),
+  );
+  expect(await sql`select * from sending_quota where org_id=${tenant.orgId}`).toHaveLength(0);
+  await Promise.all(ids.map((id, index) => deliverEmail(contexts[index]!.options, id)));
+  expect(await sql`select * from transport_attempts where org_id=${tenant.orgId}`).toHaveLength(0);
+  // Make persisted schedules due; no application clock hooks or pacing bypasses.
+  await sql`update messages set scheduled_at=now(),next_attempt_at=now() where org_id=${tenant.orgId} and id in ${sql(ids)}`;
+  await Promise.all(ids.map((id, index) => deliverEmail(contexts[index]!.options, id)));
+  const messages =
+    await sql`select id,status,hold_reason,claim_id,lease_until,delivery_started_at,next_attempt_at>now() as retry_pending from messages where org_id=${tenant.orgId}`;
+  expect(messages.filter((message) => message.status === 'sent')).toHaveLength(1);
+  const held = messages.filter((message) => message.status === 'held');
+  expect(held).toHaveLength(1);
+  expect(held[0]).toMatchObject({
+    hold_reason: 'sending_rate_limited',
+    claim_id: null,
+    lease_until: null,
+    delivery_started_at: null,
+    retry_pending: true,
+  });
+  expect(await sql`select state from sending_quota where org_id=${tenant.orgId}`).toEqual([
+    { state: 'consumed' },
+  ]);
+  expect(await sql`select recipients from sending_dispatches where org_id=${tenant.orgId}`).toEqual(
+    [{ recipients: 1 }],
+  );
+  expect(await sql`select status from transport_attempts where org_id=${tenant.orgId}`).toEqual([
+    { status: 'accepted' },
+  ]);
+  const heldId = String(held[0]!.id),
+    heldContext = contexts[ids.indexOf(heldId)]!;
+  expect(await sql`select * from sending_quota where message_id=${heldId}`).toHaveLength(0);
+  expect(
+    await sql`select * from event_outbox where org_id=${tenant.orgId} and type='email.held' and data->>'email_id'=${heldId}`,
+  ).toHaveLength(1);
+  const freshSql = connectDatabase(url, { max: 2 }).client;
+  try {
+    await deliverEmail({ ...options, sql: freshSql }, heldId);
+    expect(
+      (
+        await freshSql`select status,claim_id,delivery_started_at from messages where id=${heldId}`
+      )[0],
+    ).toMatchObject({ status: 'held', claim_id: null, delivery_started_at: null });
+    expect(
+      await freshSql`select * from transport_attempts where org_id=${tenant.orgId}`,
+    ).toHaveLength(1);
+    await changeSchedule(freshSql, heldContext.principal, heldId, null);
+    await deliverEmail({ ...options, sql: freshSql }, heldId);
+    expect((await freshSql`select status from messages where id=${heldId}`)[0]?.status).toBe(
+      'canceled',
+    );
+  } finally {
+    await freshSql.end();
+  }
+  expect(await sql`select state from sending_quota where org_id=${tenant.orgId}`).toEqual([
+    { state: 'consumed' },
+  ]);
+  const mailpit = (await fetch('http://127.0.0.1:18025/api/v1/messages').then((response) =>
+    response.json(),
+  )) as { messages: { Subject: string }[] };
+  expect(mailpit.messages.filter((message) => subjects.includes(message.Subject))).toHaveLength(1);
 });
 
 it('rejects a foreign credential and isolates quota visibility across real tenant transactions', async () => {

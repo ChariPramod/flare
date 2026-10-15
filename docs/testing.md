@@ -18,6 +18,8 @@ The existing test patterns are executable examples. For an email bug, put the re
 
 For sender-safety requirements, extend `tests/unit/sending-pipeline.test.ts` for durable holds, reservations and the final attempt boundary, or `packages/mail/src/feedback-receipts.test.ts` for feedback replay and audited suppression restoration. The multi-connection quota/SMTP/feedback cases belong in `apps/worker/tests/sending-policy.integration.ts`; a PGlite test with one connection does not establish concurrency safety. Operator UI contracts live in `tests/e2e/operator.spec.ts`, and real session/MFA flows in `tests/live/operator.spec.ts`. Keep public DNS, physical pool and receiver evidence out of simulated success claims.
 
+`apps/worker/tests/email-crash.integration.ts` kills a child delivery process after actual Mailpit acceptance and waits for the unchanged two-minute lease. It checks quarantine, retained quota, rejected redrive and stale Redis jobs across two worker restarts. This deliberately adds about two minutes to integration runtime; do not shorten it by editing the lease or substituting a mocked clock. The child fixture rejects targets outside the disposable database, Redis namespace, MinIO bucket and loopback Mailpit listener.
+
 ## A useful test-writing loop
 
 1. Write one observable requirement in plain language, such as “a missing French translation falls back to the default English value.”

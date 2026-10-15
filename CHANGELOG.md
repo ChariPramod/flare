@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added real-service acceptance for cross-domain/environment quota contention, simultaneous scheduled dispatch pacing, and outbound-email SIGKILL after SMTP acceptance with actual lease expiry. The crash scenario verifies retained usage, ambiguity quarantine and no replay across worker restarts; execution evidence is recorded in the acceptance ledger.
+
 - Fixed DNS and SES poll completion against native PostgreSQL timestamp precision. Explicit text binding preserves microseconds in guarded claim updates; regressions force sub-millisecond values that the embedded test clock does not normally produce.
 
 - Hardened the P0 follow-up: retain accepted messages during final TLS capability-probe outages, bound SES capability requests, and retain provider receipt history without replaying complaint/bounce restrictions after audited operator restoration. Added database regressions for fresh callback IDs and classification upgrades.
