@@ -75,6 +75,22 @@ E2E_BROWSER_CHANNEL=chrome caffeinate -i bash scripts/acceptance.sh
 
 Sleep can pause the Docker VM while host wall-clock deadlines advance. A timed-out crash/lease test after sleep is not a passing recovery result; rerun it awake without shortening leases or weakening assertions. `caffeinate -i` does not override closing the lid or an explicit sleep request.
 
+## Sustained load and populated upgrade rehearsals
+
+The full-stack script now runs a three-minute mixed workload after the short queue-loss smoke. For a longer local run:
+
+```sh
+ACCEPTANCE_SOAK_SECONDS=600 E2E_BROWSER_CHANNEL=chrome caffeinate -i bash scripts/acceptance.sh
+```
+
+`ACCEPTANCE_SOAK_SECONDS` accepts 120–1800 seconds (default 180). The runner creates fresh email, signed inbound receipts and native Inbox work alongside API reads, idempotent replays and concurrent bursts. It pauses only the disposable Flare worker for 20 seconds while submissions continue, then requires the durable backlog to drain. The separate existing scenarios still exercise full queue loss and abrupt crashes.
+
+The safe numeric summary records offered/completed API requests, throttles, unique operations, response percentiles, post-admission drain time, peak backlog/age, and sampled API/worker RSS. It checks actual paginated Mailpit receipts, database/provider-attempt identities, inbound outbox events and Inbox contents independently. Mailpit retention is increased only in the acceptance overlay so long runs cannot silently evict evidence. Worker RSS is unavailable during the intentional stop; other collection failures fail the run. Defaults are a 768 MiB sampled RSS ceiling, a five-second successful-request p95 ceiling and a 120-second oldest pending-operation bound. The memory and p95 limits can be configured with `ACCEPTANCE_MEMORY_MAX_BYTES` and `ACCEPTANCE_SOAK_P95_MS`; record changed thresholds with results rather than weakening them after a failure.
+
+The workload uses the isolated Mailpit sandbox and its explicit quota exemption. It does not measure real-provider throughput or the pilot's 100/day allowance, prove absence of memory leaks, or establish production sizing. Root tests in `tests/unit/sustained-load.test.ts` cover configuration/evidence helpers and refusal of unsafe targets; container acceptance is the runtime evidence. Detailed private samples are deleted with the disposable stack; retain only the numeric console summary when recording results.
+
+Before application scenarios, `upgrade-rehearsal.sh` populates the committed `62aaa57` schema with two organizations/four environments, pinned template versions, scheduled/active/terminal mail and durable workflow, automation, webhook and broadcast state. It takes a real pre-upgrade `pg_dump`, upgrades and verifies unchanged original values plus intentional migration changes, reruns the migrator, restores the dump into a separate database, then verifies and upgrades that copy twice. `tests/unit/upgrade-rehearsal.test.ts` checks the populated fixture and detects lost or changed history. This same-cluster database fallback is separate from the final fresh-volume multi-store restore and never starts delivery processes or certifies down migrations.
+
 ## CI and staging gates
 
 `.github/workflows/ci.yml` runs unit/database tests, deterministic evals, Python lint/tests, package installation, fixture browser contracts, staging configuration validation, real-service integration and pinned full-stack acceptance. The Python staging cases remain skipped in ordinary CI because no deployment or provider credentials are supplied. Configuration validation does not issue public certificates or deploy a host.

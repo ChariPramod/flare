@@ -12,7 +12,27 @@ Additional hosting-independent scenarios run after authentication and email setu
 
 The load stage stops the worker, submits at the default 10 requests/second plus a simultaneous 40-request burst, checks throttling headers and repeated idempotency keys, then deletes only the disposable Redis database and restarts the worker. It requires all accepted logical messages to reach Mailpit with exactly one transport attempt and no duplicate database operation. API/worker RSS is sampled against a configurable `ACCEPTANCE_MEMORY_MAX_BYTES` ceiling (768 MiB default). This is a bounded reproducible smoke load, not a maximum throughput benchmark or production sizing guarantee.
 
+The sustained mixed-load stage defaults to 180 seconds, with `ACCEPTANCE_SOAK_SECONDS=600` selecting a ten-minute local run. It continues fresh email, signed inbound and native Inbox work through a controlled 20-second Flare worker pause, verifies actual Mailpit receipt counts alongside logical identities/outbox/Inbox contents, and bounds request latency, sampled process RSS and oldest durable backlog. This stage uses sandbox quotas; the existing separate policy integration tests verify pilot admission limits. Results below distinguish the actual duration and host from the existence of the scenario.
+
+The populated upgrade stage now snapshots the committed baseline before migrating, restores that actual `pg_dump` into a second isolated database, and upgrades it again. Both paths run migrations twice. The final multi-store restore additionally proves rollback-only tenant writes and broader behavioral isolation; neither rehearsal enables delivery or substitutes for off-host recovery. See [testing instructions](testing.md#sustained-load-and-populated-upgrade-rehearsals) and [upgrade boundaries](deployment.md#populated-upgrade-and-snapshot-fallback-acceptance).
+
 ## Completion ledger
+
+**Sustained/upgrade candidate: local verification passed; CI awaits upload.** Standard checkpoint: 372 unit/database tests, 25 evals, 23 browser contracts, 45 Python tests (four external skips), packages and all static/build/secret checks. All 23 PostgreSQL/Redis/MinIO/Mailpit tests passed in 138.41s. Full-stack acceptance exited 0 with nine real Chrome flows, populated baseline upgrade, exact pg_dump snapshot recovery and both migration reruns, the existing crash/queue-loss scenarios and the expanded multi-store restore in 27s. Cleanup removed both disposable projects.
+
+| Local mixed workload measurement | Observed value |
+| --- | --- |
+| Admission duration | 600 seconds |
+| Rate-limited API requests | 6,359 offered/completed; 6,005 successful; 354 expected throttles; none skipped |
+| Unique completed operations | 600 emails, 60 inbound messages, 30 Inbox deliveries |
+| Logical/provider/actual receipt duplicates or losses | None observed |
+| Successful API response p50 / p95 | 6.79 / 23.47 ms |
+| Peak sampled API / worker RSS | 220,200,960 / 208,437,248 bytes (121 samples; worker unavailable during intentional stop) |
+| Peak durable backlog / oldest pending operation | 26 / 21.23 seconds |
+| Final drain after admission ended | 64.52 ms |
+| Controlled interruption | Graceful worker stop; 20 seconds of continued admission; restart |
+
+The final drain is not a measurement from restart to recovery. These are small-message Mailpit-sandbox observations with explicit quota exemption, not a production sizing, leak-freedom or real-provider claim. The pre-upgrade dump recovery shares its PostgreSQL cluster/roles and starts no old application binary; the final multi-store restore uses fresh volumes and never enables delivery.
 
 **Current implementation `a7ed844` passed all five jobs** in [CI 38687921843](https://github.com/ChariPramod/flare/actions/runs/38687921843): 365 unit/database tests, 25 evals, 45 Python tests (four external skips), 23 browser contracts, 23 real-service tests and nine live browser flows. CI load recovered all 54 accepted sends with 29 expected throttles, no lost/duplicate logical or provider submissions and 196,440,064 bytes peak sampled API RSS. Isolated restore passed in 46 seconds. Standard lint/types/OpenAPI/build/secrets, package installation, staging ingress and the full pinned-stack scenarios passed.
 

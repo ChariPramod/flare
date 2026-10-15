@@ -10,7 +10,10 @@ project="flare-integration-$(date +%s)-$$-$RANDOM"
 compose=(docker compose --project-name "$project" --env-file /dev/null -f docker-compose.test.yml)
 cleanup() {
   result=$?
-  "${compose[@]}" down -v --remove-orphans || true
+  if ! "${compose[@]}" down -v --remove-orphans; then
+    echo 'Disposable integration cleanup failed; inspect the named project before rerunning.' >&2
+    if [[ "$result" -eq 0 ]]; then result=1; fi
+  fi
   exit "$result"
 }
 trap cleanup EXIT

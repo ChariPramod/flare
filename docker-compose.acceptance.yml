@@ -1,5 +1,8 @@
 # Used only by scripts/acceptance.sh in a disposable generated directory.
 services:
+  mailpit:
+    # Keep the longest bounded soak's receipts for independent duplicate checks.
+    command: ['--max', '5000']
   acceptance-dns:
     image: coredns/coredns:1.12.4
     command: [-conf, /zones/Corefile]

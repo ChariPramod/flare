@@ -46,6 +46,14 @@ try {
     'domains',
     'messages',
     'inbound_messages',
+    'workflows',
+    'workflow_runs',
+    'layouts',
+    'layout_versions',
+    'translations',
+    'translation_versions',
+    'publication_operations',
+    'publication_items',
   ])
     assert.ok(data[required]?.count > 0, `Restore fixture needs nonempty ${required}`);
   phase = 'postgres-schema';
@@ -61,7 +69,7 @@ try {
   const [role] =
     await sql`select rolcanlogin,rolsuper,rolbypassrls from pg_roles where rolname='flare_tenant'`;
   assert.deepEqual(role, { rolcanlogin: false, rolsuper: false, rolbypassrls: false });
-  const [domain] = await sql`select org_id,environment_id from domains limit 1`;
+  const [domain] = await sql`select id,org_id,environment_id from domains limit 1`;
   await withTenant(
     sql,
     { orgId: domain.org_id, environmentId: domain.environment_id },
@@ -73,6 +81,68 @@ try {
       assert.equal((await tx`select id from domains`).length, 0, 'Restored tenant isolation');
     },
   );
+  phase = 'tenant-write-rollback';
+  const probeIdentifier = `restore-probe-${randomUUID()}`;
+  const rollback = new Error('rollback-only restore probe');
+  await assert.rejects(
+    withTenant(sql, { orgId: domain.org_id, environmentId: domain.environment_id }, async (tx) => {
+      const [written] =
+        await tx`insert into workflows(org_id,environment_id,identifier,definition) values(${domain.org_id},${domain.environment_id},${probeIdentifier},'{}') returning id`;
+      assert.ok(written.id, 'Restored default UUID and tenant insert permission');
+      assert.equal(
+        (await tx`select id from workflows where identifier=${probeIdentifier}`).length,
+        1,
+      );
+      throw rollback;
+    }),
+    (error) => error === rollback,
+  );
+  assert.equal(
+    (await sql`select id from workflows where identifier=${probeIdentifier}`).length,
+    0,
+    'Restore probe transaction rolled back',
+  );
+  phase = 'tenant-composite-foreign-key';
+  // A real but differently scoped parent must never be accepted, even by the privileged connection.
+  const [foreignEnvironment] =
+    await sql`select org_id,id from environments where id<>${domain.environment_id} limit 1`;
+  assert.ok(foreignEnvironment, 'Composite key probe needs another environment');
+  await assert.rejects(
+    sql`insert into messages(id,org_id,environment_id,domain_id,request,envelope_from,status) values(gen_random_uuid(),${foreignEnvironment.org_id},${foreignEnvironment.id},${domain.id},'{}','restore-probe@example.invalid','queued')`,
+    (error) => error.code === '23503',
+  );
+  phase = 'tenant-restored-resources';
+  for (const table of [
+    'messages',
+    'inbound_messages',
+    'workflows',
+    'workflow_runs',
+    'layout_versions',
+    'translation_versions',
+  ]) {
+    const [scope] = await sql`select org_id,environment_id from ${sql(table)} limit 1`;
+    assert.ok(scope, `Restore isolation fixture: ${table}`);
+    await withTenant(
+      sql,
+      { orgId: scope.org_id, environmentId: scope.environment_id },
+      async (tx) => {
+        const visible = await tx`select org_id,environment_id from ${tx(table)}`;
+        assert.ok(
+          visible.length > 0 &&
+            visible.every(
+              (row) => row.org_id === scope.org_id && row.environment_id === scope.environment_id,
+            ),
+          `Restored tenant scope: ${table}`,
+        );
+        await tx`select set_config('flare.org_id',${randomUUID()},true)`;
+        assert.equal(
+          (await tx`select org_id from ${tx(table)}`).length,
+          0,
+          `Restored foreign tenant isolation: ${table}`,
+        );
+      },
+    );
+  }
   phase = 'dkim-decryption';
   for (const row of await sql`select * from domains`) {
     createPrivateKey(

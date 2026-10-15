@@ -68,7 +68,7 @@ describe('disposable Docker target boundaries', () => {
   });
 });
 
-function exerciseIntegration(upFails: boolean, remote = false) {
+function exerciseIntegration(upFails: boolean, remote = false, downFails = false) {
   const root = mkdtempSync(join(tmpdir(), 'flare-docker-harness-'));
   try {
     for (const folder of ['scripts', 'apps/worker/tests', 'bin'])
@@ -91,6 +91,7 @@ fs.appendFileSync(process.env.FIXTURE_LOG, JSON.stringify(['docker', ...args]) +
 if (args[0] === 'context') console.log('unix:///fixture.sock');
 if (args[0] === 'info') console.log('{"OSType":"linux"}');
 if (args.includes('up') && process.env.FIXTURE_UP_FAILS === 'true') process.exitCode = 17;
+if (args.includes('down') && process.env.FIXTURE_DOWN_FAILS === 'true') process.exitCode = 19;
 `,
       { mode: 0o700 },
     );
@@ -111,6 +112,7 @@ require('node:fs').appendFileSync(process.env.FIXTURE_LOG, JSON.stringify(['pnpm
         PATH: `${join(root, 'bin')}:${process.env.PATH}`,
         FIXTURE_LOG: log,
         FIXTURE_UP_FAILS: String(upFails),
+        FIXTURE_DOWN_FAILS: String(downFails),
         COMPOSE_PROJECT_NAME: 'important-existing-stack',
         ...(remote ? { DOCKER_HOST: 'ssh://staging' } : {}),
       },
@@ -156,6 +158,16 @@ describe('integration launcher cleanup ownership', () => {
     expect(result.status).toBe(1);
     expect(result.output).toContain('local-docker-required');
     expect(result.calls).toEqual([]);
+  });
+  it('fails if cleanup fails after passing tests, and preserves an earlier failure', () => {
+    const passed = exerciseIntegration(false, false, true);
+    expect(passed.status).toBe(1);
+    expect(passed.calls).toContainEqual(['pnpm', 'test:integration']);
+    expect(passed.output).toContain('cleanup failed');
+    const failed = exerciseIntegration(true, false, true);
+    expect(failed.status).toBe(17);
+    expect(failed.calls.some((call) => call[0] === 'pnpm')).toBe(false);
+    expect(failed.output).toContain('cleanup failed');
   });
 });
 

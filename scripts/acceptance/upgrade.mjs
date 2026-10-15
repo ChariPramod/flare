@@ -1,67 +1,168 @@
-import { readFileSync, readdirSync } from 'node:fs';
-import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { sql } from './common.mjs';
-import { connectDatabase } from '../../packages/db/dist/index.js';
-await sql.unsafe('create database flare_upgrade_test');
+import { connectDatabase, withTenant } from '../../packages/db/dist/index.js';
+import {
+  seedUpgradeFixtures,
+  captureUpgradeRows,
+  assertPreservedRows,
+} from './upgrade-fixtures.mjs';
+
+const mode = process.argv[2];
+const database = process.argv[3];
+assert.ok(['prepare', 'baseline', 'migrate', 'cleanup'].includes(mode));
+assert.ok(['flare_upgrade_test', 'flare_upgrade_restored'].includes(database));
 const url = new URL(process.env.DATABASE_URL);
-url.pathname = '/flare_upgrade_test';
-const { client: old } = connectDatabase(url.href);
+url.pathname = `/${database}`;
+let client;
+let created = false;
 try {
-  await old`create table flare_migrations(name text primary key, hash text not null, applied_at timestamptz not null default now())`;
-  for (const name of readdirSync('/acceptance/baseline').sort()) {
-    const source = readFileSync(`/acceptance/baseline/${name}`, 'utf8');
-    await old.unsafe(source);
-    await old`insert into flare_migrations(name,hash) values(${name},${createHash('sha256').update(source).digest('hex')})`;
+  if (mode === 'cleanup') {
+    await sql`drop database if exists ${sql(database)}`;
+  } else {
+    if (mode === 'prepare') {
+      await sql`create database ${sql(database)}`;
+      created = true;
+    }
+    client = connectDatabase(url.href).client;
+    if (mode === 'prepare') {
+      await client`create table flare_migrations(name text primary key, hash text not null, applied_at timestamptz not null default now())`;
+      for (const name of readdirSync('/acceptance/baseline')
+        .filter((n) => n.endsWith('.sql'))
+        .sort()) {
+        const source = readFileSync(`/acceptance/baseline/${name}`, 'utf8');
+        await client.unsafe(source);
+        await client`insert into flare_migrations(name,hash) values(${name},${createHash('sha256').update(source).digest('hex')})`;
+      }
+      await seedUpgradeFixtures(client);
+      writeFileSync(
+        '/acceptance/upgrade-baseline.json',
+        JSON.stringify(await captureUpgradeRows(client)),
+        { mode: 0o600 },
+      );
+      console.log(
+        'Populated 62aaa57 baseline: two organizations, four environments, versioned content and durable pending/terminal work.',
+      );
+    } else {
+      const expected = JSON.parse(readFileSync('/acceptance/upgrade-baseline.json', 'utf8'));
+      if (mode === 'migrate') {
+        const ledgerBefore = await client`select name,hash from flare_migrations order by name`;
+        process.env.DATABASE_URL = url.href;
+        await import('../../packages/db/dist/migrate.js');
+        const rows = await captureUpgradeRows(client);
+        assertPreservedRows(expected, rows, true);
+        const ledger = await client`select name,hash from flare_migrations order by name`;
+        for (const row of ledgerBefore)
+          assert.ok(
+            ledger.some((r) => r.name === row.name && r.hash === row.hash),
+            'Existing migration hash preserved',
+          );
+        const migrationFiles = readdirSync('/app/packages/db/migrations')
+          .filter((n) => n.endsWith('.sql'))
+          .sort();
+        assert.deepEqual(
+          ledger.map((r) => r.name),
+          migrationFiles,
+        );
+        for (const row of ledger)
+          assert.equal(
+            row.hash,
+            createHash('sha256')
+              .update(readFileSync(`/app/packages/db/migrations/${row.name}`))
+              .digest('hex'),
+          );
+        assert.equal(rows.organizations.length, 2);
+        assert.equal(rows.environments.length, 4);
+        for (const row of rows.workflows) {
+          assert.deepEqual(row.source_definition, row.definition);
+          assert.deepEqual(row.content_dependencies, {
+            layouts: [],
+            templates: [],
+            translations: [],
+          });
+        }
+        for (const row of rows.sending_policies)
+          assert.deepEqual(
+            [row.state, row.daily_limit, row.per_minute_limit, row.route_bindings],
+            ['pending_review', 100, 10, {}],
+          );
+        assert.equal(rows.sending_policies.length, 2);
+        assert.equal(rows.domain_transport_readiness.length, 0);
+        assert.equal(rows.sending_quota.length, 0);
+        for (const row of rows.messages.filter((r) => r.status === 'held'))
+          assert.equal(row.hold_reason, 'classification_required');
+        assert.equal(rows.messages.filter((r) => r.status === 'held').length, 8);
+        for (const row of rows.domains) {
+          assert.deepEqual(row.dmarc_evidence, {});
+          assert.ok(new Date(row.next_check_at).getTime() <= Date.now());
+        }
+        for (const row of rows.transport_attempts) assert.equal(row.instance_id, row.provider);
+        for (const row of rows.suppressions) assert.equal(row.protected, row.reason !== 'manual');
+        for (const env of rows.environments) {
+          const tenant = { orgId: env.org_id, environmentId: env.id };
+          await withTenant(client, tenant, async (tx) => {
+            for (const table of [
+              'messages',
+              'workflows',
+              'template_versions',
+              'workflow_runs',
+              'idempotency',
+              'webhook_deliveries',
+              'automation_runs',
+            ]) {
+              const visible = await tx`select org_id,environment_id from ${tx(table)}`;
+              assert.ok(visible.length > 0, `Populated RLS probe: ${table}`);
+              assert.ok(
+                visible.every((row) => row.org_id === env.org_id && row.environment_id === env.id),
+                `Tenant isolation after upgrade: ${table}`,
+              );
+            }
+          });
+          const foreign = rows.domains.find((d) => d.environment_id !== env.id);
+          await assert.rejects(
+            client`insert into messages(id,org_id,environment_id,domain_id,request,envelope_from,status) values(gen_random_uuid(),${env.org_id},${env.id},${foreign.id},'{}','fixture@example.com','queued')`,
+            (error) => error.code === '23503',
+          );
+          await assert.rejects(
+            withTenant(client, tenant, (tx) => tx`update template_versions set subject='tampered'`),
+            (error) => error.code === '42501',
+          );
+        }
+        const fingerprintPath = `/acceptance/upgrade-${database}.json`;
+        const serialized = JSON.stringify(rows);
+        // A second process invocation exercises the real migrator's ledger no-op path.
+        try {
+          const prior = JSON.parse(readFileSync(fingerprintPath, 'utf8'));
+          assertPreservedRows(prior, rows, false);
+          console.log('Repeated migration preserved all rows and migration timestamps.');
+        } catch (error) {
+          if (error.code !== 'ENOENT') throw error;
+          writeFileSync(fingerprintPath, serialized, { mode: 0o600 });
+        }
+        console.log(
+          'Populated upgrade verified: content versions, durable work/history, safe holds, tenant isolation and composite keys.',
+        );
+      } else {
+        assertPreservedRows(expected, await captureUpgradeRows(client), false);
+        assert.equal(
+          (await client`select to_regclass('public.sending_policies') as name`)[0].name,
+          null,
+        );
+        console.log(
+          'Pre-upgrade pg_dump restored exactly into isolated baseline database; no delivery processes started.',
+        );
+      }
+    }
   }
-  const org = randomUUID(),
-    env = randomUUID();
-  await old`insert into organizations(id,name,slug) values(${org},'Upgrade preservation','upgrade')`;
-  await old`insert into environments(id,org_id,name) values(${env},${org},'Development')`;
-  const definition = { workflowId: 'preserved', name: 'Preserved', steps: [] };
-  await old`insert into workflows(org_id,environment_id,identifier,definition) values(${org},${env},'preserved',${old.json(definition)})`;
-  const domain = randomUUID(),
-    queued = randomUUID(),
-    delivered = randomUUID();
-  await old`insert into domains(id,org_id,environment_id,name,status,dkim_selector,dkim_public,dkim_private_cipher) values(${domain},${org},${env},'upgrade.example.com','verified','old-selector','old-public','old-encrypted-key')`;
-  await old`insert into messages(id,org_id,environment_id,domain_id,request,envelope_from,status) values(${queued},${org},${env},${domain},'{}','sender@upgrade.example.com','queued'),(${delivered},${org},${env},${domain},'{}','sender@upgrade.example.com','delivered')`;
-  await old`update messages set delivery_started_at=now(),delivery_finished_at=now() where id=${delivered}`;
-  process.env.DATABASE_URL = url.href;
-  await import('../../packages/db/dist/migrate.js');
-  const [row] =
-    await old`select definition,source_definition from workflows where identifier='preserved'`;
-  assert.deepEqual(row.definition, definition);
-  assert.deepEqual(row.source_definition, definition);
-  assert.equal((await old`select count(*)::int as count from organizations`)[0].count, 1);
-  assert.deepEqual(
-    (
-      await old`select state,daily_limit,per_minute_limit from sending_policies where org_id=${org}`
-    )[0],
-    { state: 'pending_review', daily_limit: 100, per_minute_limit: 10 },
-  );
-  assert.deepEqual((await old`select status,hold_reason from messages where id=${queued}`)[0], {
-    status: 'held',
-    hold_reason: 'classification_required',
-  });
-  assert.equal(
-    (await old`select status from messages where id=${delivered}`)[0].status,
-    'delivered',
-  );
-  assert.deepEqual(
-    (
-      await old`select status,dkim_private_cipher,dmarc_evidence from domains where id=${domain}`
-    )[0],
-    { status: 'verified', dkim_private_cipher: 'old-encrypted-key', dmarc_evidence: {} },
-  );
-  assert.equal(
-    (await old`select count(*)::int as count from domain_transport_readiness`)[0].count,
-    0,
-  );
-  console.log(
-    'Upgrade from 62aaa57 preserved workflow/sender history and held unreviewed pending mail.',
-  );
+} catch (error) {
+  if (created) {
+    if (client) await client.end();
+    client = undefined;
+    await sql`drop database ${sql(database)}`;
+  }
+  throw error;
 } finally {
-  await old.end();
-  await sql.unsafe('drop database flare_upgrade_test');
+  if (client) await client.end();
   await sql.end();
 }

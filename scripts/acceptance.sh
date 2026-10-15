@@ -20,7 +20,10 @@ cleanup() {
     "${compose[@]}" logs --no-color --tail 80 flare-migrate flare-api flare-worker flare-smtp-relay novu-api novu-worker postal-init 2>/dev/null | node scripts/acceptance/diagnostics.mjs "$acceptance_dir/.env" || true
     echo 'Acceptance failed. Only filtered, redacted error diagnostics are shown.' >&2
   fi
-  "${compose[@]}" down -v --remove-orphans || true
+  if ! "${compose[@]}" down -v --remove-orphans; then
+    echo 'Disposable acceptance cleanup failed; inspect the named project before rerunning.' >&2
+    if [[ "$result" -eq 0 ]]; then result=1; fi
+  fi
   case "$acceptance_dir" in */flare-acceptance-*) rm -rf -- "$acceptance_dir";; esac
   exit "$result"
 }
@@ -29,7 +32,7 @@ trap cleanup EXIT
 # This job owns an ephemeral GitHub-hosted Docker daemon. Never prune a local user's cache.
 if [[ "${GITHUB_ACTIONS:-false}" == true ]]; then docker builder prune --force; fi
 "${compose[@]}" up -d --wait --wait-timeout 600
-"${compose[@]}" exec -T flare-api node scripts/acceptance/upgrade.mjs
+bash scripts/acceptance/upgrade-rehearsal.sh "$acceptance_dir" "$project"
 "${compose[@]}" exec -T flare-api pnpm --filter @flare/db seed
 "${compose[@]}" exec -T flare-api node scripts/acceptance/bootstrap.mjs
 "${compose[@]}" exec -T flare-api pnpm seed
@@ -56,6 +59,7 @@ printf 'Worker drained and exited cleanly before queue-loss recovery.\n'
 "${compose[@]}" exec -T redis redis-cli FLUSHDB
 "${compose[@]}" up -d --no-deps --no-recreate --wait --wait-timeout 120 flare-worker
 "${compose[@]}" exec -T flare-api node scripts/acceptance/load.mjs verify
+check_independent sustained-mixed-load bash scripts/acceptance/sustained-load.sh "$acceptance_dir" "$project"
 check_independent native-queue-loss bash scripts/acceptance/crash-recovery.sh "$acceptance_dir" "$project"
 check_independent dispatcher-crash bash scripts/acceptance/dispatch-crash.sh "$acceptance_dir" "$project"
 check_independent restore bash scripts/acceptance/restore.sh "$acceptance_dir" "$project"
