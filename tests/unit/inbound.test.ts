@@ -207,6 +207,41 @@ it('requires fresh verified receiving MX separately from domain ownership', asyn
   expect(await sql`select * from inbound_messages`).toHaveLength(0);
   expect(objects.size).toBe(0);
 });
+it.each(['pending', 'parsed', 'failed'] as const)(
+  'acknowledges an already accepted %s receipt after receiving readiness changes without accepting new work',
+  async (status) => {
+    const body = payload(status === 'failed' ? Buffer.from('not MIME') : rawMail());
+    const first = await acceptInbound(sql, options.store, domainId, body);
+    if (status === 'parsed') await parseInbound(sql, options.store, first.id);
+    if (status === 'failed')
+      await expect(parseInbound(sql, options.store, first.id)).rejects.toThrow('headers');
+    const storedKeys = [...objects.keys()].sort();
+    const parseAttempts = await sql`select id from inbound_attempts order by id`;
+    for (const change of [
+      'receiving=false',
+      "status='failed'",
+      "checked_at=now()-interval '25 hours'",
+      "records='[]'::jsonb",
+    ]) {
+      await sql`update domains set receiving=true,status='verified',checked_at=now(),records=${sql.json([{ purpose: 'receiving', type: 'MX', name: 'example.com', status: 'verified' }])} where id=${domainId}`;
+      await sql.unsafe(`update domains set ${change} where id=$1`, [domainId]);
+      expect(await acceptInbound(sql, options.store, domainId, body)).toEqual({
+        id: first.id,
+        status,
+        duplicate: true,
+      });
+      await expect(
+        acceptInbound(sql, options.store, domainId, payload(rawMail('X-Changed: yes\r\n'))),
+      ).rejects.toMatchObject({ status: 409 });
+      await expect(
+        acceptInbound(sql, options.store, domainId, { ...body, id: 'new-receipt' }),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(await sql`select id from inbound_messages`).toEqual([{ id: first.id }]);
+      expect([...objects.keys()].sort()).toEqual(storedKeys);
+      expect(await sql`select id from inbound_attempts order by id`).toEqual(parseAttempts);
+    }
+  },
+);
 it('retries storage errors without acknowledging failed writes or losing pending parsing work', async () => {
   const broken = {
     ...options.store,

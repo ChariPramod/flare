@@ -96,6 +96,8 @@ services:
       retries: 10
   postal-config:
     image: ghcr.io/postalserver/postal:3.3.7
+    # The pinned upstream release publishes AMD64 only; Docker Desktop uses emulation on ARM.
+    platform: linux/amd64
     user: root
     entrypoint: [/bin/sh, -ec]
     command:
@@ -103,6 +105,8 @@ services:
     volumes: ['./ops/postal/config:/source:ro', 'postal-config-data:/config']
   postal-init:
     image: ghcr.io/postalserver/postal:3.3.7
+    # The pinned upstream release publishes AMD64 only; Docker Desktop uses emulation on ARM.
+    platform: linux/amd64
     command: postal initialize
     volumes: ['postal-config-data:/config:ro']
     depends_on:
@@ -110,6 +114,8 @@ services:
       postal-config: { condition: service_completed_successfully }
   postal:
     image: ghcr.io/postalserver/postal:3.3.7
+    # The pinned upstream release publishes AMD64 only; Docker Desktop uses emulation on ARM.
+    platform: linux/amd64
     command: postal web-server
     restart: unless-stopped
     volumes: ['postal-config-data:/config:ro']
@@ -121,6 +127,8 @@ services:
       <<: *node-health
   postal-worker:
     image: ghcr.io/postalserver/postal:3.3.7
+    # The pinned upstream release publishes AMD64 only; Docker Desktop uses emulation on ARM.
+    platform: linux/amd64
     command: postal worker
     restart: unless-stopped
     volumes: ['postal-config-data:/config:ro']
@@ -128,6 +136,8 @@ services:
       postal-init: { condition: service_completed_successfully }
   postal-smtp:
     image: ghcr.io/postalserver/postal:3.3.7
+    # The pinned upstream release publishes AMD64 only; Docker Desktop uses emulation on ARM.
+    platform: linux/amd64
     command: postal smtp-server
     restart: unless-stopped
     volumes: ['postal-config-data:/config:ro']

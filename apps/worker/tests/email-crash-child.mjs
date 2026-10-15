@@ -1,5 +1,8 @@
+import { integrationTargets } from './targets.mjs';
 import { connectDatabase } from '@flare/db';
 import { configuredTransports, deliverEmail, objectStore } from '@flare/mail';
+
+integrationTargets();
 
 // Integration-only process. Never accept production targets or emit SMTP content/secrets.
 if (

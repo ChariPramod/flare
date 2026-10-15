@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Acknowledge identical durable inbound receipts after DNS drift or receiving disablement while keeping new admission serialized with domain updates. Reject named callback keys that do not match bundled Postal. Isolate local integration cleanup by project and refuse remote Docker/custom store targets before destructive tests. Explicitly select the pinned AMD64-only Postal image for Apple Silicon emulation. Added regression and PostgreSQL race coverage; candidate execution is tracked in `PROGRESS.md`.
+
 - Sender-safety checkpoint `c307e1f` and forwarding checkpoint `a70140e` each passed all five CI jobs. Latest evidence: 351 unit/database tests, 25 evals, 45 Python tests (four external skips), 23 browser contracts, 22 real-service tests and nine live browser flows. Load recovered all 54 accepted sends without lost/duplicate submissions; isolated restore passed in 46 seconds. Local Mac containers and real staging/provider checks remain open.
 
 - Inbound forwarding now preserves accepted work through approval/suspension, quota exhaustion and recoverable sender-readiness blocks. Retry deadlines persist without consuming the failure budget; recovery submits one outbound message using the original receipt and rule. Unknown senders and malformed content retain permanent-failure behavior.

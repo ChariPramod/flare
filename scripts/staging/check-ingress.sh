@@ -2,6 +2,7 @@
 # Actual Caddy routing with synthetic upstreams on an egress-isolated Docker network.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+node scripts/local-docker.mjs
 staging_smoke="flare-staging-smoke-$$-$RANDOM"
 cleanup() {
   staging_smoke_status=$?

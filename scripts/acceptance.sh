@@ -2,8 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if [[ -x .tools/node/bin/node ]]; then export PATH="$PWD/.tools/node/bin:$PWD/.tools/pnpm/node_modules/.bin:$PWD/.tools/bin:$PATH"; fi
-command -v docker >/dev/null || { echo 'Docker is required for full-stack acceptance.' >&2; exit 1; }
-docker info >/dev/null
+node scripts/local-docker.mjs
 acceptance_dir=$(node scripts/acceptance/prepare.mjs)
 project="flare-acceptance-$(date +%s)-$$"
 failed_checks=()

@@ -2,6 +2,7 @@
 # CI-only configuration validation with synthetic values; no application services or ACME.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+node scripts/local-docker.mjs
 umask 077
 staging_fixture=$(mktemp -d "${TMPDIR:-/tmp}/flare-staging-config-XXXXXX")
 trap 'rm -rf -- "$staging_fixture"' EXIT

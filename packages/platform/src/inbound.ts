@@ -69,23 +69,8 @@ export async function acceptInbound(sql: Sql, store: ObjectStore, domainId: stri
   if (!mime.length || mime.length > limits.raw || mime.length !== input.data.size)
     throw new MailError(422, 'MIME size mismatch');
   const [domain] =
-    await sql`select id,org_id,environment_id,name,status,receiving,records,checked_at from domains where id=${domainId}`;
-  if (
-    !domain ||
-    domain.status !== 'verified' ||
-    !domain.receiving ||
-    !evidenceFresh(domain.checked_at) ||
-    !Array.isArray(domain.records) ||
-    !domain.records.some(
-      (record: { purpose?: string; type?: string; name?: string; status?: string }) =>
-        record.purpose === 'receiving' &&
-        record.type === 'MX' &&
-        record.name === domain.name &&
-        record.status === 'verified',
-    ) ||
-    input.data.rcpt_to.split('@')[1] !== domain.name
-  )
-    throw new MailError(403, 'Verified receiving domain required');
+    await sql`select org_id,environment_id from domains where id=${domainId}`;
+  if (!domain) throw new MailError(403, 'Verified receiving domain required');
   const tenant = { orgId: String(domain.org_id), environmentId: String(domain.environment_id) };
   const hash = fingerprint({ mime: encoded, from: input.data.mail_from, to: input.data.rcpt_to });
   let uploaded: string | undefined;
@@ -99,6 +84,28 @@ export async function acceptInbound(sql: Sql, store: ObjectStore, domainId: stri
           throw new MailError(409, 'Postal message ID conflicts with accepted content');
         return { id: String(existing.id), status: String(existing.status), duplicate: true };
       }
+      // A lost acknowledgement must remain retryable after later DNS drift or
+      // disabling receipt. Only NEW content needs current receiving eligibility.
+      // Hold that eligibility through persistence so a concurrent disable either
+      // commits before admission (rejected) or after the accepted receipt.
+      const [current] =
+        await tx`select name,status,receiving,records,checked_at from domains where id=${domainId} for share`;
+      if (
+        !current ||
+        current.status !== 'verified' ||
+        !current.receiving ||
+        !evidenceFresh(current.checked_at) ||
+        !Array.isArray(current.records) ||
+        !current.records.some(
+          (record: { purpose?: string; type?: string; name?: string; status?: string }) =>
+            record.purpose === 'receiving' &&
+            record.type === 'MX' &&
+            record.name === current.name &&
+            record.status === 'verified',
+        ) ||
+        input.data.rcpt_to.split('@')[1] !== current.name
+      )
+        throw new MailError(403, 'Verified receiving domain required');
       const id = randomUUID();
       uploaded = `${tenant.orgId}/${tenant.environmentId}/inbound/${id}/raw.eml`;
       await store.put(uploaded, mime, 'message/rfc822');

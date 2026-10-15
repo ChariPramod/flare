@@ -20,6 +20,10 @@ For sender-safety requirements, extend `tests/unit/sending-pipeline.test.ts` for
 
 `apps/worker/tests/email-crash.integration.ts` kills a child delivery process after actual Mailpit acceptance and waits for the unchanged two-minute lease. It checks quarantine, retained quota, rejected redrive and stale Redis jobs across two worker restarts. This deliberately adds about two minutes to integration runtime; do not shorten it by editing the lease or substituting a mocked clock. The child fixture rejects targets outside the disposable database, Redis namespace, MinIO bucket and loopback Mailpit listener.
 
+Postal 3.3.7 publishes only a Linux AMD64 image; Compose explicitly selects that platform for Postal. The pinned Novu images include ARM64. On Apple Silicon, full acceptance therefore requires working AMD64 emulation in [Docker Desktop for Apple Silicon](https://docs.docker.com/desktop/setup/install/mac-install/) and may run more slowly. Registry manifests were inspected, but local emulated runtime remains unverified until Docker is installed.
+
+The container test launchers first run `node scripts/local-docker.mjs`, a read-only check for a reachable local Linux engine and Compose. Remote SSH/TCP Docker contexts are refused. Integration startup uses a unique project name and ignores the checkout's `.env`; failure cleanup removes only that invocation's project. Required loopback ports must be free: startup failure does not run schema/Redis resets or tear down a pre-existing stack. Integration tests reject custom `TEST_DATABASE_URL` and `TEST_REDIS_URL` values; use the exact disposable endpoints in `apps/worker/tests/targets.mjs`. Do not point these tests at an SSH tunnel or an existing service. Harness regressions live in `tests/unit/local-docker.test.ts`.
+
 ## A useful test-writing loop
 
 1. Write one observable requirement in plain language, such as “a missing French translation falls back to the default English value.”

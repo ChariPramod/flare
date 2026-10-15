@@ -28,14 +28,8 @@ import type { NamedTransportConfig, PipelineOptions, TransportAdapter } from '@f
 import { startRelayFixture } from '../../smtp-relay/tests/relay-fixture.js';
 import { refreshSesReadiness, startMailWorker } from '../src/mail.js';
 
-const url =
-  process.env.TEST_DATABASE_URL ??
-  'postgres://flare_test:local-test-only@127.0.0.1:15432/flare_test';
-if (new URL(url).pathname !== '/flare_test')
-  throw new Error('Sending policy integration requires the disposable flare_test database');
-const redisUrl = process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:16379/15';
-if (new URL(redisUrl).pathname !== '/15')
-  throw new Error('Sending policy integration requires disposable Redis database 15');
+import { integrationTargets } from './targets.mjs';
+const { databaseUrl: url, redisUrl } = integrationTargets();
 // Independent pools make advisory/row-lock assertions exercise actual PostgreSQL backends.
 const sql = connectDatabase(url, { max: 10 }).client;
 const apiSql = connectDatabase(url, { max: 10 }).client;

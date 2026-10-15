@@ -251,13 +251,15 @@ describe('staging offline preflight', () => {
       mkdirSync(join(root, 'ops/certs'), { recursive: true });
       mkdirSync(join(root, 'ops/postal/config'), { recursive: true });
       const env = environment();
-      writeFileSync(
-        join(root, '.env'),
-        Object.entries(env)
-          .map(([k, v]) => `${k}='${v}'`)
-          .join('\n'),
-        { mode: 0o600 },
-      );
+      const writeEnv = () =>
+        writeFileSync(
+          join(root, '.env'),
+          Object.entries(env)
+            .map(([k, v]) => `${k}='${v}'`)
+            .join('\n'),
+          { mode: 0o600 },
+        );
+      writeEnv();
       const openssl = (args: string[]) =>
         execFileSync('openssl', args, { cwd: root, stdio: 'pipe' });
       openssl([
@@ -338,6 +340,20 @@ describe('staging offline preflight', () => {
         }),
         { mode: 0o600 },
       );
+      // A valid but unrelated named key cannot verify this bundled Postal server's callbacks.
+      expect(preflight(root).issues).toContainEqual({
+        code: 'named-postal-key-mismatch',
+        field: 'MAIL_TRANSPORTS',
+      });
+      env.STAGING_POSTAL_PUBLIC_KEY = publicKey.export({ type: 'spki', format: 'pem' }).toString();
+      writeEnv();
+      expect(preflight(root)).toMatchObject({ ok: true, issues: [] });
+      // Independent external Postal servers do not share the bundled server's signing key.
+      env.MAIL_TRANSPORTS = JSON.stringify([
+        { ...postalInstance, url: 'https://postal.pareto.dev' },
+      ]);
+      env.STAGING_POSTAL_PUBLIC_KEY = fixturePublicKey;
+      writeEnv();
       expect(preflight(root)).toMatchObject({ ok: true, issues: [] });
       chmodSync(join(root, '.env'), 0o644);
       expect(preflight(root).issues).toContainEqual({

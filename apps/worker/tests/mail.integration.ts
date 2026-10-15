@@ -17,15 +17,10 @@ import {
 } from '@flare/mail';
 import type { TransportAdapter } from '@flare/mail';
 import { startMailWorker } from '../src/mail.js';
-const url =
-  process.env.TEST_DATABASE_URL ??
-  'postgres://flare_test:local-test-only@127.0.0.1:15432/flare_test';
-if (new URL(url).pathname !== '/flare_test')
-  throw new Error('Integration tests require the disposable flare_test database');
+import { integrationTargets } from './targets.mjs';
+const { databaseUrl: url, redisUrl } = integrationTargets();
 const { client: sql } = connectDatabase(url);
-const redis = new Redis(process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:16379/15', {
-  maxRetriesPerRequest: null,
-});
+const redis = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const key = randomBytes(32).toString('base64');
 const org = randomUUID(),
   env = randomUUID();
@@ -531,3 +526,91 @@ it('recovers workflow dispatch from Redis loss and serializes independent Postgr
   expect(count).toBe(1);
   expect((await sql`select status from workflow_runs where id=${id}`)[0]!.status).toBe('accepted');
 });
+
+it('serializes inbound receipt persistence with receiving disable and still acknowledges the accepted retry', async () => {
+  const { acceptInbound } = await import('@flare/platform');
+  const control = connectDatabase(url, { max: 1 }).client;
+  control.options.onnotice = () => undefined;
+  const store = objectStore();
+  const [domain] =
+    await sql`update domains set receiving=true,status='verified',checked_at=now(),records=${sql.json([{ purpose: 'receiving', type: 'MX', name: 'example.com', value: 'postal.example.com', status: 'verified' }])} where org_id=${org} and environment_id=${env} returning id`;
+  const domainId = String(domain!.id);
+  const raw = Buffer.from(
+    'From: original@example.net\r\nTo: inbox@example.com\r\nSubject: Receipt boundary\r\n\r\nAccepted before receiving was disabled.',
+  );
+  const body = {
+    id: `disable-race-${randomUUID()}`,
+    rcpt_to: 'inbox@example.com',
+    mail_from: 'original@example.net',
+    message: raw.toString('base64'),
+    size: raw.length,
+    base64: true,
+  };
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let uploaded = false;
+  let key: string | undefined;
+  let receipt: Promise<Awaited<ReturnType<typeof acceptInbound>>> | undefined;
+  let disable: Promise<void> | undefined;
+  try {
+    await control`set application_name='flare-inbound-disable-race'`;
+    receipt = acceptInbound(
+      sql,
+      {
+        ...store,
+        async put(objectKey, content, type) {
+          await store.put(objectKey, content, type);
+          key = objectKey;
+          uploaded = true;
+          await gate;
+        },
+      },
+      domainId,
+      body,
+    );
+    void receipt.catch(() => undefined);
+    await expect.poll(() => uploaded, { timeout: 5000 }).toBe(true);
+    disable = control`update domains set receiving=false where id=${domainId}`.then(
+      () => undefined,
+    );
+    void disable.catch(() => undefined);
+    await expect
+      .poll(
+        async () =>
+          Boolean(
+            (
+              await sql`select exists(select 1 from pg_stat_activity where application_name='flare-inbound-disable-race' and wait_event_type='Lock') as blocked`
+            )[0]!.blocked,
+          ),
+        { timeout: 5000 },
+      )
+      .toBe(true);
+    expect(await sql`select id from inbound_messages where postal_id=${body.id}`).toHaveLength(0);
+    release();
+    const accepted = await receipt;
+    await disable;
+    expect((await sql`select receiving from domains where id=${domainId}`)[0]!.receiving).toBe(
+      false,
+    );
+    expect(await acceptInbound(sql, store, domainId, body)).toEqual({
+      id: accepted.id,
+      status: 'pending',
+      duplicate: true,
+    });
+    await expect(
+      acceptInbound(sql, store, domainId, { ...body, id: `${body.id}-new` }),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(await sql`select id from inbound_messages where postal_id=${body.id}`).toEqual([
+      { id: accepted.id },
+    ]);
+  } finally {
+    release();
+    await Promise.allSettled([receipt, disable]);
+    await control.end({ timeout: 5 });
+    await sql`delete from inbound_messages where postal_id=${body.id} and domain_id=${domainId}`;
+    if (key) await store.remove(key);
+    await sql`update domains set receiving=true where id=${domainId}`;
+  }
+}, 15000);

@@ -9,15 +9,10 @@ import { connectDatabase } from '@flare/db';
 import { encrypt, webhookSecret, verifyWebhook } from '@flare/shared';
 import { deliverWebhook, fanOutEvents } from '@flare/platform';
 import { startWebhookWorker } from '../src/webhooks.js';
-const url =
-  process.env.TEST_DATABASE_URL ??
-  'postgres://flare_test:local-test-only@127.0.0.1:15432/flare_test';
-if (new URL(url).pathname !== '/flare_test')
-  throw new Error('Use the disposable flare_test database');
+import { integrationTargets } from './targets.mjs';
+const { databaseUrl: url, redisUrl } = integrationTargets();
 const sql = connectDatabase(url).client;
-const redis = new Redis(process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:16379/15', {
-  maxRetriesPerRequest: null,
-});
+const redis = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const key = randomBytes(32).toString('base64'),
   secret = webhookSecret(),
   org = randomUUID(),

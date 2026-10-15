@@ -4,10 +4,24 @@ import { describe, expect, it } from 'vitest';
 const compose = parse(readFileSync('docker-compose.yml', 'utf8'), { merge: true }) as {
   services: Record<
     string,
-    { image?: string; ports?: string[]; command?: string[]; environment?: Record<string, unknown> }
+    {
+      image?: string;
+      platform?: string;
+      ports?: string[];
+      command?: string[];
+      environment?: Record<string, unknown>;
+    }
   >;
 };
 describe('deployment boundaries', () => {
+  it('selects the only published Postal architecture without forcing Novu off native ARM64', () => {
+    for (const name of ['postal-config', 'postal-init', 'postal', 'postal-worker', 'postal-smtp']) {
+      expect(compose.services[name]?.image).toBe('ghcr.io/postalserver/postal:3.3.7');
+      expect(compose.services[name]?.platform).toBe('linux/amd64');
+    }
+    for (const component of ['api', 'worker', 'ws', 'dashboard'])
+      expect(compose.services[`novu-${component}`]?.platform).toBeUndefined();
+  });
   it('pins every Novu component to the approved version', () => {
     for (const component of ['api', 'worker', 'ws', 'dashboard'])
       expect(compose.services[`novu-${component}`]?.image).toBe(

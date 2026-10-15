@@ -8,7 +8,7 @@ The contract follows Postal's pinned [HTTP sender](https://github.com/postalserv
 
 ## Durability and limits
 
-Flare validates the signature, envelope and verified receiving domain, stores raw MIME in MinIO, and commits an inbound receipt before returning success. A repeated Postal ID within the same domain returns the original ID; changed content or envelope returns 409. Domain verification is required even for repeat callbacks. Database rows recover unfinished jobs after Redis loss.
+Flare validates the signature, envelope and verified receiving domain, stores raw MIME in MinIO, and commits an inbound receipt before returning success. A repeated Postal ID within the same domain returns the original ID; changed content or envelope returns 409. A signed identical retry of an already accepted receipt is acknowledged even after receiving is disabled or DNS evidence drifts/expires; it creates no new work. New receipts require current receiving readiness, held under a database row lock through persistence, so disabling receipt cannot race across that acceptance boundary. Database rows recover unfinished jobs after Redis loss.
 
 The parser records attempts, stores parsed bodies and decoded attachments separately, and commits one metadata-only `email.received` event. Permanent input errors stop immediately; storage errors retry up to five attempts with backoff. A crashed transaction remains pending. Failed records and original MIME remain available for inspection.
 

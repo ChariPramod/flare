@@ -22,12 +22,8 @@ import type { NamedTransportConfig, PipelineOptions } from '@flare/mail';
 import { listDeadLetters, redriveDeadLetter } from '@flare/platform';
 import { startMailWorker } from '../src/mail.js';
 
-const databaseUrl =
-  process.env.TEST_DATABASE_URL ??
-  'postgres://flare_test:local-test-only@127.0.0.1:15432/flare_test';
-const redisUrl = process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:16379/15';
-if (new URL(databaseUrl).pathname !== '/flare_test' || new URL(redisUrl).pathname !== '/15')
-  throw new Error('Email crash integration requires disposable flare_test and Redis database 15');
+import { integrationTargets } from './targets.mjs';
+const { databaseUrl, redisUrl } = integrationTargets();
 const sql = connectDatabase(databaseUrl, { max: 5 }).client;
 const redis = new Redis(redisUrl, { lazyConnect: true, maxRetriesPerRequest: null });
 const key = randomBytes(32).toString('base64');

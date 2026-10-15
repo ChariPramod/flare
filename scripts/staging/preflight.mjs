@@ -398,12 +398,30 @@ export function preflight(root) {
   }
   if (postalKey && postalPublic) {
     try {
+      const signingPublic = createPublicKey(createPrivateKey(postalKey)).export({
+        format: 'der',
+        type: 'spki',
+      });
       if (
-        !createPublicKey(createPrivateKey(postalKey))
-          .export({ format: 'der', type: 'spki' })
-          .equals(createPublicKey(postalPublic).export({ format: 'der', type: 'spki' }))
+        !signingPublic.equals(createPublicKey(postalPublic).export({ format: 'der', type: 'spki' }))
       )
         fail('postal-key-mismatch', 'postal-public.pem');
+      // Named callbacks use the instance's environment reference, not the legacy
+      // mounted key. Only the bundled Postal hostname shares this signing key.
+      if (validateNamedStagingTransports(env).length === 0) {
+        for (const instance of JSON.parse(env.MAIL_TRANSPORTS)) {
+          if (instance.kind !== 'postal' || new URL(instance.url).hostname !== 'postal') continue;
+          if (
+            !signingPublic.equals(
+              createPublicKey(env[instance.webhook_public_key_env]).export({
+                format: 'der',
+                type: 'spki',
+              }),
+            )
+          )
+            fail('named-postal-key-mismatch', 'MAIL_TRANSPORTS');
+        }
+      }
     } catch {
       fail('postal-key-invalid', 'postal-public.pem');
     }
