@@ -12,6 +12,14 @@ export interface Acceptance {
   accepted: string[];
   rejected: string[];
   retryableRejected?: string[];
+  diagnostics?: TransportDiagnostics;
+}
+export interface TransportDiagnostics {
+  classification: 'transient_refusal' | 'permanent_refusal' | 'acceptance_unknown';
+  http_status?: number;
+  smtp_status?: number;
+  error_code?: string;
+  retry_after_seconds?: number;
 }
 export interface TransportAdapter {
   name: string;
@@ -22,37 +30,70 @@ export class TransportError extends Error {
   constructor(
     message: string,
     public kind: 'transient' | 'permanent' | 'ambiguous',
+    public diagnostics: TransportDiagnostics = {
+      classification:
+        kind === 'transient'
+          ? 'transient_refusal'
+          : kind === 'permanent'
+            ? 'permanent_refusal'
+            : 'acceptance_unknown',
+    },
   ) {
     super(message);
   }
 }
-function transportError(error: unknown): TransportError {
+export function transportError(error: unknown): TransportError {
   if (error instanceof TransportError) return error;
   const detail = error as {
     code?: string;
     responseCode?: number;
     $metadata?: { httpStatusCode?: number };
     name?: string;
+    cause?: { code?: string };
+    $response?: { headers?: Record<string, string> };
   };
-  const status = detail.responseCode ?? detail.$metadata?.httpStatusCode;
+  const status = detail?.responseCode ?? detail?.$metadata?.httpStatusCode;
+  const code = detail?.code ?? detail?.cause?.code ?? detail?.name ?? '';
   // A lost connection after DATA/request upload cannot prove whether the provider accepted it.
-  const kind = status
-    ? detail.responseCode
-      ? status >= 400 && status < 500
+  const kind = ['ThrottlingException', 'TooManyRequestsException'].includes(code)
+    ? 'transient'
+    : status
+      ? detail.responseCode
+        ? status >= 400 && status < 500
+          ? 'transient'
+          : status >= 500 && status < 600
+            ? 'permanent'
+            : 'ambiguous'
+        : status === 429
+          ? 'transient'
+          : status >= 400 && status < 500 && ![408, 409].includes(status)
+            ? 'permanent'
+            : 'ambiguous'
+      : ['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN'].includes(code)
         ? 'transient'
-        : 'permanent'
-      : [408, 429].includes(status) || status >= 500
-        ? 'transient'
-        : 'permanent'
-    : ['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ThrottlingException'].includes(
-          detail.code ?? detail.name ?? '',
-        )
-      ? 'transient'
-      : 'ambiguous';
+        : 'ambiguous';
   return new TransportError(
-    `Transport ${detail.code ?? detail.name ?? 'failure'}${status ? ` (${status})` : ''}`,
+    `Transport ${/^[A-Za-z0-9_-]{1,80}$/.test(code) ? code : 'failure'}${status ? ` (${status})` : ''}`,
     kind,
+    {
+      classification:
+        kind === 'transient'
+          ? 'transient_refusal'
+          : kind === 'permanent'
+            ? 'permanent_refusal'
+            : 'acceptance_unknown',
+      ...(status ? { [detail.responseCode ? 'smtp_status' : 'http_status']: status } : {}),
+      ...(/^[A-Za-z0-9_-]{1,80}$/.test(code) ? { error_code: code } : {}),
+      ...(kind === 'transient'
+        ? { retry_after_seconds: retryAfterSeconds(detail.$response?.headers?.['retry-after']) }
+        : {}),
+    },
   );
+}
+export function retryAfterSeconds(value?: string | null, now = Date.now()) {
+  if (!value) return 0;
+  const seconds = /^\d+$/.test(value.trim()) ? Number(value) : (Date.parse(value) - now) / 1000;
+  return Number.isFinite(seconds) ? Math.min(86400, Math.max(0, Math.ceil(seconds))) : 0;
 }
 export class PostalAdapter implements TransportAdapter {
   name = 'postal';
@@ -77,10 +118,11 @@ export class PostalAdapter implements TransportAdapter {
         signal: AbortSignal.timeout(30_000),
       });
       if (!response.ok)
-        throw new TransportError(
-          `Postal HTTP ${response.status}`,
-          response.status === 429 || response.status >= 500 ? 'transient' : 'permanent',
-        );
+        throw transportError({
+          name: 'PostalHttpError',
+          $metadata: { httpStatusCode: response.status },
+          $response: { headers: { 'retry-after': response.headers.get('retry-after') ?? '' } },
+        });
       const result = z
         .object({ status: z.string(), data: z.unknown() })
         .parse(await response.json());
@@ -96,6 +138,8 @@ export class PostalAdapter implements TransportAdapter {
       const ids = Object.fromEntries(
         Object.entries(data.messages).map(([email, info]) => [email.toLowerCase(), info.token]),
       );
+      if (message.to.some((recipient) => !ids[recipient]))
+        throw new TransportError('Postal acceptance omitted a recipient identifier', 'ambiguous');
       return {
         ids,
         accepted: message.to.filter((v) => ids[v]),
@@ -193,7 +237,8 @@ export class SmtpAdapter implements TransportAdapter {
         accepted,
         rejected: result.rejected
           .map(String)
-          .filter((v) => !retryableRejected.includes(v.toLowerCase())),
+          .map((v) => v.toLowerCase())
+          .filter((v) => !retryableRejected.includes(v)),
         retryableRejected,
       };
     } catch (error) {

@@ -10,6 +10,8 @@ import {
   verifySns,
   snsSchema,
   recordEvent,
+  normalizeFeedback,
+  normalizeSesNotification,
   verifyTracking,
 } from '@flare/mail';
 import type { DeliveryEvent } from '@flare/mail';
@@ -80,7 +82,19 @@ export class MailEventController {
         messageId: String(message.id),
         recipient,
         type,
-        hardBounce: type === 'bounced',
+        ...(type === 'bounced' ? { bounceClass: 'unknown' as const } : {}),
+        data: normalizeFeedback({
+          classification:
+            type === 'delivered'
+              ? 'delivered'
+              : type === 'delivery_delayed'
+                ? 'transient'
+                : 'unknown',
+          diagnostic: event.payload.output,
+          reason: event.payload.status,
+          timestamp: event.payload.timestamp,
+          tls: event.payload.sent_with_ssl,
+        }),
       },
     );
   }
@@ -112,58 +126,23 @@ export class MailEventController {
     } catch {
       throw new MailError(422, 'Invalid SNS JSON');
     }
-    const notification = parse(
-      z
-        .object({
-          notificationType: z.string().optional(),
-          eventType: z.string().optional(),
-          mail: z.object({ messageId: z.string(), destination: z.array(z.string().email()) }),
-          bounce: z
-            .object({
-              bounceType: z.string(),
-              bouncedRecipients: z.array(z.object({ emailAddress: z.string().email() })),
-            })
-            .optional(),
-          complaint: z
-            .object({
-              complainedRecipients: z.array(z.object({ emailAddress: z.string().email() })),
-            })
-            .optional(),
-          delivery: z.object({ recipients: z.array(z.string().email()) }).optional(),
-        })
-        .passthrough(),
-      payload,
-    );
-    const typeMap: Record<string, DeliveryEvent['type']> = {
-      Delivery: 'delivered',
-      Bounce: 'bounced',
-      Complaint: 'complained',
-      DeliveryDelay: 'delivery_delayed',
-      Reject: 'failed',
-      RenderingFailure: 'failed',
-    };
-    const type = typeMap[notification.eventType ?? notification.notificationType ?? ''];
-    if (!type) return { ignored: true };
-    const recipients =
-      notification.bounce?.bouncedRecipients.map((v) => v.emailAddress) ??
-      notification.complaint?.complainedRecipients.map((v) => v.emailAddress) ??
-      notification.delivery?.recipients ??
-      notification.mail.destination;
-    for (const raw of recipients) {
-      const recipient = raw.toLowerCase();
+    const feedback = normalizeSesNotification(payload);
+    if (!feedback.length) return { ignored: true };
+    for (const item of feedback) {
       const [message] =
-        await sql`select m.id,m.org_id,m.environment_id from messages m join transport_attempts a on a.message_id=m.id where a.provider='ses' and a.provider_ids->>${recipient}=${notification.mail.messageId} limit 1`;
+        await sql`select m.id,m.org_id,m.environment_id from messages m join transport_attempts a on a.message_id=m.id where a.provider='ses' and a.provider_ids->>${item.recipient}=${item.providerId} limit 1`;
       if (!message) throw new MailError(404, 'SES message correlation not available yet');
       await recordEvent(
         sql,
         { orgId: String(message.org_id), environmentId: String(message.environment_id) },
         {
           source: 'sns',
-          sourceId: `${event.MessageId}/${recipient}`,
+          sourceId: `${event.MessageId}/${item.recipient}`,
           messageId: String(message.id),
-          recipient,
-          type,
-          hardBounce: notification.bounce?.bounceType === 'Permanent',
+          recipient: item.recipient,
+          type: item.type,
+          bounceClass: item.bounceClass,
+          data: item.data,
         },
       );
     }

@@ -43,7 +43,7 @@ export function startMailWorker(
     try {
       await recoverDeliveries(sql);
       const due =
-        await sql`select id from messages where delivery_finished_at is null and status not in ('canceled','suppressed','failed') and scheduled_at<=now() and claim_id is null order by scheduled_at limit 100`;
+        await sql`select id from messages where delivery_finished_at is null and status not in ('canceled','suppressed','failed') and scheduled_at<=now() and next_attempt_at<=now() and claim_id is null order by next_attempt_at,scheduled_at limit 100`;
       for (const row of due)
         await queue.add(
           'deliver',

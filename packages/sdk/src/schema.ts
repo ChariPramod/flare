@@ -14723,6 +14723,7 @@ export interface operations {
                         subject: string;
                         status: string;
                         scheduled_at: string;
+                        next_attempt_at: string;
                         created_at: string;
                     } & {
                         [key: string]: unknown;
@@ -15255,6 +15256,20 @@ export interface operations {
                             [key: string]: unknown;
                         };
                         error: string | null;
+                        next_attempt_at: string;
+                        attempts: ({
+                            provider: string;
+                            ordinal: number;
+                            status: string;
+                            error: string | null;
+                            diagnostics: {
+                                [key: string]: unknown;
+                            };
+                            started_at: string;
+                            finished_at: string | null;
+                        } & {
+                            [key: string]: unknown;
+                        })[];
                     } & {
                         [key: string]: unknown;
                     };
@@ -16532,6 +16547,7 @@ export interface operations {
                     "application/json": ({
                         email: string;
                         reason: string;
+                        protected: boolean;
                         created_at: string;
                     } & {
                         [key: string]: unknown;

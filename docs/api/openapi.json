@@ -24875,6 +24875,9 @@
                       "scheduled_at": {
                         "type": "string"
                       },
+                      "next_attempt_at": {
+                        "type": "string"
+                      },
                       "created_at": {
                         "type": "string"
                       }
@@ -24886,6 +24889,7 @@
                       "subject",
                       "status",
                       "scheduled_at",
+                      "next_attempt_at",
                       "created_at"
                     ],
                     "additionalProperties": true
@@ -25930,6 +25934,51 @@
                     "error": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "next_attempt_at": {
+                      "type": "string"
+                    },
+                    "attempts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string"
+                          },
+                          "ordinal": {
+                            "type": "integer"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "diagnostics": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "started_at": {
+                            "type": "string"
+                          },
+                          "finished_at": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "ordinal",
+                          "status",
+                          "error",
+                          "diagnostics",
+                          "started_at",
+                          "finished_at"
+                        ],
+                        "additionalProperties": true
+                      }
                     }
                   },
                   "required": [
@@ -25937,7 +25986,9 @@
                     "created_at",
                     "status",
                     "request",
-                    "error"
+                    "error",
+                    "next_attempt_at",
+                    "attempts"
                   ],
                   "additionalProperties": true
                 }
@@ -28455,6 +28506,9 @@
                       "reason": {
                         "type": "string"
                       },
+                      "protected": {
+                        "type": "boolean"
+                      },
                       "created_at": {
                         "type": "string"
                       }
@@ -28462,6 +28516,7 @@
                     "required": [
                       "email",
                       "reason",
+                      "protected",
                       "created_at"
                     ],
                     "additionalProperties": true

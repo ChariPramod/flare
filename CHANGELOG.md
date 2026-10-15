@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Sender-reputation P0 checkpoint 1: recipient-correct SES feedback, protected provider suppressions, explicit unknown bounce classification, conservative failure/failover rules, persisted retry deadlines with bounded Retry-After, typed retry/attempt metadata and content-free email request logs. Operator approval, quotas and transport readiness follow in separate checkpoints.
+
 - All five CI jobs passed independently on `82729e7`, `d65420c`, `ef54d28` and latest implementation `e178006` (run `38629040758`). Latest evidence: 169 unit/database tests, 25 evals, 45 Python tests, 14 browser contracts, 12 integration tests and eight live flows. Native worker SIGKILL, complete native queue-loss characterization and Flare's interrupted-acceptance quarantine all passed. Load recovered 54 sends without duplicates; restore passed in 42 seconds. Mac Docker and external deployment/provider verification remain open.
 
 - Added a real Flare dispatcher SIGKILL scenario after native acceptance but before local persistence. A disposable internal proxy creates the uncertainty window; actual lease expiry must quarantine the attempt without replay or duplicate delivery.

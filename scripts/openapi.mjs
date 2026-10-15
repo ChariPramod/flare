@@ -85,6 +85,27 @@ const overrides = {
   AudienceController_createTemplate: shared.templateSchema,
   AudienceController_version: shared.templateSchema,
 };
+// Only publish controllers mounted by the application. This also permits staged
+// implementation of new controllers without advertising unavailable routes.
+const registeredControllers = new Set();
+const mainSource = ts.createSourceFile(
+  'main.ts',
+  readFileSync('apps/api/src/main.ts', 'utf8'),
+  ts.ScriptTarget.Latest,
+  true,
+);
+function inspectRegistration(node) {
+  if (
+    ts.isPropertyAssignment(node) &&
+    node.name.getText(mainSource) === 'controllers' &&
+    ts.isArrayLiteralExpression(node.initializer)
+  ) {
+    for (const entry of node.initializer.elements)
+      if (ts.isIdentifier(entry)) registeredControllers.add(entry.text);
+  }
+  ts.forEachChild(node, inspectRegistration);
+}
+inspectRegistration(mainSource);
 for (const file of readdirSync('apps/api/src').filter(
   (f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && f !== 'main.ts',
 )) {
@@ -109,6 +130,7 @@ for (const file of readdirSync('apps/api/src').filter(
         }
       }
   for (const controller of source.statements.filter(ts.isClassDeclaration)) {
+    if (!controller.name || !registeredControllers.has(controller.name.text)) continue;
     const prefix = arg(deco(controller, 'Controller'));
     if (prefix === undefined && !deco(controller, 'Controller')) continue;
     for (const method of controller.members.filter(ts.isMethodDeclaration)) {

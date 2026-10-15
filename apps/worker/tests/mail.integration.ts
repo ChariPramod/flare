@@ -163,7 +163,15 @@ it('persists transient SMTP retries before failing over to Mailpit', async () =>
         { from: 'sender@example.com', to: 'retry@example.net', subject, text: 'Retry acceptance' },
       ])
     ).data[0]!.id;
-    await deliverEmail(options, id);
+    const deadline = Date.now() + 15000;
+    let finished = false;
+    do {
+      await deliverEmail(options, id);
+      const [state] = await sql`select delivery_finished_at from messages where id=${id}`;
+      finished = Boolean(state!.delivery_finished_at);
+      if (!finished) await new Promise((resolve) => setTimeout(resolve, 100));
+    } while (!finished && Date.now() < deadline);
+    expect(finished).toBe(true);
     expect(refusals).toBe(4);
     expect(
       (

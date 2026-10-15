@@ -15,6 +15,8 @@ import {
   requiredTls,
   outbox,
   mailLimits,
+  removeManualSuppression,
+  protectSuppression,
 } from '@flare/mail';
 import { Access } from './auth.js';
 import { config, parse, sql } from './context.js';
@@ -79,14 +81,14 @@ export class MailController {
       sql,
       req.principal,
       (tx) =>
-        tx`select id,domain_id,request->>'from' as "from",request->>'subject' as subject,status,scheduled_at,created_at from messages order by created_at desc limit 100`,
+        tx`select id,domain_id,request->>'from' as "from",request->>'subject' as subject,status,scheduled_at,next_attempt_at,created_at from messages order by created_at desc limit 100`,
     );
   }
   @Get('emails/:id') async get(@Req() req: AuthRequest, @Param('id') id: string) {
     id = parse(uuid, id);
     return withTenant(sql, req.principal, async (tx) => {
       const [message] =
-        await tx`select id,domain_id,request,status,scheduled_at,delivery_started_at,error,created_at,updated_at from messages where id=${id}`;
+        await tx`select id,domain_id,request,status,scheduled_at,next_attempt_at,delivery_started_at,error,created_at,updated_at from messages where id=${id}`;
       if (!message || (req.principal.domainId && req.principal.domainId !== message.domain_id))
         throw new MailError(404, 'Email not found');
       return {
@@ -96,7 +98,7 @@ export class MailController {
         events:
           await tx`select type,recipient,data,created_at from delivery_events where message_id=${id} order by created_at`,
         attempts:
-          await tx`select provider,ordinal,status,error,started_at,finished_at from transport_attempts where message_id=${id} order by ordinal`,
+          await tx`select provider,ordinal,status,error,diagnostics,started_at,finished_at from transport_attempts where message_id=${id} order by ordinal`,
       };
     });
   }
@@ -201,15 +203,14 @@ export class MailController {
       sql,
       req.principal,
       (tx) =>
-        tx`select address as email,reason,created_at from suppressions order by created_at desc limit 100`,
+        tx`select address as email,reason,protected,created_at from suppressions order by created_at desc limit 100`,
     );
   }
   @Post('suppressions') async suppress(@Req() req: AuthRequest, @Body() body: unknown) {
     const { email } = parse(z.object({ email: z.string().email().toLowerCase() }).strict(), body);
     return withTenant(sql, req.principal, async (tx) => {
-      await tx`insert into suppressions(org_id,address,reason) values(${req.principal.orgId},${email},'manual') on conflict do nothing`;
-      await audit(tx, req.principal, 'suppression.created', null, { email });
-      await outbox(tx, req.principal, 'suppression.created', { email, reason: 'manual' });
+      const result = await protectSuppression(tx, req.principal, email, 'manual');
+      if (result.changed) await audit(tx, req.principal, 'suppression.created', null, { email });
       return { email };
     });
   }
@@ -219,9 +220,7 @@ export class MailController {
   ) {
     const email = parse(z.string().email().toLowerCase(), raw);
     return withTenant(sql, req.principal, async (tx) => {
-      await tx`select pg_advisory_xact_lock(hashtextextended(${`${req.principal.orgId}/${email}/suppression`},0))`;
-      await tx`delete from suppressions where address=${email}`;
-      await tx`delete from soft_bounces where address=${email}`;
+      await removeManualSuppression(tx, req.principal, email);
       await audit(tx, req.principal, 'suppression.removed', null, { email });
       await outbox(tx, req.principal, 'suppression.removed', { email });
       return { email, deleted: true };

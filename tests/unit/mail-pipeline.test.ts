@@ -14,6 +14,9 @@ import {
   changeSchedule,
   recordEvent,
   recoverDeliveries,
+  normalizeSesNotification,
+  protectSuppression,
+  removeManualSuppression,
 } from '../../packages/mail/src/index.js';
 import type { PipelineOptions, TransportAdapter } from '../../packages/mail/src/index.js';
 const org = randomUUID(),
@@ -241,7 +244,7 @@ describe('persistent email pipeline', () => {
     await deliverEmail(options, id);
     expect((await sql`select status from messages where id=${id}`)[0]!.status).toBe('canceled');
   });
-  it('records failover in order and reuses exactly the same signed MIME', async () => {
+  it('stops definitive permanent rejection without trying another transport', async () => {
     const raws: Buffer[] = [];
     options.transports = [
       {
@@ -267,28 +270,48 @@ describe('persistent email pipeline', () => {
         v.provider,
         v.status,
       ]),
-    ).toEqual([
-      ['reject', 'permanent_failure'],
-      ['test', 'accepted'],
-    ]);
-    expect(raws[0]!.equals(raws[1]!)).toBe(true);
+    ).toEqual([['reject', 'permanent_failure']]);
+    expect(raws).toHaveLength(1);
+    expect((await sql`select status from messages where id=${id}`)[0]!.status).toBe('failed');
   });
   it('retries three transient failures before failing over without changing MIME', async () => {
     let calls = 0;
+    const raws: Buffer[] = [];
     options.transports = [
       {
         ...accepted,
         name: 'busy',
-        send: async () => {
+        send: async (message) => {
+          raws.push(message.raw);
           calls++;
           throw new TransportError('Busy', 'transient');
         },
       },
-      accepted,
+      {
+        ...accepted,
+        send: async (message) => {
+          raws.push(message.raw);
+          return accepted.send(message);
+        },
+      },
     ];
     const id = (await submitEmails(options, principal, [body])).data[0]!.id;
-    await deliverEmail(options, id);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await deliverEmail(options, id);
+      if (attempt < 3) {
+        const [waiting] =
+          await sql`select claim_id,next_attempt_at,delivery_finished_at from messages where id=${id}`;
+        expect(waiting!.claim_id).toBeNull();
+        expect(waiting!.delivery_finished_at).toBeNull();
+        expect(new Date(waiting!.next_attempt_at).getTime()).toBeGreaterThan(Date.now());
+        await deliverEmail({ ...options }, id);
+        expect(calls).toBe(attempt + 1);
+        await sql`update messages set next_attempt_at=now() where id=${id}`;
+      }
+    }
     expect(calls).toBe(4);
+    expect(raws).toHaveLength(5);
+    expect(raws.every((raw) => raw.equals(raws[0]!))).toBe(true);
     expect(
       (await sql`select provider from transport_attempts order by ordinal`).map((v) => v.provider),
     ).toEqual(['busy', 'busy', 'busy', 'busy', 'test']);
@@ -317,6 +340,9 @@ describe('persistent email pipeline', () => {
       ])
     ).data[0]!.id;
     await deliverEmail(options, id);
+    expect(sent).toEqual([['first@example.net', 'second@example.net']]);
+    await sql`update messages set next_attempt_at=now() where id=${id}`;
+    await deliverEmail({ ...options }, id);
     expect(sent).toEqual([['first@example.net', 'second@example.net'], ['second@example.net']]);
     expect(
       (await sql`select status from message_recipients where message_id=${id}`).map(
@@ -384,6 +410,107 @@ describe('persistent email pipeline', () => {
       if (i < 2) expect(await sql`select * from suppressions`).toHaveLength(0);
     }
     expect((await sql`select reason from suppressions`)[0]!.reason).toBe('soft_bounce');
+  });
+  it('updates only the affected recipient for SES partial delays', async () => {
+    const recipients = ['first@example.net', 'second@example.net'];
+    const id = (await submitEmails(options, principal, [{ ...body, to: recipients }])).data[0]!.id;
+    await deliverEmail(options, id);
+    const feedback = normalizeSesNotification({
+      eventType: 'DeliveryDelay',
+      mail: { messageId: 'native-id', destination: recipients },
+      deliveryDelay: {
+        delayType: 'IPFailure',
+        delayedRecipients: [{ emailAddress: recipients[1], status: '4.7.1' }],
+      },
+    });
+    for (const item of feedback)
+      await recordEvent(sql, principal, {
+        ...item,
+        source: 'sns',
+        sourceId: `delay/${item.recipient}`,
+        messageId: id,
+      });
+    expect(
+      await sql`select address,status from message_recipients where message_id=${id} order by address`,
+    ).toEqual([
+      { address: recipients[0], status: 'sent' },
+      { address: recipients[1], status: 'delivery_delayed' },
+    ]);
+    expect(await sql`select * from delivery_events where message_id=${id}`).toHaveLength(1);
+  });
+  it('protects unknown provider bounces without treating them as hard or soft evidence', async () => {
+    const id = (await submitEmails(options, principal, [body])).data[0]!.id;
+    await deliverEmail(options, id);
+    await recordEvent(sql, principal, {
+      source: 'postal',
+      sourceId: randomUUID(),
+      messageId: id,
+      recipient: body.to[0],
+      type: 'bounced',
+      bounceClass: 'unknown',
+      data: { classification: 'unknown' },
+    });
+    expect((await sql`select reason,protected from suppressions`)[0]).toEqual({
+      reason: 'unknown_bounce',
+      protected: true,
+    });
+    expect(await sql`select * from soft_bounces`).toHaveLength(0);
+    await expect(
+      withTenant(sql, principal, (tx) => removeManualSuppression(tx, principal, body.to[0]!)),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+  it('upgrades manual suppression on feedback and never downgrades or removes provider protection', async () => {
+    await withTenant(sql, principal, (tx) =>
+      protectSuppression(tx, principal, body.to[0]!, 'manual'),
+    );
+    await withTenant(sql, principal, (tx) =>
+      protectSuppression(tx, principal, body.to[0]!, 'complaint'),
+    );
+    await withTenant(sql, principal, (tx) =>
+      protectSuppression(tx, principal, body.to[0]!, 'manual'),
+    );
+    await withTenant(sql, principal, (tx) =>
+      protectSuppression(tx, principal, body.to[0]!, 'hard_bounce'),
+    );
+    expect((await sql`select reason,protected from suppressions`)[0]).toEqual({
+      reason: 'complaint',
+      protected: true,
+    });
+    await expect(
+      withTenant(sql, principal, (tx) => removeManualSuppression(tx, principal, body.to[0]!)),
+    ).rejects.toMatchObject({ status: 409 });
+    const foreign = { ...principal, orgId: otherOrg, environmentId: foreignEnv };
+    await withTenant(sql, foreign, (tx) => protectSuppression(tx, foreign, body.to[0]!, 'manual'));
+    await withTenant(sql, foreign, (tx) => removeManualSuppression(tx, foreign, body.to[0]!));
+    expect(await sql`select * from suppressions`).toHaveLength(1);
+  });
+  it('persists Retry-After before releasing the claim and does not retry early', async () => {
+    let calls = 0;
+    options.transports = [
+      {
+        ...accepted,
+        send: async () => {
+          calls++;
+          throw new TransportError('Throttled', 'transient', {
+            classification: 'transient_refusal',
+            retry_after_seconds: 600,
+          });
+        },
+      },
+    ];
+    const id = (await submitEmails(options, principal, [body])).data[0]!.id;
+    await deliverEmail(options, id);
+    const [waiting] =
+      await sql`select claim_id,next_attempt_at,delivery_finished_at from messages where id=${id}`;
+    expect(waiting!.claim_id).toBeNull();
+    expect(waiting!.delivery_finished_at).toBeNull();
+    expect(new Date(waiting!.next_attempt_at).getTime()).toBeGreaterThan(Date.now() + 599000);
+    await deliverEmail({ ...options }, id);
+    expect(calls).toBe(1);
+    expect((await sql`select diagnostics from transport_attempts`)[0]!.diagnostics).toMatchObject({
+      classification: 'transient_refusal',
+      retry_after_seconds: 600,
+    });
   });
   it('keeps API-key scope immutable in PostgreSQL and preserves cached IDs after DNS drift', async () => {
     const [apiKey] =

@@ -27,6 +27,18 @@ const message = obj({
   status: str,
   request: json,
   error: { type: 'string', nullable: true },
+  next_attempt_at: str,
+  attempts: arr(
+    obj({
+      provider: str,
+      ordinal: int,
+      status: str,
+      error: { type: 'string', nullable: true },
+      diagnostics: json,
+      started_at: str,
+      finished_at: { type: 'string', nullable: true },
+    }),
+  ),
 });
 const domain = obj({
   ...entity.properties,
@@ -154,6 +166,7 @@ const mappings = {
       subject: str,
       status: str,
       scheduled_at: str,
+      next_attempt_at: str,
       created_at: str,
     }),
   ),
@@ -164,7 +177,9 @@ const mappings = {
   MailController_createDomain: obj({ id: str, name: str, status: str, records: arr(json) }),
   MailController_verify: obj({ id: str, status: str }),
   MailController_updateDomain: obj({ id: str, status: str, records: arr(json) }),
-  MailController_suppressions: arr(obj({ email: str, reason: str, created_at: str })),
+  MailController_suppressions: arr(
+    obj({ email: str, reason: str, protected: bool, created_at: str }),
+  ),
   PublicationController_create: publication,
   PublicationController_list: arr(publication),
   PublicationController_detail: publication,

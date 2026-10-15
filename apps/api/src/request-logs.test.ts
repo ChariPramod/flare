@@ -35,6 +35,9 @@ it('records tenant, route, latency and redacted bodies for completed and rejecte
       .json({ id: 'created', secret: 'signing-secret', data: { token: 'session-token' } });
   });
   app.post('/v1/inbound/postal/:id', (req, res) => res.json({ html: 'private response body' }));
+  app.post('/v1/emails/batch', (_req, res) =>
+    res.json({ request: { text: 'outgoing response content' } }),
+  );
   app.get('/v1/private', (_req, res) => res.status(401).json({ message: 'Unauthorized' }));
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -53,8 +56,21 @@ it('records tenant, route, latency and redacted bodies for completed and rejecte
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: 'private encoded MIME' }),
     }).then((r) => r.text());
+    await fetch(`${origin}/v1/emails/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        emails: [
+          {
+            html: 'outgoing private HTML',
+            text: 'outgoing private text',
+            attachments: [{ content: 'private attachment bytes' }],
+          },
+        ],
+      }),
+    }).then((r) => r.text());
     await flushRequestLogs();
-    expect(records).toHaveLength(3);
+    expect(records).toHaveLength(4);
     expect(records[0]!.slice(1, 8)).toEqual([
       'org',
       'env',
@@ -76,6 +92,10 @@ it('records tenant, route, latency and redacted bodies for completed and rejecte
       'session-token',
       'signing-secret',
       'sensitive-path',
+      'outgoing private HTML',
+      'outgoing private text',
+      'outgoing response content',
+      'private attachment bytes',
     ])
       expect(stored).not.toContain(secret);
     expect(stored).toContain('REDACTED');

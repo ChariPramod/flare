@@ -51,7 +51,7 @@ export async function redriveDeadLetter(sql: Sql, p: Principal, kind: DeadLetter
         await tx`update message_recipients set status='queued' where message_id=${id} and status='failed' returning address`;
       if (!recipients.length) throw new MailError(409, 'No failed recipients to redrive');
       rows =
-        await tx`update messages set status='queued',delivery_finished_at=null,delivery_started_at=null,lease_until=null,scheduled_at=now(),redrives=redrives+1,error=null,updated_at=now() where id=${id} returning id`;
+        await tx`update messages set status='queued',delivery_finished_at=null,delivery_started_at=null,lease_until=null,scheduled_at=now(),next_attempt_at=now(),redrives=redrives+1,error=null,updated_at=now() where id=${id} returning id`;
     } else if (kind === 'webhook')
       rows =
         await tx`update webhook_deliveries d set status='pending',cycle_attempts=0,replays=replays+1,next_attempt_at=now(),error=null where id=${id} and status='failed' and claim_id is null and exists(select 1 from webhook_endpoints e where e.id=d.endpoint_id and e.enabled) returning id`;

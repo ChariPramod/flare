@@ -4,6 +4,8 @@ Updated: 2026-10-14, America/Los_Angeles.
 
 ## Resume point — 2026-10-14
 
+- Active cycle: approved P0 sender-reputation plan. Checkpoint 1 adds protected provider suppressions, recipient-correct SES delays, conservative transport outcome classification and durable retry deadlines. Operator approval/quotas, domain readiness/routes and dashboard acceptance follow. See `docs/sender-reputation.md`. Verification and commit IDs are recorded below as each checkpoint completes; no live deliverability claim is made.
+
 - Resume from current `main` in the public [ChariPramod/flare](https://github.com/ChariPramod/flare) repository. Latest implementation: `e178006`, with all five jobs green in [CI 38629040758](https://github.com/ChariPramod/flare/actions/runs/38629040758). The native-progress (`82729e7`), browser-MFA (`d65420c`) and native-crash/queue-loss (`ef54d28`) checkpoints also passed all five jobs independently.
 - Verified on `e178006`: lint/types/OpenAPI/build/packages/gitleaks/Ruff, 169 unit/database tests, 25 deterministic evals, 45 Python tests (four external staging checks intentionally skipped), 14 browser contracts, 12 real-service tests and eight live browser flows. Real browser MFA enrollment/recovery/revocation/viewer restrictions and native progress/cancellation passed alongside local TLS OIDC, native Postal callbacks with synthetic outcomes, clean shutdown, native actions and isolated Caddy checks.
 - Fault evidence: native worker SIGKILL with preserved Redis AOF resumed one delayed Inbox delivery and kept canceled work absent. Complete native Redis DB2 loss left delay/digest jobs stranded beyond their deadlines; Flare did not resubmit, rejected redrive and confirmed explicit cancellation. A separate Flare dispatcher SIGKILL after real native acceptance but before local persistence produced one ambiguous attempt/event after actual lease expiry, one Inbox delivery and no replay across another restart. These bounded observations do not certify reconstruction of destroyed native queues or every possible crash window.
@@ -29,6 +31,8 @@ Updated: 2026-10-14, America/Los_Angeles.
 | 8 — Hardening, SDK, CLI                         | Packages, load, recovery and isolated restore passed; deployment gates remain      |
 
 ## Checkpoint log
+
+- 2026-10-14: Sender-reputation checkpoint 1: fixed SES recipient-specific delays, normalized bounded provider diagnostics, protected automatic suppressions, stopped permanent-refusal failover, quarantined uncertain HTTP outcomes, persisted retry deadlines and redacted outbound email content from logs. Local lint/types/OpenAPI/build/gitleaks, 226 tests across the current working tree and 25 evals pass; this includes independently developed later-checkpoint tests. The committed feedback subset is verified separately by CI. Docker integration and external deliverability evidence remain pending.
 
 - 2026-10-14: Added the Flare dispatcher acceptance-uncertainty crash window: an internal disposable proxy forwards one real Novu trigger and holds its response, then the runner kills Flare before local persistence. Assertions require real lease expiry, one quarantined ambiguous attempt/event, stable native identity, one Inbox side effect and rejected redrive across another restart. No production fault hooks or database state/lease mutations. Local checkpoint checks pass; all five jobs passed in CI `38629040758` on `e178006`.
 
