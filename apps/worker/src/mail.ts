@@ -91,8 +91,10 @@ export async function verifyDueMailDomains(sql: Sql, dns: DnsResolver = domainRe
         sql,
         { orgId: String(domain.org_id), environmentId: String(domain.environment_id) },
         async (tx) => {
+          // Bind the claim as text before casting in SQL. A timestamptz parameter
+          // makes postgres.js round-trip through Date and lose microseconds.
           const changed =
-            await tx`update domains set status=${status},records=${tx.json(toJson(records))},dmarc_evidence=${tx.json(toJson(dmarc))},checked_at=now(),verified_at=case when ${status}='verified' then coalesce(verified_at,now()) else null end,verification_attempts=case when ${status}='verified' then 0 else verification_attempts+1 end,next_check_at=now()+${verificationDelay(Number(domain.verification_attempts), status === 'verified')}*interval '1 second' where id=${domain.id} and records=${tx.json(toJson(domain.records))} and next_check_at=${domain.check_claim}::timestamptz and dkim_selector=${domain.dkim_selector} and dkim_public=${domain.dkim_public} and name=${domain.name} and sending=${domain.sending} and receiving=${domain.receiving} and open_tracking=${domain.open_tracking} and click_tracking=${domain.click_tracking} and tracking_subdomain=${domain.tracking_subdomain} returning id`;
+            await tx`update domains set status=${status},records=${tx.json(toJson(records))},dmarc_evidence=${tx.json(toJson(dmarc))},checked_at=now(),verified_at=case when ${status}='verified' then coalesce(verified_at,now()) else null end,verification_attempts=case when ${status}='verified' then 0 else verification_attempts+1 end,next_check_at=now()+${verificationDelay(Number(domain.verification_attempts), status === 'verified')}*interval '1 second' where id=${domain.id} and records=${tx.json(toJson(domain.records))} and next_check_at=${domain.check_claim}::text::timestamptz and dkim_selector=${domain.dkim_selector} and dkim_public=${domain.dkim_public} and name=${domain.name} and sending=${domain.sending} and receiving=${domain.receiving} and open_tracking=${domain.open_tracking} and click_tracking=${domain.click_tracking} and tracking_subdomain=${domain.tracking_subdomain} returning id`;
           if (changed.length && domain.status !== status)
             await outbox(
               tx,
@@ -142,7 +144,8 @@ export async function refreshSesReadiness(sql: Sql, probe = probeNamedSesIdentit
       delete evidence.ses;
       if (result.evidence) evidence.ses = result.evidence;
     }
-    await sql`update domain_transport_readiness set evidence=${sql.json(toJson(evidence ?? row.evidence))},provider_checked_at=now(),provider_check_after=now()+interval '1 hour' where org_id=${row.org_id} and environment_id=${row.environment_id} and domain_id=${row.domain_id} and transport_instance=${row.transport_instance} and config_fingerprint=${row.config_fingerprint} and evidence=${sql.json(toJson(row.evidence))} and revoked_at is null and provider_check_after=${row.check_claim}::timestamptz`;
+    // Preserve the exact PostgreSQL claim, including sub-millisecond precision.
+    await sql`update domain_transport_readiness set evidence=${sql.json(toJson(evidence ?? row.evidence))},provider_checked_at=now(),provider_check_after=now()+interval '1 hour' where org_id=${row.org_id} and environment_id=${row.environment_id} and domain_id=${row.domain_id} and transport_instance=${row.transport_instance} and config_fingerprint=${row.config_fingerprint} and evidence=${sql.json(toJson(row.evidence))} and revoked_at is null and provider_check_after=${row.check_claim}::text::timestamptz`;
   }
   return due.length;
 }

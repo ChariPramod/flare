@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed DNS and SES poll completion against native PostgreSQL timestamp precision. Explicit text binding preserves microseconds in guarded claim updates; regressions force sub-millisecond values that the embedded test clock does not normally produce.
+
 - Hardened the P0 follow-up: retain accepted messages during final TLS capability-probe outages, bound SES capability requests, and retain provider receipt history without replaying complaint/bounce restrictions after audited operator restoration. Added database regressions for fresh callback IDs and classification upgrades.
 
 - Added P0 operator approval, recent MFA and audited policy changes; shared recipient quotas/pacing, durable holds and campaign admission pauses; authenticated feedback suspension with reviewed-evidence replay protection; immutable named routes and safe failover boundaries; separate ownership/Production readiness with DMARC, hourly checks and evidence expiry; operator/tenant UI, SDK/CLI status and additive migration coverage. External delivery evidence remains unverified.

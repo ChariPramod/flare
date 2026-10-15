@@ -109,6 +109,31 @@ it('regenerates obsolete Postal instructions without changing DKIM keys, stores 
   ).toHaveLength(1);
   expect(await verifyDueMailDomains(sql, resolver)).toBe(0);
 });
+it('preserves PostgreSQL microsecond precision when completing a DNS claim', async () => {
+  await sql`update domains set status='pending',checked_at=null where id=${domainId}`;
+  // PGlite's clock is millisecond-aligned; native PostgreSQL now() is not.
+  // Give the real claim query a sub-millisecond value before it returns.
+  await sql`create function test_dns_microseconds() returns trigger language plpgsql as $$
+    begin
+      new.next_check_at := date_trunc('milliseconds',new.next_check_at)+interval '123 microseconds';
+      return new;
+    end
+  $$`;
+  await sql`create trigger test_dns_microseconds before update on domains for each row execute function test_dns_microseconds()`;
+  try {
+    expect(await verifyDueMailDomains(sql, dns())).toBe(1);
+    const [domain] =
+      await sql`select status,records,checked_at,next_check_at-now()>interval '59 minutes' as hourly from domains where id=${domainId}`;
+    expect(domain).toMatchObject({ status: 'verified', hourly: true });
+    expect(domain!.records).toContainEqual(
+      expect.objectContaining({ purpose: 'dkim', status: 'verified' }),
+    );
+    expect(await verifyDueMailDomains(sql, dns())).toBe(0);
+  } finally {
+    await sql`drop trigger test_dns_microseconds on domains`;
+    await sql`drop function test_dns_microseconds()`;
+  }
+});
 it('keeps ownership separate from provider/DMARC drift and fails ownership closed on DKIM loss', async () => {
   const resolver = dns();
   resolver.resolveTxt.mockImplementation(async (name) =>
@@ -220,6 +245,34 @@ it('refreshes SES configuration hourly without renewing received-header proof, a
   const [failed] = await sql`select * from domain_transport_readiness`;
   expect(failed!.evidence.ses).toBeUndefined();
   expect(failed!.evidence.checked_at).toBe(original.checked_at);
+});
+it('preserves PostgreSQL microsecond precision when completing an SES readiness claim', async () => {
+  const original = await proof();
+  await sql`create function test_ses_microseconds() returns trigger language plpgsql as $$
+    begin
+      new.provider_check_after := date_trunc('milliseconds',new.provider_check_after)+interval '123 microseconds';
+      return new;
+    end
+  $$`;
+  await sql`create trigger test_ses_microseconds before update on domain_transport_readiness for each row execute function test_ses_microseconds()`;
+  try {
+    expect(
+      await refreshSesReadiness(sql, async () => ({
+        status: 'temporary_failure',
+        checked_at: new Date().toISOString(),
+        evidence: null,
+      })),
+    ).toBe(1);
+    const [row] =
+      await sql`select evidence,provider_checked_at,provider_check_after-now()>interval '59 minutes' as hourly from domain_transport_readiness`;
+    expect(row!.hourly).toBe(true);
+    expect(row!.provider_checked_at).not.toBeNull();
+    expect(row!.evidence.ses).toBeUndefined();
+    expect(row!.evidence.checked_at).toBe(original.checked_at);
+  } finally {
+    await sql`drop trigger test_ses_microseconds on domain_transport_readiness`;
+    await sql`drop function test_ses_microseconds()`;
+  }
 });
 it('does not overwrite concurrent operator refresh or revocation during an SES probe', async () => {
   const original = await proof();

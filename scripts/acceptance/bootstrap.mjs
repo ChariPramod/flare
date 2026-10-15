@@ -73,10 +73,29 @@ try {
   }
   writeFileSync('/acceptance/dns/acceptance.test', zone.join('\n') + '\n');
   await api(`/domains/${domain.id}/verify`, 'POST');
-  await until(
-    async () => (await api(`/domains/${domain.id}`)).status === 'verified',
-    'local authoritative DNS verification',
-  );
+  try {
+    await until(
+      async () => (await api(`/domains/${domain.id}`)).status === 'verified',
+      'local authoritative DNS verification',
+    );
+  } catch (error) {
+    const [state] =
+      await sql`select status,checked_at,next_check_at,verification_attempts,records from domains where id=${domain.id}`;
+    // Only bounded verification metadata: never log TXT values, keys or credentials.
+    console.error(
+      'DNS verification state:',
+      JSON.stringify({
+        status: state?.status,
+        checked_at: state?.checked_at,
+        next_check_at: state?.next_check_at,
+        verification_attempts: state?.verification_attempts,
+        records: (state?.records ?? [])
+          .slice(0, 20)
+          .map(({ purpose, type, status }) => ({ purpose, type, status })),
+      }),
+    );
+    throw error;
+  }
   await api('/integrations', 'POST', {
     identifier: 'acceptance-smtp',
     name: 'Acceptance relay',
