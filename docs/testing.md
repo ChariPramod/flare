@@ -16,6 +16,8 @@ Flare is a TypeScript application. Start with the behavior you want to guarantee
 
 The existing test patterns are executable examples. For an email bug, put the regression beside the relevant mail module; for “canceling while a worker claims the message never sends it,” use a database/concurrency test plus the real-service suite. For “the operator can find an inbound attachment,” use a browser flow. Fixture-backed browser tests establish the UI contract; real-stack browser tests establish that the API and UI work together.
 
+For sender-safety requirements, extend `tests/unit/sending-pipeline.test.ts` for durable holds, reservations and the final attempt boundary, or `packages/mail/src/feedback-receipts.test.ts` for feedback replay and audited suppression restoration. The multi-connection quota/SMTP/feedback cases belong in `apps/worker/tests/sending-policy.integration.ts`; a PGlite test with one connection does not establish concurrency safety. Operator UI contracts live in `tests/e2e/operator.spec.ts`, and real session/MFA flows in `tests/live/operator.spec.ts`. Keep public DNS, physical pool and receiver evidence out of simulated success claims.
+
 ## A useful test-writing loop
 
 1. Write one observable requirement in plain language, such as “a missing French translation falls back to the default English value.”

@@ -172,9 +172,17 @@ export async function deliverEmail(options: PipelineOptions, id: string) {
             return null;
           }
         }
-        if (currentDomain.enforce_tls && !(await transport.supportsRequiredTls())) {
-          await hold(tx, 'required_tls_unavailable');
-          return null;
+        if (currentDomain.enforce_tls) {
+          let capable = false;
+          try {
+            capable = await transport.supportsRequiredTls();
+          } catch {
+            /* Provider outage: retain accepted work without attempting delivery. */
+          }
+          if (!capable) {
+            await hold(tx, 'required_tls_unavailable');
+            return null;
+          }
         }
         // Audience changes use the same contact lock as preference updates. The
         // attempt commit is the boundary after which a send cannot be recalled.

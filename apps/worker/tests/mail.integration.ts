@@ -1,9 +1,10 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
+import { once } from 'node:events';
 import { beforeAll, afterAll, it, expect } from 'vitest';
 import { Redis } from 'ioredis';
-import { connectDatabase } from '@flare/db';
+import { connectDatabase, toJson } from '@flare/db';
 import {
   configuredTransports,
   objectStore,
@@ -14,6 +15,7 @@ import {
   deliverEmail,
   SmtpAdapter,
 } from '@flare/mail';
+import type { TransportAdapter } from '@flare/mail';
 import { startMailWorker } from '../src/mail.js';
 const url =
   process.env.TEST_DATABASE_URL ??
@@ -145,7 +147,7 @@ it('persists transient SMTP retries before failing over to Mailpit', async () =>
   try {
     const address = busy.address();
     if (!address || typeof address === 'string') throw new Error('Missing SMTP listener');
-    const first = new SmtpAdapter({
+    const first: TransportAdapter = new SmtpAdapter({
       host: '127.0.0.1',
       port: address.port,
       secure: false,
@@ -373,8 +375,9 @@ it('resumes an automation wait after Redis loss without duplicating its prior em
 it('deduplicates concurrent inbound receipts and recovers parsing and forwarding after Redis loss', async () => {
   const { acceptInbound, parseInbound } = await import('@flare/platform');
   const { startInboundWorker } = await import('../src/inbound.js');
+  // Fixture-only DNS evidence: inbound admission requires a fresh, verified receiving MX.
   const [domain] =
-    await sql`update domains set receiving=true where org_id=${org} and environment_id=${env} returning id`;
+    await sql`update domains set receiving=true,status='verified',checked_at=now(),records=${sql.json([{ purpose: 'receiving', type: 'MX', name: 'example.com', value: 'postal.example.com', status: 'verified' }])} where org_id=${org} and environment_id=${env} returning id`;
   const domainId = String(domain!.id),
     store = objectStore();
   await sql`insert into forwarding_rules(org_id,environment_id,domain_id,sender,destinations) values(${org},${env},${domainId},'forward@example.com',${sql.json(['inbound@example.net'])})`;
@@ -425,7 +428,6 @@ it('deduplicates concurrent inbound receipts and recovers parsing and forwarding
 
 it('reconciles a publication after engine acceptance and Redis loss on real PostgreSQL', async () => {
   const { createServer } = await import('node:http');
-  const { once } = await import('node:events');
   const { encrypt, workflowSchema } = await import('@flare/shared');
   const { createPublication, advancePublication, syncPublicationWorkflow, emptyDependencies } =
     await import('@flare/platform');
@@ -437,7 +439,7 @@ it('reconciles a publication after engine acceptance and Redis loss on real Post
       steps: [],
     });
   await sql`insert into environments(id,org_id,name,novu_key_cipher) values(${production},${org},'Production',${encrypt('integration-novu-key', key, `${org}/${production}`)})`;
-  await sql`insert into workflows(org_id,environment_id,identifier,definition,source_definition) values(${org},${env},${definition.workflowId},${sql.json(definition)},${sql.json(definition)})`;
+  await sql`insert into workflows(org_id,environment_id,identifier,definition,source_definition) values(${org},${env},${definition.workflowId},${sql.json(toJson(definition))},${sql.json(toJson(definition))})`;
   let remote: unknown = null,
     writes = 0;
   const server = createServer(async (req, res) => {

@@ -19,6 +19,8 @@ import {
   SmtpAdapter,
   transportInstanceIdentity,
   updateSendingPolicy,
+  recordEvent,
+  restoreProtectedSuppression,
 } from '@flare/mail';
 import type { NamedTransportConfig, PipelineOptions, TransportAdapter } from '@flare/mail';
 import { startRelayFixture } from '../../smtp-relay/tests/relay-fixture.js';
@@ -406,4 +408,71 @@ it('preserves a suspended send through Redis loss and resumes once after worker 
     response.json(),
   )) as { messages: { Subject: string }[] };
   expect(mailpit.messages.filter((message) => message.Subject === subject)).toHaveLength(1);
+});
+
+it('serializes fresh complaint receipt IDs into one restriction and does not replay reviewed feedback', async () => {
+  const tenant = await fixture();
+  const messageId = (await submitEmails(options, tenant.first.principal, [input()])).data[0]!.id;
+  await deliverEmail(options, messageId);
+  expect((await sql`select status from messages where id=${messageId}`)[0]?.status).toBe('sent');
+  const event = {
+    source: 'postal:integration-feedback',
+    messageId,
+    recipient: 'reader@example.net',
+    type: 'complained' as const,
+  };
+  // Authentication/signature verification is covered at the ingestion boundary;
+  // these normalized trusted-provider receipts exercise concurrent persistence.
+  const outcomes = await Promise.all(
+    Array.from({ length: 8 }, (_, index) =>
+      recordEvent(index % 2 ? relaySql : apiSql, tenant.first.principal, {
+        ...event,
+        sourceId: randomUUID(),
+      }),
+    ),
+  );
+  expect(outcomes.filter((outcome) => !outcome.duplicate)).toHaveLength(1);
+  expect(
+    await sql`select * from delivery_events where message_id=${messageId} and type='complained'`,
+  ).toHaveLength(8);
+  expect(
+    await sql`select * from event_outbox where org_id=${tenant.orgId} and type='email.complained'`,
+  ).toHaveLength(1);
+  expect(
+    await sql`select * from event_outbox where org_id=${tenant.orgId} and type='suppression.created'`,
+  ).toHaveLength(1);
+  expect(
+    await sql`select * from audit_logs where org_id=${tenant.orgId} and action='operator.sending_policy.auto_suspended'`,
+  ).toHaveLength(1);
+  const [suspended] =
+    await sql`select state,revision from sending_policies where org_id=${tenant.orgId}`;
+  expect(suspended!.state).toBe('suspended');
+  await restoreProtectedSuppression(sql, actor, tenant.orgId, {
+    email: event.recipient,
+    expected_revision: Number(suspended!.revision),
+    reason: 'Fixture operator reviewed the original complaint evidence',
+  });
+  await tenant.change({ state: 'approved' });
+  expect(
+    await recordEvent(relaySql, tenant.first.principal, { ...event, sourceId: randomUUID() }),
+  ).toEqual({ duplicate: true });
+  expect(
+    await sql`select * from delivery_events where message_id=${messageId} and type='complained'`,
+  ).toHaveLength(9);
+  expect(await sql`select * from suppressions where org_id=${tenant.orgId}`).toHaveLength(0);
+  expect(
+    (await sql`select state from sending_policies where org_id=${tenant.orgId}`)[0]?.state,
+  ).toBe('approved');
+  expect(
+    await sql`select * from event_outbox where org_id=${tenant.orgId} and type='email.complained'`,
+  ).toHaveLength(1);
+  expect(
+    await sql`select * from event_outbox where org_id=${tenant.orgId} and type='suppression.created'`,
+  ).toHaveLength(1);
+  expect(
+    await sql`select * from audit_logs where org_id=${tenant.orgId} and action='operator.sending_policy.auto_suspended'`,
+  ).toHaveLength(1);
+  expect(
+    await sql`select * from audit_logs where org_id=${tenant.orgId} and action='operator.suppression.restored'`,
+  ).toHaveLength(1);
 });

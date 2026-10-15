@@ -559,3 +559,30 @@ it('lets non-broadcast audience work use its approved transactional binding', as
     contact_id: contact,
   });
 });
+
+it('retains accepted work when the final TLS capability probe loses its provider connection', async () => {
+  await sql`update domains set enforce_tls=true where id=${domainId}`;
+  const id = await accept();
+  let probes = 0;
+  options.transports = [
+    {
+      ...adapter,
+      supportsRequiredTls: async () => {
+        if (++probes === 1) return true;
+        throw new Error('Provider capability probe unavailable');
+      },
+    },
+  ];
+  await deliverEmail(options, id);
+  expect(probes).toBe(2);
+  expect(await message(id)).toMatchObject({
+    status: 'held',
+    hold_reason: 'required_tls_unavailable',
+    delivery_started_at: null,
+  });
+  expect(send).not.toHaveBeenCalled();
+  expect(await sql`select id from transport_attempts where message_id=${id}`).toHaveLength(0);
+  expect(await sql`select state from sending_quota where message_id=${id}`).toEqual([
+    { state: 'reserved' },
+  ]);
+});

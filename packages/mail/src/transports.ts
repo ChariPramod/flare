@@ -172,6 +172,7 @@ export class SesAdapter implements TransportAdapter {
     if (!this.configurationSet) return false;
     const config = await this.client.send(
       new GetConfigurationSetCommand({ ConfigurationSetName: this.configurationSet }),
+      { abortSignal: AbortSignal.timeout(5000) },
     );
     return config.DeliveryOptions?.TlsPolicy === 'REQUIRE';
   }

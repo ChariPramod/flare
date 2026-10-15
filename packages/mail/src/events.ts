@@ -361,6 +361,21 @@ export async function recordEvent(sql: Sql, tenant: Tenant, event: DeliveryEvent
     const rows =
       await tx`insert into delivery_events(org_id,environment_id,message_id,source,source_id,type,recipient,data,created_at) values(${tenant.orgId},${tenant.environmentId},${event.messageId},${event.source},${event.sourceId},${event.type},${event.recipient ?? null},${tx.json(toJson(data))},clock_timestamp()) on conflict(source,source_id) do nothing returning id`;
     if (!rows.length) return { duplicate: true };
+    if (/^(postal|sns|ses)(:|$)/.test(event.source) && ['bounced', 'complained'].includes(event.type)) {
+      // Provider retries can have fresh callback IDs. Keep every authenticated
+      // receipt, but apply each recipient outcome only once so old evidence
+      // cannot undo an operator's audited restoration. Classification is part
+      // of the identity: new evidence such as unknown -> hard remains actionable.
+      // The message lock above serializes the lookup with concurrent receipts.
+      const [previous] = await tx`
+        select id from delivery_events
+        where message_id=${event.messageId} and id<>${rows[0]!.id}
+          and recipient is not distinct from ${event.recipient ?? null}::text
+          and type=${event.type} and data->>'classification'=${classification}
+          and (source in ('postal','sns','ses') or source like 'postal:%' or source like 'sns:%' or source like 'ses:%')
+        limit 1`;
+      if (previous) return { duplicate: true };
+    }
     if (event.recipient && ['bounced', 'complained'].includes(event.type)) {
       // Serialize suppression counters across environments for the same organization/address.
       await tx`select pg_advisory_xact_lock(hashtextextended(${`${tenant.orgId}/${event.recipient}/suppression`},0))`;
