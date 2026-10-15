@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- P0 implementation checkpoint `54743f0` passed all five CI jobs: 318 unit/database tests, 21 real-service tests, 22 browser contracts, nine live browser flows, 25 evals and 45 Python tests (four external skips). Shared quotas, scheduled pacing, operator MFA and actual email SIGKILL/lease recovery passed. Full-stack load recovered 54 sends without duplicates; isolated restore passed in 41 seconds. Local Mac Docker and external provider evidence remain pending.
+
 - Added real-service acceptance for cross-domain/environment quota contention, simultaneous scheduled dispatch pacing, and outbound-email SIGKILL after SMTP acceptance with actual lease expiry. The crash scenario verifies retained usage, ambiguity quarantine and no replay across worker restarts; execution evidence is recorded in the acceptance ledger.
 
 - Fixed DNS and SES poll completion against native PostgreSQL timestamp precision. Explicit text binding preserves microseconds in guarded claim updates; regressions force sub-millisecond values that the embedded test clock does not normally produce.

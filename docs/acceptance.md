@@ -14,7 +14,23 @@ The load stage stops the worker, submits at the default 10 requests/second plus 
 
 ## Completion ledger
 
-P0 feedback checkpoint `27882e7` passed all five jobs in [CI 38662181492](https://github.com/ChariPramod/flare/actions/runs/38662181492). The subsequent approval/readiness candidate has separate local and CI evidence in `PROGRESS.md`; earlier green runs do not certify it. The expanded suite adds shared real PostgreSQL/API/SMTP quota tests, persisted pacing/holds after Redis loss, operator-only browser MFA/session checks and upgrade checks for unreviewed pending mail. Received-header attestations and physical pool addresses in automated fixtures are synthetic, never live provider evidence. Local Mac Compose and public DNS/PTR/Postal pools/receiver authentication/complaint feeds/inbox placement remain open.
+### P0 sender-safety evidence map
+
+| Guarantee | Automated evidence | Boundary |
+| --- | --- | --- |
+| Organization-wide admission and dispatch limits | `apps/worker/tests/sending-policy.integration.ts`: independent API/SMTP credentials, Development/Production domains, batch rollback, scheduled contention and retries | Real PostgreSQL/Redis/MinIO/Mailpit; Production DNS/receiver attestations in fixtures are synthetic |
+| Holds, reservation release and safe cancellation | `tests/unit/sending-pipeline.test.ts`, `packages/mail/src/dispatch-policy.test.ts`, plus real-service cancellation/suppression/restart cases | Embedded database for detailed attempt-boundary cases; independent PostgreSQL for shared accounting |
+| No replay after uncertain SMTP acceptance | `apps/worker/tests/email-crash.integration.ts`: SMTP acceptance, actual SIGKILL, unchanged two-minute lease, repeated recovery and two worker recreations | Real Mailpit acceptance; one specific crash window, not every provider failure mode |
+| Tenant owners and keys cannot grant platform authority | `apps/api/src/operator-auth.test.ts`, `tests/unit/sending-policy.test.ts`, `packages/mail/src/routes.test.ts` | Authorization, replay and database policy tests; deployment allowlist remains operator-managed |
+| Operator MFA expiry, revocation and recovery replay | `tests/live/operator.spec.ts`; UI contracts in `tests/e2e/operator.spec.ts` | Real browser/API flow in the disposable full stack; contract browser tests are separate |
+| Deduplicated feedback and protected restoration | `packages/mail/src/feedback-receipts.test.ts`, `apps/api/src/mail-events.test.ts`, real-service concurrent receipt scenario | Authenticated ingestion has separate signature tests; normalized provider outcomes are synthetic |
+| Pinned routes and conservative failover | `packages/mail/src/routes.test.ts`, `packages/mail/src/feedback.test.ts`, `tests/unit/sending-pipeline.test.ts` | Configured boundaries enforced locally; actual Postal pool separation requires live evidence |
+| Ownership, DMARC, freshness and drift | `packages/mail/src/readiness.test.ts`, `packages/mail/src/domain-readiness-service.test.ts`, `apps/worker/src/mail.test.ts`; private CoreDNS in full-stack bootstrap | Includes microsecond-precision claim regressions; public DNS and trusted receiver results remain external |
+| Additive upgrade preserves history | `tests/unit/sending-upgrade.test.ts`, `scripts/acceptance/upgrade.mjs` | Existing domains retain ownership data without fabricated readiness; terminal history is preserved and pending real mail requires review |
+
+Use the candidate-specific results below and in `PROGRESS.md` to determine which suites have executed. The existence of a test is not a passing result. Public DNS/PTR, real sending pools, external receiver authentication, real feedback delivery and inbox placement remain separate acceptance gates.
+
+Final P0 checkpoint **`54743f0` passed all five jobs** in [CI 38666872984](https://github.com/ChariPramod/flare/actions/runs/38666872984): 318 unit/database tests, 25 evals, 45 Python tests (four external skips), 22 browser contracts, 21 real-service tests and all nine live browser flows. The email SIGKILL scenario used real SMTP acceptance and unmodified lease expiry, retained consumed quota and prevented replay across two worker restarts. Shared Development/Production quota contention and scheduled pacing passed. Load recovered all 54 accepted sends with 30 expected throttles, no duplicate logical/provider submissions and 190,877,696 bytes peak sampled API RSS; isolated restore passed in 41 seconds. Application checkpoint `8844f3c` also passed all five jobs independently in [CI 38666210288](https://github.com/ChariPramod/flare/actions/runs/38666210288). Received-header attestations and physical pool addresses in fixtures are synthetic. Local Mac Compose and public DNS/PTR/Postal pools/receiver authentication/complaint feeds/inbox placement remain open.
 
 [CI run 38618186115](https://github.com/ChariPramod/flare/actions/runs/38618186115) passed all five jobs on `abaa551`: 149 unit/database tests, 25 evals, 45 Python tests with four external skips, 12 integration tests, 12 browser contracts and six live browser flows. Local TLS OIDC and native Postal callback scenarios passed. The worker drained and exited cleanly before the load recovery stage. Load accepted 54 logical sends, observed 30 expected throttles and sampled 185,020,416 bytes peak API RSS; Redis-loss recovery produced no lost or duplicate sends. The isolated restore completed in 43 seconds. The subsequent native-engine restart and activity-outage checkpoints have separate verification below.
 
@@ -38,26 +54,27 @@ Complete loss of native Redis left delay/digest jobs pending beyond their deadli
 
 | Check                              | Evidence required                                               | Current boundary                                                                 |
 | ---------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| lint/types/unit/build/secrets      | checkpoint and CI check job                                     | Passed on e178006 in CI                                                          |
-| browser contract tests             | 14 Playwright flows                                             | Passed on e178006 in CI                                                          |
-| real-service integration           | CI integration job and same script locally                      | 12 tests passed in CI on e178006; Mac run pending                                |
-| pinned full stack                  | CI acceptance job and same script locally                       | All API scenarios and 8/8 browser flows passed on e178006; Mac run pending       |
-| migration/seed/upgrade             | acceptance scenario                                             | Clean startup, baseline upgrade and repeated seed passed on e178006              |
-| load/queue-loss recovery           | acceptance scenario                                             | Passed on e178006 in CI; Mac run pending                                         |
+| lint/types/unit/build/secrets      | checkpoint and CI check job                                     | Passed on 54743f0 in CI                                                          |
+| browser contract tests             | 22 Playwright flows                                             | Passed on 54743f0 in CI                                                          |
+| real-service integration           | CI integration job and same script locally                      | 21 tests passed in CI on 54743f0; Mac run pending                                |
+| pinned full stack                  | CI acceptance job and same script locally                       | All API scenarios and 9/9 browser flows passed on 54743f0; Mac run pending       |
+| migration/seed/upgrade             | acceptance scenario                                             | Clean startup, baseline upgrade and repeated seed passed on 54743f0              |
+| load/queue-loss recovery           | acceptance scenario                                             | Passed on 54743f0 in CI; Mac run pending                                         |
 | native Inbox/actions               | runtime matrix in novu-gaps.md                                  | Feed/browser, delay/digest/throttle and HTTP failure controls passed             |
-| native restart/API outage          | SIGKILL, preserved AOF, delayed Inbox, cancellation and outage  | Passed on e178006; one survivor, canceled work absent                            |
-| complete native queue loss         | retained Mongo evidence, no resubmission, explicit cancellation | Passed on e178006; destroyed queues remain stranded                              |
-| interrupted Flare acceptance       | actual lease expiry, ambiguity event, no replay or duplicate    | Passed on e178006; one specific dispatcher crash window                          |
-| local OIDC/native Postal callbacks | local HTTPS issuer and pinned native serializer/signer          | Passed on e178006; external issuer/routing remains separate                      |
+| native restart/API outage          | SIGKILL, preserved AOF, delayed Inbox, cancellation and outage  | Passed on 54743f0; one survivor, canceled work absent                            |
+| complete native queue loss         | retained Mongo evidence, no resubmission, explicit cancellation | Passed on 54743f0; destroyed queues remain stranded                              |
+| interrupted Flare acceptance       | actual lease expiry, ambiguity event, no replay or duplicate    | Passed on 54743f0; one specific dispatcher crash window                          |
+| outbound email abrupt crash | SMTP acceptance, SIGKILL, real lease expiry, retained quota and no replay | Passed on 54743f0 with one quarantined attempt and one Mailpit delivery |
+| local OIDC/native Postal callbacks | local HTTPS issuer and pinned native serializer/signer          | Passed on 54743f0; external issuer/routing remains separate                      |
 | credentialed push/chat             | controlled provider/device/destination                          | Pending                                                                          |
 | public DNS and DKIM delivery       | controlled external sending/receiving domain                    | Credentials/infrastructure pending                                               |
 | Postal public routing/delivery     | real sending/receiving domain and recipient outcome             | Pending; native callback serialization/signatures passed with synthetic outcomes |
 | SES/SNS and SMS                    | verified identity/topic/provider account                        | Pending                                                                          |
-| local MFA                          | real HTTP/browser enrollment, replay, recovery and revocation   | Passed on e178006 in CI                                                          |
+| local MFA                          | real HTTP/browser enrollment, replay, recovery and revocation   | Passed on 54743f0 in CI                                                          |
 | external OIDC login                | actual configured issuer                                        | Pending                                                                          |
-| isolated backup restore            | stores/security/keys/native mappings on fresh volumes           | Passed on e178006 in CI in 42s; Mac run pending                                  |
+| isolated backup restore            | stores/security/keys/native mappings on fresh volumes           | Passed on 54743f0 in CI in 41s; Mac run pending                                  |
 | production recovery                | off-host backup/key recovery and provider reconciliation        | Pending; synthetic restore does not certify production recovery targets          |
-| deterministic product evals        | fixture cases against current source                            | 25 passed on e178006 in CI                                                       |
+| deterministic product evals        | fixture cases against current source                            | 25 passed on 54743f0 in CI                                                       |
 | Python tooling                     | Python runtime checks and Ruff                                  | 45 pass on Python 3.12 in CI and local 3.9; four external skips                  |
 | staging ingress configuration      | merged Compose boundaries and native Caddy validation           | Config plus 43 private routes, four upstream routes and spoof rejection passed   |
 
