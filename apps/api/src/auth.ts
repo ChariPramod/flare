@@ -248,6 +248,7 @@ export class AuthController {
     if (user.mfa_secret) throw new BadRequestException('MFA is already enabled');
     const secret = newTotpSecret();
     await sql`update users set mfa_pending = ${encrypt(secret, config.FLARE_ENCRYPTION_KEY, `mfa:${req.principal.actorId}`)} where id = ${req.principal.actorId}`;
+    await sql`update sessions set operator_mfa_at=null where user_id=${req.principal.actorId}`;
     return {
       secret,
       uri: `otpauth://totp/Flare:${encodeURIComponent(String(user.email))}?secret=${secret}&issuer=Flare&algorithm=SHA1&digits=6&period=30`,
@@ -276,6 +277,7 @@ export class AuthController {
       if (counter === null) throw new BadRequestException('Invalid MFA code');
       await tx`update users set mfa_secret = mfa_pending, mfa_pending = null, mfa_last_counter = ${counter}, recovery_hashes = ${tx.json(codes.map(hashToken))} where id = ${req.principal.actorId}`;
       await tx`update sessions set revoked_at = now() where user_id = ${req.principal.actorId} and id != ${req.principal.sessionId!}`;
+      await tx`update sessions set operator_mfa_at=null where user_id=${req.principal.actorId}`;
     });
     return { recovery_codes: codes };
   }
@@ -292,7 +294,10 @@ export class AuthController {
     if (!user?.password_hash || !(await verifyPassword(password, String(user.password_hash))))
       throw new UnauthorizedException();
     await consumeMfa(req.principal.actorId, code);
-    await sql`update users set mfa_secret = null, mfa_pending = null, recovery_hashes = '[]', mfa_last_counter = -1 where id = ${req.principal.actorId}`;
+    await sql.begin(async (tx) => {
+      await tx`update users set mfa_secret = null, mfa_pending = null, recovery_hashes = '[]', mfa_last_counter = -1 where id = ${req.principal.actorId}`;
+      await tx`update sessions set operator_mfa_at=null where user_id=${req.principal.actorId}`;
+    });
     return { success: true };
   }
   @Public() @Get('oidc') async oidcStart(@Res() res: Response) {

@@ -8,9 +8,18 @@ import {
   validateTemplate,
 } from '@flare/shared';
 import type { Tenant, Principal, Segment } from '@flare/shared';
-import { MailError, submitEmails, outbox, schedule, address } from '@flare/mail';
+import {
+  MailError,
+  submitEmails,
+  outbox,
+  schedule,
+  address,
+  lockSendingPolicy,
+  releaseUnusedQuota,
+} from '@flare/mail';
 import type { PipelineOptions } from '@flare/mail';
 import { segmentWhere } from './audience.js';
+import { sendingPause } from './sending-pause.js';
 export const unsubscribeVariable = '{{{FLARE_UNSUBSCRIBE_URL}}}';
 function checkOrigins() {
   if (
@@ -54,19 +63,20 @@ export async function scheduleBroadcast(sql: Sql, p: Principal, id: string, at?:
 }
 export async function cancelBroadcast(sql: Sql, tenant: Tenant, id: string) {
   return withTenant(sql, tenant, async (tx) => {
+    await lockSendingPolicy(tx, tenant.orgId);
     const [row] = await tx`select status from broadcasts where id=${id} for update`;
     if (!row) throw new MailError(404, 'Broadcast not found');
     if (row.status === 'sent') throw new MailError(409, 'Broadcast submission has completed');
-    if (row.status === 'canceled') return { id, status: 'canceled' };
     await tx`update broadcasts set status='canceled',finished_at=now(),updated_at=now() where id=${id}`;
     await tx`update broadcast_recipients set status='canceled' where broadcast_id=${id} and status='pending'`;
     const messages =
-      await tx`update messages set status='canceled',updated_at=now() where broadcast_id=${id} and status in ('queued','scheduled') and delivery_started_at is null returning id`;
+      await tx`update messages set status='canceled',claim_id=null,lease_until=null,hold_reason=null,updated_at=now() where broadcast_id=${id} and status in ('queued','scheduled','held') and delivery_started_at is null returning id`;
     for (const m of messages) {
       await tx`update message_recipients set status='canceled' where message_id=${m.id} and status='queued'`;
+      await releaseUnusedQuota(tx, tenant, String(m.id));
       await outbox(tx, tenant, 'email.canceled', { email_id: m.id });
     }
-    await outbox(tx, tenant, 'broadcast.canceled', { id });
+    if (row.status !== 'canceled') await outbox(tx, tenant, 'broadcast.canceled', { id });
     return { id, status: 'canceled', canceled_messages: messages.length };
   });
 }
@@ -80,6 +90,8 @@ export async function dispatchBroadcast(
   if (!lookup) return;
   const tenant = { orgId: String(lookup.org_id), environmentId: String(lookup.environment_id) };
   return withTenant(options.sql, tenant, async (tx) => {
+    // Delivery locks the organization before message and campaign rows.
+    await lockSendingPolicy(tx, tenant.orgId);
     const [broadcast] =
       await tx`select * from broadcasts where id=${id} and status in ('scheduled','sending') and next_dispatch_at<=now() for update skip locked`;
     if (!broadcast) return;
@@ -107,7 +119,7 @@ export async function dispatchBroadcast(
       role: 'owner',
       production: false,
     };
-    for (const contact of recipients) {
+    for (const [index, contact] of recipients.entries()) {
       const [topic] = broadcast.topic_id
         ? await tx`select coalesce(p.enabled,t.default_opt_in) as enabled from audience_topics t left join contact_topic_preferences p on p.topic_id=t.id and p.org_id=t.org_id and p.environment_id=t.environment_id and p.contact_id=${contact.id} where t.id=${broadcast.topic_id}`
         : [];
@@ -164,9 +176,17 @@ export async function dispatchBroadcast(
               topicId: broadcast.topic_id ? String(broadcast.topic_id) : null,
             },
           });
-          await sp`update broadcast_recipients set status='queued',message_id=${result.data[0]!.id} where broadcast_id=${id} and contact_id=${contact.id}`;
+          await sp`update broadcast_recipients set status='queued',message_id=${result.data[0]!.id},error=null where broadcast_id=${id} and contact_id=${contact.id}`;
         });
       } catch (error) {
+        const pause = sendingPause(error);
+        if (pause) {
+          // The savepoint rolled back this recipient's mail and quota. Preserve
+          // earlier accepted recipients and retry this same pending recipient.
+          await tx`update broadcast_recipients set error=${pause.reason} where broadcast_id=${id} and contact_id=${contact.id} and status='pending'`;
+          await tx`update broadcasts set error=${pause.reason},next_dispatch_at=now()+${pause.seconds}*interval '1 second',updated_at=now() where id=${id}`;
+          return { processed: index, finished: false, paused: true, retry_after: pause.seconds };
+        }
         if (!(error instanceof MailError)) throw error;
         await tx`update broadcast_recipients set status='failed',error=${error.message.slice(0, 500)} where broadcast_id=${id} and contact_id=${contact.id}`;
       }

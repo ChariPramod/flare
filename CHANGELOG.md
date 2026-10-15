@@ -2,7 +2,10 @@
 
 ## Unreleased
 
-- Sender-reputation P0 checkpoint 1: recipient-correct SES feedback, protected provider suppressions, explicit unknown bounce classification, conservative failure/failover rules, persisted retry deadlines with bounded Retry-After, typed retry/attempt metadata and content-free email request logs. Operator approval, quotas and transport readiness follow in separate checkpoints.
+- Added P0 operator approval, recent MFA and audited policy changes; shared recipient quotas/pacing, durable holds and campaign admission pauses; authenticated feedback suspension with reviewed-evidence replay protection; immutable named routes and safe failover boundaries; separate ownership/Production readiness with DMARC, hourly checks and evidence expiry; operator/tenant UI, SDK/CLI status and additive migration coverage. External delivery evidence remains unverified.
+- Added API/SMTP shared-quota and Redis-loss real-service scenarios, private real-browser operator MFA acceptance, upgrade preservation assertions and stricter offline staging configuration checks. Execution evidence is tracked per candidate in `PROGRESS.md`.
+
+- Sender-reputation P0 checkpoint 1: recipient-correct SES feedback, protected provider suppressions, explicit unknown bounce classification, conservative failure/failover rules, persisted retry deadlines with bounded Retry-After, typed retry/attempt metadata and content-free email request logs. Operator approval, quotas and transport readiness are implemented in the subsequent integrated checkpoint.
 
 - All five CI jobs passed independently on `82729e7`, `d65420c`, `ef54d28` and latest implementation `e178006` (run `38629040758`). Latest evidence: 169 unit/database tests, 25 evals, 45 Python tests, 14 browser contracts, 12 integration tests and eight live flows. Native worker SIGKILL, complete native queue-loss characterization and Flare's interrupted-acceptance quarantine all passed. Load recovered 54 sends without duplicates; restore passed in 42 seconds. Mac Docker and external deployment/provider verification remain open.
 

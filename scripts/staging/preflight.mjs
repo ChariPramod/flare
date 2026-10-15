@@ -19,6 +19,137 @@ export function publicHostname(value) {
 }
 const placeholder = (value) =>
   !value || /CHANGE_ME|REPLACE_ME|changeme|your[-_ ]|example\.(com|net|org)|localhost/i.test(value);
+// Keep the offline shape checks aligned with packages/mail/src/routes.ts. This
+// script must also run before service packages are built; it never loads adapters.
+export function validateNamedStagingTransports(env) {
+  const issues = [];
+  const fail = (code) => issues.push({ code, field: 'MAIL_TRANSPORTS' });
+  if (!env.MAIL_TRANSPORTS) {
+    fail('named-transports-required');
+    return issues;
+  }
+  let instances;
+  try {
+    if (env.MAIL_TRANSPORTS.length > 131072) throw new Error();
+    instances = JSON.parse(env.MAIL_TRANSPORTS);
+    if (!Array.isArray(instances) || !instances.length || instances.length > 100) throw new Error();
+  } catch {
+    fail('named-transports-invalid');
+    return issues;
+  }
+  const identifier = /^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}$/;
+  const reference = /^[A-Z][A-Z0-9_]{0,127}$/;
+  const base = ['id', 'kind', 'server_id', 'pool_id', 'credential_version'];
+  const shapes = {
+    postal: ['url', 'api_key_env', 'webhook_public_key_env'],
+    ses: [
+      'region',
+      'configuration_set',
+      'access_key_id_env',
+      'secret_access_key_env',
+      'session_token_env',
+      'sns_topic_arn',
+    ],
+    smtp: ['host', 'port', 'secure', 'delivery_tls_required', 'username_env', 'password_env'],
+  };
+  const ids = new Set(),
+    topics = new Set();
+  for (const instance of instances) {
+    if (
+      !instance ||
+      typeof instance !== 'object' ||
+      Array.isArray(instance) ||
+      !Object.hasOwn(shapes, instance.kind)
+    ) {
+      fail('named-transports-invalid');
+      continue;
+    }
+    const fields = [...base, ...shapes[instance.kind]];
+    if (
+      Object.keys(instance).some((key) => !fields.includes(key)) ||
+      ['id', 'server_id', 'pool_id', 'credential_version'].some(
+        (field) => typeof instance[field] !== 'string' || !identifier.test(instance[field]),
+      )
+    ) {
+      fail('named-transports-invalid');
+      continue;
+    }
+    if (['postal', 'ses', 'smtp'].includes(instance.id)) fail('named-instance-reserved');
+    if (ids.has(instance.id)) fail('named-instance-duplicate');
+    ids.add(instance.id);
+    const required =
+      instance.kind === 'postal'
+        ? ['api_key_env', 'webhook_public_key_env']
+        : instance.kind === 'ses'
+          ? ['access_key_id_env', 'secret_access_key_env']
+          : [];
+    const references = [
+      ...new Set([...required, ...Object.keys(instance).filter((field) => field.endsWith('_env'))]),
+    ];
+    for (const field of references) {
+      const name = instance[field];
+      if (typeof name !== 'string' || !reference.test(name))
+        fail('named-credential-reference-invalid');
+      else if (typeof env[name] !== 'string' || placeholder(env[name]))
+        fail('named-credential-reference-unavailable');
+    }
+    if (instance.kind === 'postal') {
+      try {
+        const url = new URL(instance.url);
+        if (
+          url.username ||
+          url.password ||
+          url.search ||
+          url.hash ||
+          !(
+            (url.protocol === 'https:' && publicHostname(url.hostname)) ||
+            (url.protocol === 'http:' && url.hostname === 'postal')
+          )
+        )
+          throw new Error();
+      } catch {
+        fail('named-postal-endpoint-invalid');
+      }
+      try {
+        const key = env[instance.webhook_public_key_env];
+        if (
+          typeof key !== 'string' ||
+          /PRIVATE KEY/.test(key) ||
+          createPublicKey(key).asymmetricKeyType !== 'rsa'
+        )
+          throw new Error();
+      } catch {
+        fail('named-postal-public-key-invalid');
+      }
+    } else if (instance.kind === 'ses') {
+      if (
+        typeof instance.region !== 'string' ||
+        !/^[a-z]{2}(?:-[a-z]+)+-\d+$/.test(instance.region) ||
+        typeof instance.configuration_set !== 'string' ||
+        !identifier.test(instance.configuration_set) ||
+        typeof instance.sns_topic_arn !== 'string' ||
+        !/^arn:aws(?:-us-gov|-cn)?:sns:[a-z0-9-]+:\d{12}:[A-Za-z0-9_-]+$/.test(
+          instance.sns_topic_arn,
+        ) ||
+        instance.sns_topic_arn.split(':')[3] !== instance.region
+      )
+        fail('named-ses-settings-invalid');
+      if (topics.has(instance.sns_topic_arn)) fail('named-sns-topic-duplicate');
+      topics.add(instance.sns_topic_arn);
+    } else {
+      if (
+        !publicHostname(instance.host) ||
+        ![465, 587, 2525].includes(instance.port) ||
+        typeof instance.secure !== 'boolean'
+      )
+        fail('named-smtp-provider-required');
+      if (instance.delivery_tls_required !== true) fail('named-smtp-tls-guarantee-required');
+      if (Boolean(instance.username_env) !== Boolean(instance.password_env))
+        fail('named-smtp-auth-pair-required');
+    }
+  }
+  return issues;
+}
 export function validateStagingEnv(env) {
   const issues = [];
   const fail = (code, field) => issues.push({ code, field });
@@ -70,10 +201,25 @@ export function validateStagingEnv(env) {
   if (new Set(secrets.map((key) => env[key])).size !== secrets.length)
     fail('independent-secrets-required', 'SECRETS');
   if (env.FLARE_ACCEPTANCE === 'true') fail('acceptance-config-forbidden', 'FLARE_ACCEPTANCE');
+  if (env.MAIL_SANDBOX === 'true') fail('sandbox-config-forbidden', 'MAIL_SANDBOX');
+  const operatorIds = String(env.FLARE_OPERATOR_USER_IDS ?? '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+  if (
+    !operatorIds.length ||
+    operatorIds.some(
+      (id) =>
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id),
+    )
+  )
+    fail('operator-allowlist-required', 'FLARE_OPERATOR_USER_IDS');
+  issues.push(...validateNamedStagingTransports(env));
+
   const transports = (env.TRANSPORT_PRIORITY || env.TRANSPORT || '')
     .split(',')
     .map((v) => v.trim());
-  for (const transport of transports) {
+  for (const transport of env.MAIL_TRANSPORTS ? [] : transports) {
     if (!['postal', 'ses', 'smtp'].includes(transport)) fail('transport-invalid', 'TRANSPORT');
     const required =
       transport === 'postal'
@@ -269,6 +415,10 @@ export function preflight(root) {
       'public-dns',
       'acme-issuance',
       'provider-authentication-delivery',
+      'operator-identity-mfa-and-live-session',
+      'organization-approval-and-route-bindings',
+      'physical-provider-pool-isolation',
+      'fresh-domain-transport-readiness',
       'oidc-if-enabled',
       'off-host-backup-restore',
     ],

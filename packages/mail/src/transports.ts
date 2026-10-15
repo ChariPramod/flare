@@ -1,6 +1,8 @@
 import nodemailer from 'nodemailer';
 import { SESv2Client, SendEmailCommand, GetConfigurationSetCommand } from '@aws-sdk/client-sesv2';
 import { z } from 'zod';
+import { parseNamedTransports, transportInstanceIdentity } from './routes.js';
+import type { TransportInstanceIdentity } from './routes.js';
 export interface Delivery {
   raw: Buffer;
   from: string;
@@ -23,6 +25,8 @@ export interface TransportDiagnostics {
 }
 export interface TransportAdapter {
   name: string;
+  instance?: TransportInstanceIdentity;
+  sandbox?: boolean;
   supportsRequiredTls(): Promise<boolean>;
   send(message: Delivery): Promise<Acceptance>;
 }
@@ -156,8 +160,13 @@ export class SesAdapter implements TransportAdapter {
   constructor(
     region: string,
     private configurationSet?: string,
+    credentials?: { accessKeyId: string; secretAccessKey: string; sessionToken?: string },
   ) {
-    this.client = new SESv2Client({ region, maxAttempts: 1 });
+    this.client = new SESv2Client({
+      region,
+      maxAttempts: 1,
+      ...(credentials ? { credentials } : {}),
+    });
   }
   async supportsRequiredTls() {
     if (!this.configurationSet) return false;
@@ -249,6 +258,63 @@ export class SmtpAdapter implements TransportAdapter {
   }
 }
 export function configuredTransports(): TransportAdapter[] {
+  if (process.env.MAIL_SANDBOX === 'true') {
+    const host = process.env.SMTP_HOST ?? '';
+    const port = Number(process.env.SMTP_PORT ?? 1025);
+    if (
+      process.env.MAIL_TRANSPORTS ||
+      (process.env.TRANSPORT_PRIORITY || process.env.TRANSPORT) !== 'smtp' ||
+      !['mailpit', 'localhost', '127.0.0.1', '::1'].includes(host) ||
+      !(port === 1025 || (port === 11025 && host !== 'mailpit')) ||
+      process.env.SMTP_SECURE === 'true' ||
+      process.env.SMTP_USER ||
+      process.env.SMTP_PASSWORD
+    )
+      throw new Error(
+        'MAIL_SANDBOX requires only unauthenticated Mailpit SMTP at an approved local host on port 1025 (or loopback port 11025)',
+      );
+    const sandbox: TransportAdapter = new SmtpAdapter({
+      host,
+      port,
+      secure: false,
+      deliveryTlsRequired: false,
+    });
+    sandbox.sandbox = true;
+    return [sandbox];
+  }
+  if (process.env.MAIL_TRANSPORTS) {
+    return parseNamedTransports(process.env.MAIL_TRANSPORTS).map((instance) => {
+      const identity = transportInstanceIdentity(instance);
+      const secret = (reference: string) => {
+        const value = process.env[reference];
+        if (!value) throw new Error(`Missing mail transport environment reference: ${reference}`);
+        return value;
+      };
+      let adapter: TransportAdapter;
+      if (instance.kind === 'postal')
+        adapter = new PostalAdapter(instance.url, secret(instance.api_key_env));
+      else if (instance.kind === 'ses')
+        adapter = new SesAdapter(instance.region, instance.configuration_set, {
+          accessKeyId: secret(instance.access_key_id_env),
+          secretAccessKey: secret(instance.secret_access_key_env),
+          ...(instance.session_token_env
+            ? { sessionToken: secret(instance.session_token_env) }
+            : {}),
+        });
+      else
+        adapter = new SmtpAdapter({
+          host: instance.host,
+          port: instance.port,
+          secure: instance.secure,
+          deliveryTlsRequired: instance.delivery_tls_required,
+          user: instance.username_env ? secret(instance.username_env) : undefined,
+          pass: instance.password_env ? secret(instance.password_env) : undefined,
+        });
+      adapter.instance = identity;
+      adapter.sandbox = false;
+      return adapter;
+    });
+  }
   const order = (process.env.TRANSPORT_PRIORITY || process.env.TRANSPORT || 'postal')
     .split(',')
     .map((v) => v.trim());

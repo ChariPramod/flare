@@ -20,6 +20,19 @@ type Domain = {
   name: string;
   region: string;
   status: string;
+  ownership_status?: string;
+  readiness?: {
+    environment: string;
+    blockers?: string[];
+    transports?: {
+      transport_instance: string;
+      provider: string;
+      ready: boolean;
+      blockers: string[];
+      dkim_aligned: boolean | null;
+      spf_aligned: boolean | null;
+    }[];
+  };
   sending: boolean;
   receiving: boolean;
   open_tracking: boolean;
@@ -27,7 +40,7 @@ type Domain = {
   tracking_subdomain: string;
   enforce_tls: boolean;
   created_at: string;
-  checked_at: string;
+  checked_at: string | null;
   next_check_at: string;
   records: {
     type: string;
@@ -159,6 +172,94 @@ export function Domains({ id, writable }: { id?: string; writable: boolean }) {
     </>
   );
 }
+function DomainReadiness({ domain }: { domain: Domain }) {
+  const checked = domain.checked_at ? Date.parse(domain.checked_at) : NaN;
+  const fresh =
+    Number.isFinite(checked) && checked <= Date.now() && Date.now() - checked < 24 * 60 * 60 * 1000;
+  const readiness = domain.readiness;
+  const alignment = (value: boolean | null | undefined) =>
+    value == null ? 'Unknown' : value ? 'Aligned' : 'Not aligned';
+  return (
+    <section className="panel" aria-label="Domain sending readiness">
+      <div className="panel-heading">
+        <h2>Sending readiness</h2>
+        <Badge>{readiness?.environment ?? 'Environment unavailable'}</Badge>
+      </div>
+      <p>
+        Domain ownership: <strong>{domain.ownership_status ?? domain.status}</strong>. Ownership
+        verification does not grant organization approval or verify a provider route.
+      </p>
+      <p>
+        DNS checked {date(domain.checked_at)} ·{' '}
+        <strong>
+          {!Number.isFinite(checked)
+            ? 'Freshness unavailable'
+            : fresh
+              ? 'DNS evidence less than 24 hours old'
+              : 'DNS evidence stale or future dated'}
+        </strong>
+      </p>
+      <p className="muted">
+        Production requires DNS and transport evidence less than 24 hours old. Flare refreshes
+        verified-domain DNS hourly; provider evidence requires operator review.
+      </p>
+      {readiness?.environment === 'Development' && (
+        <p>Development checks do not certify Production readiness.</p>
+      )}
+      {!readiness ? (
+        <p>
+          Transport readiness is unavailable. Contact your platform operator before real sending.
+        </p>
+      ) : (
+        <>
+          {(readiness.blockers ?? []).map((blocker) => (
+            <p key={blocker}>Blocked: {blocker.replaceAll('_', ' ')}.</p>
+          ))}
+          {readiness.transports?.length ? (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Transport</th>
+                    <th>Readiness</th>
+                    <th>DKIM</th>
+                    <th>SPF</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {readiness.transports.map((transport) => (
+                    <tr key={transport.transport_instance}>
+                      <td>
+                        {transport.transport_instance}
+                        <small className="muted block">{transport.provider}</small>
+                      </td>
+                      <td>
+                        <Badge>{transport.ready ? 'Readiness passes' : 'Blocked'}</Badge>
+                        {transport.blockers.map((blocker) => (
+                          <small className="block" key={blocker}>
+                            {blocker.replaceAll('_', ' ')}
+                          </small>
+                        ))}
+                      </td>
+                      <td>{alignment(transport.dkim_aligned)}</td>
+                      <td>{alignment(transport.spf_aligned)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p>No approved transport readiness is available for this domain.</p>
+          )}
+        </>
+      )}
+      <p className="muted">
+        Organization approval, sending limits and route availability still apply. Your platform
+        operator reviews provider evidence and route assignments.
+      </p>
+    </section>
+  );
+}
 function DomainDetail({ id, writable }: { id: string; writable: boolean }) {
   const query = useApi<Domain>(`domains/${id}`, 5000),
     verify = useAction(`domains/${id}/verify`),
@@ -187,11 +288,12 @@ function DomainDetail({ id, writable }: { id: string; writable: boolean }) {
       <ErrorBox error={query.error || verify.error || update.error} />
       {domain && (
         <>
+          <DomainReadiness domain={domain} />
           <div className="panel">
             <div className="panel-heading">
               <div>
                 <h2>DNS records</h2>
-                <p>Keep these records in place. Flare checks verified domains daily.</p>
+                <p>Keep these records in place. Flare checks verified domains hourly.</p>
               </div>
               <span className="muted small">Last checked {date(domain.checked_at)}</span>
             </div>
@@ -351,7 +453,69 @@ type Email = {
   }[];
   error?: string;
   delivery_started_at?: string;
+  hold_reason?: string | null;
+  next_attempt_at?: string | null;
+  traffic_class?: 'transactional' | 'marketing' | null;
+  route_snapshot?: { id: string; revision: number } | null;
 };
+type SendingPolicy = {
+  state: 'pending_review' | 'approved' | 'suspended';
+  revision: number;
+  daily_limit: number;
+  per_minute_limit: number;
+  suspension_reason?: string | null;
+  usage: { reserved: number; sent_24h: number };
+  feedback?: {
+    recipients_24h?: number;
+    hard_bounces?: number;
+    complaints?: number;
+    unknown?: number;
+  };
+};
+function SendingPolicySummary() {
+  const query = useApi<SendingPolicy>('sending-policy', 15000);
+  const policy = query.data;
+  return (
+    <section className="panel" aria-label="Organization sending access">
+      <div className="panel-heading">
+        <h2>Sending access</h2>
+        {policy && <Badge>{policy.state.replaceAll('_', ' ')}</Badge>}
+      </div>
+      <ErrorBox error={query.error} />
+      {policy ? (
+        <>
+          <p>
+            {policy.state === 'approved'
+              ? 'Your organization is approved for sending within its reviewed limits.'
+              : policy.state === 'suspended'
+                ? 'Sending is paused. Contact your platform operator to review the restriction.'
+                : 'Real sending requires platform review. Sandbox submission may remain available where configured.'}
+          </p>
+          {policy.suspension_reason && <p>Reason: {policy.suspension_reason}</p>}
+          <p className="muted">
+            24-hour recipient allowance: {policy.daily_limit.toLocaleString()} · Used:{' '}
+            {policy.usage.sent_24h.toLocaleString()} · Reserved:{' '}
+            {policy.usage.reserved.toLocaleString()} · Per-minute limit:{' '}
+            {policy.per_minute_limit.toLocaleString()}
+          </p>
+          <p className="muted" aria-label="Authenticated sending feedback">
+            24-hour recipient cohort:{' '}
+            {policy.feedback?.recipients_24h?.toLocaleString() ?? 'Unavailable'} · Hard bounces:{' '}
+            {policy.feedback?.hard_bounces?.toLocaleString() ?? 'Unavailable'} · Complaints:{' '}
+            {policy.feedback?.complaints?.toLocaleString() ?? 'Unavailable'} · Unknown bounces:{' '}
+            {policy.feedback?.unknown?.toLocaleString() ?? 'Unavailable'}
+          </p>
+          <p className="muted">
+            Unknown bounce classifications do not count toward the hard-bounce rate. Sending access
+            is reviewed separately from recipient suppression.
+          </p>
+        </>
+      ) : query.isPending ? (
+        <p className="muted">Loading sending access…</p>
+      ) : null}
+    </section>
+  );
+}
 export function Emails({ id, writable }: { id?: string; writable: boolean }) {
   const query = useApi<Email[]>('emails', 5000);
   const [open, setOpen] = useState(false);
@@ -369,6 +533,7 @@ export function Emails({ id, writable }: { id?: string; writable: boolean }) {
         }
       />
       <ErrorBox error={query.error} />
+      <SendingPolicySummary />
       {query.isPending ? (
         <Loading />
       ) : (
@@ -442,7 +607,7 @@ function Compose({ close }: { close: () => void }) {
             })),
           ).then(
             (attachments) => {
-              const { body, cc, bcc, scheduled_at, ...rest } = form;
+              const { body, cc, bcc, scheduled_at, traffic_class, ...rest } = form;
               send.mutate(
                 {
                   ...rest,
@@ -465,6 +630,7 @@ function Compose({ close }: { close: () => void }) {
                     : {}),
                   [html ? 'html' : 'text']: body,
                   ...(scheduled_at ? { scheduled_at } : {}),
+                  ...(traffic_class ? { traffic_class } : {}),
                   attachments,
                 },
                 {
@@ -507,6 +673,16 @@ function Compose({ close }: { close: () => void }) {
             <input name="bcc" />
           </Field>
         </div>
+        <Field
+          label="Traffic classification"
+          hint="Marketing requires platform approval and recipient unsubscribe support."
+        >
+          <select name="traffic_class">
+            <option value="">Use approved organization default</option>
+            <option value="transactional">Transactional</option>
+            <option value="marketing">Marketing</option>
+          </select>
+        </Field>
         <Field label="Subject">
           <input name="subject" required placeholder="A little update from us" />
         </Field>
@@ -571,6 +747,29 @@ function EmailDetail({ id, writable }: { id: string; writable: boolean }) {
         actions={<Badge>{message?.status ?? 'loading'}</Badge>}
       />
       <ErrorBox error={query.error || cancel.error || reschedule.error || sourceError} />
+      <SendingPolicySummary />
+      {message?.status === 'held' && (
+        <section className="info-banner" aria-label="Email on hold">
+          <div>
+            <strong>Sending is on hold</strong>
+            <p>
+              {message.hold_reason
+                ? message.hold_reason.replaceAll('_', ' ')
+                : 'A sending restriction must be resolved before delivery can continue.'}
+            </p>
+            {message.next_attempt_at && (
+              <p>
+                Next eligibility check: {date(message.next_attempt_at)}. This is not a delivery
+                guarantee.
+              </p>
+            )}
+            <p>
+              Flare retains this accepted message. Review the sending restriction with your platform
+              operator.
+            </p>
+          </div>
+        </section>
+      )}
       {message && (
         <div className="detail-grid">
           <section className="panel">
@@ -588,6 +787,18 @@ function EmailDetail({ id, writable }: { id: string; writable: boolean }) {
                 <dt>Scheduled</dt>
                 <dd>{date(message.scheduled_at)}</dd>
               </div>
+              <div>
+                <dt>Traffic classification</dt>
+                <dd>{message.traffic_class ?? 'Not classified'}</dd>
+              </div>
+              {message.route_snapshot && (
+                <div>
+                  <dt>Provider route</dt>
+                  <dd>
+                    {message.route_snapshot.id} · Revision {message.route_snapshot.revision}
+                  </dd>
+                </div>
+              )}
             </dl>
             <h3>Recipients</h3>
             {message.recipients.map((r) => (
@@ -600,7 +811,7 @@ function EmailDetail({ id, writable }: { id: string; writable: boolean }) {
               </div>
             ))}
             <ErrorBox error={message.error} />
-            {['queued', 'scheduled'].includes(message.status) &&
+            {['queued', 'scheduled', 'held'].includes(message.status) &&
               !message.delivery_started_at &&
               writable && (
                 <div className="schedule-controls">
@@ -620,7 +831,9 @@ function EmailDetail({ id, writable }: { id: string; writable: boolean }) {
                   <ConfirmButton
                     className="danger"
                     disabled={cancel.isPending}
-                    title="Cancel scheduled email?"
+                    title={
+                      message.status === 'held' ? 'Cancel held email?' : 'Cancel scheduled email?'
+                    }
                     description="This email will not be delivered. Messages already being delivered cannot be canceled."
                     onConfirm={() => cancel.mutateAsync({})}
                   >

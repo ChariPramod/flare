@@ -14,7 +14,7 @@ make up
 make seed
 ```
 
-For Postal transport omit `--dev`. `.env` and generated keys are gitignored. Setup refuses to replace an existing `.env`. Development credentials are generated into `.env`, never embedded in source. Dashboard: http://localhost:3000. API/OpenAPI: http://localhost:4000/docs. Mailpit: http://localhost:8025. MinIO console: http://localhost:9001. Postal admin: http://localhost:5000.
+For Postal transport omit `--dev`. Real sending also requires operator approval, named transport routes and sender readiness; follow the [sender reputation operating guide](docs/sender-reputation.md). `.env` and generated keys are gitignored. Setup refuses to replace an existing `.env`. Development credentials are generated into `.env`, never embedded in source. Dashboard: http://localhost:3000. API/OpenAPI: http://localhost:4000/docs. Mailpit: http://localhost:8025. MinIO console: http://localhost:9001. Postal admin: http://localhost:5000.
 
 The stock Novu dashboard is internal-only. Novu bootstrap credentials must be provisioned and the Development/Production service keys configured separately; Flare never exposes them to API-key callers. All published Compose ports bind loopback. Use a TLS reverse proxy and authenticated administrative access in deployment. STARTTLS certificates created by setup are for development only.
 
@@ -41,9 +41,11 @@ See [the architecture decision](docs/adr/0001-wrap-novu.md) and [Novu compatibil
 
 ## Postal and SES
 
-Create a Postal admin with `docker compose run --rm postal postal make-user`, then create the organization/server, sender domain and API credential. Put that credential in `POSTAL_API_KEY`. Configure the sending IP's PTR/rDNS, SPF include, DKIM TXT, return-path MX and receiving MX; follow [Postal DNS configuration](https://docs.postalserver.io/getting-started/dns-configuration/). Outbound port 25 and IP reputation are deployment prerequisites. DNS verification and an approved provider sender are separate requirements.
+Create a Postal admin with `docker compose run --rm postal postal make-user`, then create the organization/server, sender domain and API credential. For legacy provider bootstrap put that credential in `POSTAL_API_KEY`; approved real routes use `MAIL_TRANSPORTS` with private environment-variable credential references, as described in the [sender reputation operating guide](docs/sender-reputation.md). Configure the sending IP's PTR/rDNS, SPF include, DKIM TXT, return-path CNAME and receiving MX; follow [Postal DNS configuration](https://docs.postalserver.io/getting-started/dns-configuration/). Outbound port 25 and IP reputation are deployment prerequisites. DNS verification and an approved provider sender are separate requirements.
 
 For SES, configure `AWS_REGION`, credentials with minimal send permissions, and an SES configuration set with event publishing. Verify identities in that region and obtain production access if the account is sandboxed. SES remains optional. Never expose Postal/SNS ingestion without authenticating the provider event source.
+
+See [operator approval, sending limits, route isolation and sender readiness](docs/sender-reputation.md) before enabling real traffic. Domain ownership and provider acceptance alone do not establish Production readiness.
 
 See [email pipeline operations and API behavior](docs/email-pipeline.md) for transport priority, TLS enforcement, DNS, attachments, native provider signatures, and ambiguous delivery outcomes. Run `bash scripts/integration.sh` for the disposable PostgreSQL/Redis/MinIO/Mailpit acceptance suite. Compose now runs migrations before starting Flare services.
 

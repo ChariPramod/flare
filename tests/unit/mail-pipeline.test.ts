@@ -48,6 +48,7 @@ let db: PGlite;
 let server: PGLiteSocketServer;
 const accepted: TransportAdapter = {
   name: 'test',
+  sandbox: true,
   supportsRequiredTls: async () => true,
   send: async (m) => ({
     accepted: m.to,

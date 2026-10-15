@@ -183,6 +183,9 @@ export class FlareClient {
   sendEmail(body: EmailInput, idempotencyKey?: string) {
     return this.request('post', '/v1/emails', { body, idempotencyKey });
   }
+  sendingPolicy() {
+    return this.request('get', '/v1/sending-policy', {});
+  }
   trigger(body: TriggerInput, idempotencyKey?: string) {
     return this.request('post', '/v1/events/trigger', { body, idempotencyKey });
   }

@@ -26,7 +26,10 @@ env = env.replace(
   'postgres://flare:CHANGE_ME@postgres:5432/flare',
   `postgres://flare:${values.POSTGRES_PASSWORD}@postgres:5432/flare`,
 );
-if (process.argv.includes('--dev')) env = env.replace('TRANSPORT=postal', 'TRANSPORT=smtp');
+if (process.argv.includes('--dev'))
+  env = env
+    .replace('TRANSPORT=postal', 'TRANSPORT=smtp')
+    .replace('MAIL_SANDBOX=false', 'MAIL_SANDBOX=true');
 mkdirSync('ops/postal/config', { recursive: true, mode: 0o700 });
 mkdirSync('ops/certs', { recursive: true, mode: 0o700 });
 const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });

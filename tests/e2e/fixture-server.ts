@@ -27,6 +27,33 @@ const user = {
 };
 const token = 'browser-contract-session';
 const mfaRecovery = new Set<string>();
+let operatorAllowed = false,
+  operatorRevoked = false,
+  operatorUntil = 0;
+let fixtureRole: 'owner' | 'viewer' = 'owner';
+const operatorAudit: Record<string, unknown>[] = [];
+const operatorRoutes = new Map<string, Record<string, unknown>>();
+const operatorEvidenceDomain = '00000000-0000-4000-8000-000000000099';
+let operatorEvidence: Record<string, unknown> | null = null;
+let operatorEvidenceRevoked: string | null = null;
+const operatorPolicy = {
+  org_id: org,
+  name: 'Browser test workspace',
+  state: 'pending_review',
+  revision: 0,
+  suspension_reason: null as string | null,
+  daily_limit: 100,
+  per_minute_limit: 10,
+  complaint_threshold: 1,
+  hard_bounce_rate: 0.05,
+  hard_bounce_min: 100,
+  marketing_enabled: false,
+  default_traffic_class: null,
+  trust_tier: 'customer',
+  route_bindings: {},
+  usage: { reserved: 0, sent_24h: 0 },
+  feedback: { recipients_24h: 0, hard_bounces: 0, complaints: 0, unknown: 0, latest_at: null },
+};
 const workflows = new Map<string, Record<string, unknown>>(),
   domains = new Map<string, Record<string, unknown>>(),
   emails = new Map<string, Record<string, unknown>>(),
@@ -54,6 +81,30 @@ const server = createServer(async (req, res) => {
       method = req.method;
     if (path === '/health') return reply({ status: 'ok' });
     if (path === '/reset') {
+      operatorAllowed = false;
+      operatorRevoked = false;
+      fixtureRole = 'owner';
+      operatorUntil = 0;
+      operatorAudit.length = 0;
+      operatorRoutes.clear();
+      operatorEvidence = null;
+      operatorEvidenceRevoked = null;
+      Object.assign(operatorPolicy, {
+        state: 'pending_review',
+        suspension_reason: null,
+        revision: 0,
+        daily_limit: 100,
+        per_minute_limit: 10,
+        marketing_enabled: false,
+        route_bindings: {},
+        feedback: {
+          recipients_24h: 0,
+          hard_bounces: 0,
+          complaints: 0,
+          unknown: 0,
+          latest_at: null,
+        },
+      });
       user.mfa_enabled = false;
       mfaRecovery.clear();
       workflows.clear();
@@ -76,6 +127,88 @@ const server = createServer(async (req, res) => {
     let text = '';
     for await (const chunk of req) text += String(chunk);
     const body = text ? JSON.parse(text) : {};
+    if (path === '/fixtures/domain-readiness' && method === 'POST') {
+      fixtureRole = 'viewer';
+      const id = body.id ?? randomUUID();
+      domains.set(id, {
+        id,
+        name: 'readiness.example.test',
+        region: 'us-east-1',
+        status: 'verified',
+        ownership_status: 'verified',
+        sending: true,
+        receiving: false,
+        open_tracking: false,
+        click_tracking: false,
+        tracking_subdomain: 'track',
+        enforce_tls: false,
+        created_at: new Date().toISOString(),
+        checked_at: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+        records: [],
+        readiness: {
+          environment: 'Production',
+          blockers: body.route ? [] : ['approved_route_unavailable'],
+          transports: body.route
+            ? [
+                {
+                  transport_instance: 'fixture-postal',
+                  provider: 'postal',
+                  ready: false,
+                  blockers: ['dns_evidence_stale', 'transport_evidence_missing'],
+                  dkim_aligned: false,
+                  spf_aligned: null,
+                },
+              ]
+            : [],
+        },
+      });
+      return reply({ id });
+    }
+    if (path === '/fixtures/sending-policy' && method === 'POST') {
+      fixtureRole = body.viewer ? 'viewer' : 'owner';
+      operatorPolicy.state = 'suspended';
+      operatorPolicy.feedback = {
+        recipients_24h: 20,
+        hard_bounces: 1,
+        complaints: 1,
+        unknown: 2,
+        latest_at: null,
+      };
+      operatorPolicy.suspension_reason = 'Recipient feedback requires review';
+      const id = randomUUID(),
+        at = new Date().toISOString();
+      emails.set(id, {
+        id,
+        domain_id: randomUUID(),
+        from: 'sender@example.test',
+        subject: 'Held policy fixture',
+        status: 'held',
+        hold_reason: 'sending_not_approved',
+        next_attempt_at: at,
+        scheduled_at: at,
+        created_at: at,
+        traffic_class: 'transactional',
+        route_snapshot: { id: randomUUID(), revision: 2 },
+        request: {
+          from: 'sender@example.test',
+          to: ['reader@example.test'],
+          subject: 'Held policy fixture',
+          text: 'Retained accepted message.',
+          attachments: [],
+        },
+        recipients: [{ address: 'reader@example.test', kind: 'to', status: 'queued' }],
+        events: [],
+        attempts: [],
+      });
+      return reply({ id });
+    }
+    if (path === '/fixtures/operator' && method === 'POST') {
+      operatorAllowed = Boolean(body.allowed);
+      if (body.revoked) operatorRevoked = true;
+      if (body.expired) operatorUntil = 0;
+      if (body.stale) operatorPolicy.revision++;
+      return reply({ org_id: org, domain_id: operatorEvidenceDomain });
+    }
     if (path === '/fixtures/activity' && method === 'POST') {
       const parent = randomUUID();
       const queued = randomUUID();
@@ -181,6 +314,138 @@ const server = createServer(async (req, res) => {
     }
     if (req.headers.authorization !== `Bearer ${token}`)
       return reply({ message: 'Session expired' }, 401);
+    if (path.startsWith('operator/')) {
+      if (operatorRevoked) return reply({ message: 'Session is no longer valid' }, 401);
+      if (!operatorAllowed) return reply({ message: 'Platform operator access is required' }, 403);
+      if (path === 'operator/session')
+        return reply({
+          user,
+          step_up_required: operatorUntil <= Date.now(),
+          verified_until: operatorUntil > Date.now() ? new Date(operatorUntil).toISOString() : null,
+        });
+      if (path === 'operator/step-up') {
+        if (body.code !== '654321')
+          return reply({ message: 'A fresh authenticator or recovery code is required' }, 403);
+        operatorUntil = Date.now() + 15 * 60000;
+        return reply({ verified_until: new Date(operatorUntil).toISOString() }, 201);
+      }
+      if (path === 'operator/logout') {
+        operatorUntil = 0;
+        return reply({ success: true });
+      }
+      if (operatorUntil <= Date.now())
+        return reply({ message: 'Recent operator MFA verification is required' }, 403);
+      const evidencePath = `operator/organizations/${org}/domains/${operatorEvidenceDomain}/evidence`;
+      if (path === evidencePath || path === `${evidencePath}/fixture-postal/revoke`) {
+        if (method === 'POST') {
+          if (body.expected_revision !== operatorPolicy.revision)
+            return reply(
+              { message: 'Sending policy changed; refresh before recording evidence' },
+              409,
+            );
+          if (path.endsWith('/revoke')) operatorEvidenceRevoked = new Date().toISOString();
+          else {
+            if (body.evidence.header_from_domain !== 'example.test' || body.evidence.ses)
+              return reply({ message: 'Invalid receiver evidence' }, 422);
+            operatorEvidence = body.evidence;
+            operatorEvidenceRevoked = null;
+          }
+          operatorPolicy.revision++;
+        }
+        return reply({
+          domain: { id: operatorEvidenceDomain, name: 'example.test', environment: 'Development' },
+          policy_revision: operatorPolicy.revision,
+          evidence: [
+            {
+              transport_instance: 'fixture-postal',
+              instance: { id: 'fixture-postal', kind: 'postal' },
+              evidence: operatorEvidence,
+              checked_at: operatorEvidence?.checked_at ?? null,
+              revoked_at: operatorEvidenceRevoked,
+              readiness: {
+                ready: false,
+                blockers: operatorEvidenceRevoked
+                  ? ['transport_evidence_revoked']
+                  : operatorEvidence
+                    ? ['dns_evidence_stale']
+                    : ['transport_evidence_missing'],
+                dkim_aligned: operatorEvidence ? true : null,
+                spf_aligned: operatorEvidence ? true : null,
+              },
+            },
+          ],
+        });
+      }
+      if (path === 'operator/mail-routes') {
+        if (method === 'GET') return reply([...operatorRoutes.values()]);
+        if (body.verified && (!body.physical_ips?.length || !body.proof_reference))
+          return reply(
+            { message: 'Verified routes require physical IP evidence and a proof reference' },
+            403,
+          );
+        if (body.transport_instances.some((id: string) => id !== 'fixture-postal'))
+          return reply({ message: 'Route references an unavailable real transport instance' }, 403);
+        const id = body.id ?? randomUUID();
+        const latest = Math.max(
+          0,
+          ...[...operatorRoutes.values()]
+            .filter((row) => row.id === id)
+            .map((row) => Number(row.revision)),
+        );
+        if (body.expected_revision !== latest)
+          return reply({ message: 'Mail route changed; refresh before editing' }, 409);
+        const row = {
+          ...body,
+          id,
+          revision: latest + 1,
+          verified_at: body.verified ? new Date().toISOString() : null,
+          disabled_at: null,
+          created_at: new Date().toISOString(),
+        };
+        operatorRoutes.set(`${id}/${row.revision}`, row);
+        return reply(row, 201);
+      }
+      if (/^operator\/mail-routes\/[^/]+\/\d+\/disable$/.test(path)) {
+        const [, , id, revision] = path.split('/');
+        const row = operatorRoutes.get(`${id}/${revision}`);
+        if (!row) return reply({ message: 'Mail route revision not found' }, 404);
+        row.disabled_at = new Date().toISOString();
+        return reply(row, 201);
+      }
+      if (path === 'operator/sending-policies') return reply([operatorPolicy]);
+      if (path === `operator/sending-policies/${org}/audit`) return reply(operatorAudit);
+      if (path === `operator/sending-policies/${org}`) {
+        if (method === 'GET') return reply(operatorPolicy);
+        if (body.expected_revision !== operatorPolicy.revision)
+          return reply(
+            { message: 'Sending policy revision changed; refresh before retrying' },
+            409,
+          );
+        const { expected_revision: _revision, reason, ...updates } = body;
+        Object.assign(operatorPolicy, updates, { revision: operatorPolicy.revision + 1 });
+        operatorAudit.push({ action: 'sending_policy.updated', reason });
+        return reply(operatorPolicy);
+      }
+      if (
+        path === `operator/sending-policies/${org}/restore-suppression` ||
+        path.startsWith(`operator/organizations/${org}/credentials/`)
+      ) {
+        if (body.expected_revision !== operatorPolicy.revision)
+          return reply(
+            { message: 'Sending policy revision changed; refresh before retrying' },
+            409,
+          );
+        operatorPolicy.revision++;
+        operatorAudit.push({
+          action: path.includes('credentials')
+            ? 'sending_credential.updated'
+            : 'suppression.restored',
+          reason: body.reason,
+        });
+        return reply({ success: true });
+      }
+      return reply({ message: 'Not found' }, 404);
+    }
     if (
       req.headers['x-org-id'] !== org ||
       ![dev, prod].includes(String(req.headers['x-environment-id']))
@@ -216,7 +481,7 @@ const server = createServer(async (req, res) => {
         principal: {
           orgId: org,
           environmentId: req.headers['x-environment-id'],
-          role: 'owner',
+          role: fixtureRole,
           production,
         },
       });
@@ -485,6 +750,7 @@ const server = createServer(async (req, res) => {
       if (method === 'PATCH') Object.assign(domain, body);
       return reply(domain);
     }
+    if (path === 'sending-policy') return reply(operatorPolicy);
     if (path === 'emails' && method === 'POST') {
       const domain = [...domains.values()].find((d) => String(body.from).endsWith(`@${d.name}`));
       if (domain?.status !== 'verified')

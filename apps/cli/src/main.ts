@@ -11,6 +11,7 @@ Commands:
   workflow trigger --file request.json [--idempotency-key key]
   email send --file email.json [--idempotency-key key]
   email status ID
+  sending-policy show
   domain verify ID
   publication diff | publication publish --file selection.json
   publication status ID | publication retry ID
@@ -76,6 +77,7 @@ try {
     });
   else if (action === 'email status')
     result = await client.operation('GET', '/v1/emails/{id}', { path: { id: id ?? '' } });
+  else if (action === 'sending-policy show') result = await client.sendingPolicy();
   else if (action === 'domain verify')
     result = await client.operation('POST', '/v1/domains/{id}/verify', { path: { id: id ?? '' } });
   else if (action === 'publication diff')

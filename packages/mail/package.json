@@ -15,18 +15,20 @@
     "seed": "node dist/seed.js"
   },
   "dependencies": {
-    "@flare/shared": "workspace:*",
-    "@flare/db": "workspace:*",
-    "@aws-sdk/client-sesv2": "^3.922.0",
     "@aws-sdk/client-s3": "^3.922.0",
-    "nodemailer": "^7.0.10",
+    "@aws-sdk/client-sesv2": "^3.922.0",
+    "@flare/db": "workspace:*",
+    "@flare/shared": "workspace:*",
     "cheerio": "^1.1.2",
     "chrono-node": "^2.8.5",
     "ipaddr.js": "^2.2.0",
+    "nodemailer": "^7.0.10",
+    "tldts": "7.4.18",
     "undici": "^7.16.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/nodemailer": "^7.0.3"
+    "@types/nodemailer": "^7.0.3",
+    "mailauth": "7.3.0"
   }
 }

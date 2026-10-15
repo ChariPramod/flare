@@ -101,3 +101,60 @@ it('verifies Svix signatures, rotation and timestamps over the original body', a
     'expired',
   );
 });
+
+it('exposes tenant sending-policy and held-mail details with structured policy errors', async () => {
+  const fetcher = vi.fn(
+    async () =>
+      new Response(
+        JSON.stringify({ state: 'approved', revision: 2, usage: { reserved: 3, sent_24h: 7 } }),
+      ),
+  ) as typeof fetch;
+  const client = new FlareClient({
+    baseUrl: 'https://flare.test',
+    environmentId,
+    apiKey,
+    fetch: fetcher,
+  });
+  expect(await client.sendingPolicy()).toMatchObject({
+    state: 'approved',
+    usage: { reserved: 3, sent_24h: 7 },
+  });
+  fetcher.mockImplementationOnce(
+    async () =>
+      new Response(
+        JSON.stringify({
+          id: 'held',
+          status: 'held',
+          hold_reason: 'sending_suspended',
+          next_attempt_at: '2026-10-14T19:00:00.000Z',
+        }),
+      ),
+  );
+  expect(await client.request('get', '/v1/emails/{id}', { path: { id: 'held' } })).toMatchObject({
+    status: 'held',
+    hold_reason: 'sending_suspended',
+  });
+  fetcher.mockImplementationOnce(
+    async () =>
+      new Response(
+        JSON.stringify({
+          message: 'Recipient capacity exhausted',
+          code: 'recipient_quota_exhausted',
+        }),
+        { status: 429, headers: { 'Retry-After': '60' } },
+      ),
+  );
+  await expect(
+    client.sendEmail({
+      from: 'sender@example.test',
+      to: 'reader@example.test',
+      subject: 'Hello',
+      text: 'Hello',
+      traffic_class: 'transactional',
+    }),
+  ).rejects.toMatchObject({
+    status: 429,
+    retryAfter: 60,
+    details: { code: 'recipient_quota_exhausted' },
+  });
+});

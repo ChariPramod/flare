@@ -17,6 +17,9 @@ import {
   mailLimits,
   removeManualSuppression,
   protectSuppression,
+  SendingPolicyError,
+  getSendingPolicy,
+  sendingReadiness,
 } from '@flare/mail';
 import { Access } from './auth.js';
 import { config, parse, sql } from './context.js';
@@ -40,15 +43,21 @@ export function mailOptions() {
 @Catch(MailError)
 export class MailExceptionFilter implements ExceptionFilter {
   catch(error: MailError, host: ArgumentsHost) {
-    host
-      .switchToHttp()
-      .getResponse<Response>()
-      .status(error.status)
-      .json({ statusCode: error.status, message: error.message });
+    const response = host.switchToHttp().getResponse<Response>();
+    if (error instanceof SendingPolicyError && error.retryAfter)
+      response.setHeader('Retry-After', String(error.retryAfter));
+    response.status(error.status).json({
+      statusCode: error.status,
+      message: error.message,
+      ...(error instanceof SendingPolicyError ? { code: error.code } : {}),
+    });
   }
 }
 @Controller('v1')
 export class MailController {
+  @Get('sending-policy') async sendingPolicy(@Req() req: AuthRequest) {
+    return getSendingPolicy(sql, req.principal.orgId);
+  }
   @Access('send') @Post('emails') async send(@Req() req: AuthRequest, @Body() body: unknown) {
     const result = await submitEmails(mailOptions(), req.principal, [body], {
       key: req.get('idempotency-key'),
@@ -81,14 +90,14 @@ export class MailController {
       sql,
       req.principal,
       (tx) =>
-        tx`select id,domain_id,request->>'from' as "from",request->>'subject' as subject,status,scheduled_at,next_attempt_at,created_at from messages order by created_at desc limit 100`,
+        tx`select id,domain_id,request->>'from' as "from",request->>'subject' as subject,status,scheduled_at,next_attempt_at,hold_reason,traffic_class,created_at from messages where (${req.principal.domainId ?? null}::uuid is null or domain_id=${req.principal.domainId ?? null}) order by created_at desc limit 100`,
     );
   }
   @Get('emails/:id') async get(@Req() req: AuthRequest, @Param('id') id: string) {
     id = parse(uuid, id);
     return withTenant(sql, req.principal, async (tx) => {
       const [message] =
-        await tx`select id,domain_id,request,status,scheduled_at,next_attempt_at,delivery_started_at,error,created_at,updated_at from messages where id=${id}`;
+        await tx`select id,domain_id,request,status,scheduled_at,next_attempt_at,delivery_started_at,hold_reason,traffic_class,route_snapshot,error,created_at,updated_at from messages where id=${id}`;
       if (!message || (req.principal.domainId && req.principal.domainId !== message.domain_id))
         throw new MailError(404, 'Email not found');
       return {
@@ -98,7 +107,7 @@ export class MailController {
         events:
           await tx`select type,recipient,data,created_at from delivery_events where message_id=${id} order by created_at`,
         attempts:
-          await tx`select provider,ordinal,status,error,diagnostics,started_at,finished_at from transport_attempts where message_id=${id} order by ordinal`,
+          await tx`select provider,instance_id,ordinal,status,error,diagnostics,started_at,finished_at from transport_attempts where message_id=${id} order by ordinal`,
       };
     });
   }
@@ -129,12 +138,46 @@ export class MailController {
     return changeSchedule(sql, req.principal, parse(uuid, id), null);
   }
   @Get('domains') async domains(@Req() req: AuthRequest) {
-    return withTenant(
-      sql,
-      req.principal,
-      (tx) =>
-        tx`select id,name,region,status,sending,receiving,open_tracking,click_tracking,tracking_subdomain,enforce_tls,records,checked_at,verified_at,next_check_at,created_at from domains order by created_at desc`,
-    );
+    let transports: ReturnType<typeof configuredTransports> = [];
+    try {
+      transports = configuredTransports();
+    } catch {
+      /* Report configuration outage as a readiness blocker. */
+    }
+    return withTenant(sql, req.principal, async (tx) => {
+      const rows =
+        await tx`select id,name,region,status,sending,receiving,open_tracking,click_tracking,tracking_subdomain,enforce_tls,records,dmarc_evidence,checked_at,verified_at,next_check_at,created_at from domains where (${req.principal.domainId ?? null}::uuid is null or id=${req.principal.domainId ?? null}) order by created_at desc`;
+      const [environment] =
+        await tx`select name from environments where id=${req.principal.environmentId}`;
+      const routes =
+        await tx`select transport_instances from mail_routes where disabled_at is null`;
+      const allowed = new Set(
+        routes.flatMap((row) =>
+          Array.isArray(row.transport_instances) ? (row.transport_instances as string[]) : [],
+        ),
+      );
+      const instances = transports.filter(
+        (adapter) => adapter.instance && allowed.has(adapter.instance.id),
+      );
+      return Promise.all(
+        rows.map(async (domain) => ({
+          ...domain,
+          id: String(domain.id),
+          ownership_status: domain.status,
+          readiness: {
+            environment: environment?.name ?? 'unknown',
+            blockers: instances.length ? [] : ['approved_route_unavailable'],
+            transports: await Promise.all(
+              instances.map(async (adapter) => ({
+                transport_instance: adapter.instance!.id,
+                provider: adapter.name,
+                ...(await sendingReadiness(tx, req.principal, domain, adapter)),
+              })),
+            ),
+          },
+        })),
+      );
+    });
   }
   @Post('domains') async createDomain(@Req() req: AuthRequest, @Body() body: unknown) {
     const input = parse(domainSchema, body);

@@ -10,6 +10,7 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 const directory = mkdtempSync(join(tmpdir(), 'flare-acceptance-'));
 // Respect Git's source boundary, including uncommitted source, while excluding ignored caches/secrets.
 const sourceFiles = execFileSync(
@@ -37,17 +38,28 @@ for (const file of new Set(sourceFiles)) {
 cpSync('.env.example', join(directory, '.env.example'));
 execFileSync(process.execPath, ['scripts/setup.mjs', '--dev'], { cwd: directory, stdio: 'pipe' });
 const envPath = join(directory, '.env');
+const operatorId = randomUUID();
 let env = readFileSync(envPath, 'utf8');
 env = env
   .replace(/^SEED_DOMAIN=.*$/m, 'SEED_DOMAIN=acceptance.test')
   .replace(/^AUTH_RATE_BURST=.*$/m, 'AUTH_RATE_BURST=100')
+  .replace(/^FLARE_OPERATOR_USER_IDS=.*\n?/gm, '')
+  .replace(/^MAIL_SANDBOX=.*\n?/gm, '')
   .replace(/^SEED_SUBSCRIBER_EMAIL=.*$/m, 'SEED_SUBSCRIBER_EMAIL=recipient@example.net');
-writeFileSync(envPath, env + '\nFLARE_ACCEPTANCE=true\nDOMAIN_DNS_SERVERS=172.29.250.53\n', {
-  mode: 0o600,
-});
+writeFileSync(
+  envPath,
+  env +
+    `\nFLARE_ACCEPTANCE=true\nMAIL_SANDBOX=true\nDOMAIN_DNS_SERVERS=172.29.250.53\nFLARE_OPERATOR_USER_IDS=${operatorId}\n`,
+  {
+    mode: 0o600,
+  },
+);
 mkdirSync(join(directory, 'acceptance/dns'), { recursive: true });
 // Keep this host-owned: the root container overwrites it, then host Playwright reads it.
 writeFileSync(join(directory, 'acceptance/fixtures.json'), '{}', { mode: 0o600 });
+writeFileSync(join(directory, 'acceptance/operator.json'), JSON.stringify({ id: operatorId }), {
+  mode: 0o600,
+});
 // Deliberately empty until the API creates a domain and publishes its actual DKIM records.
 writeFileSync(
   join(directory, 'acceptance/dns/acceptance.test'),

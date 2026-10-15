@@ -2,6 +2,8 @@ import { Resolver } from 'node:dns/promises';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { encrypt } from '@flare/shared';
+import { resolveDmarc } from './dmarc.js';
+import { parseNamedTransports } from './routes.js';
 export const domainName = z
   .string()
   .trim()
@@ -56,31 +58,47 @@ export function domainRecords(
     required = true,
   ): DnsRecord => ({ type, name, value, purpose, required, status: 'pending' });
   const host = process.env.POSTAL_HOSTNAME ?? 'postal.localhost';
+  const postal = process.env.MAIL_TRANSPORTS
+    ? parseNamedTransports(process.env.MAIL_TRANSPORTS).some(
+        (transport) => transport.kind === 'postal',
+      )
+    : (process.env.TRANSPORT_PRIORITY || process.env.TRANSPORT || 'postal')
+        .split(',')
+        .map((v) => v.trim())
+        .includes('postal');
+  const returnPrefix = z
+    .string()
+    .regex(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/)
+    .parse(process.env.POSTAL_RETURN_PATH_PREFIX ?? 'psrp');
   const result = [
     record(
       'TXT',
       `${domain.dkim_selector}._domainkey.${domain.name}`,
       `v=DKIM1; k=rsa; p=${domain.dkim_public}`,
       'dkim',
-      domain.sending,
-    ),
-    record(
-      'TXT',
-      domain.name,
-      `v=spf1 include:${process.env.POSTAL_SPF_HOST ?? host} ~all`,
-      'spf',
-      domain.sending,
-    ),
-    record(
-      'MX',
-      `rp.${domain.name}`,
-      process.env.POSTAL_RETURN_PATH ?? host,
-      'return_path',
-      domain.sending,
+      true,
     ),
     record('TXT', `_dmarc.${domain.name}`, 'v=DMARC1; p=none', 'dmarc', false),
   ];
-  if (domain.receiving) result.push(record('MX', domain.name, host, 'receiving'));
+  // Ownership is the generated DKIM record. Provider DNS instructions are separate readiness evidence.
+  if (postal)
+    result.push(
+      record(
+        'TXT',
+        domain.name,
+        `v=spf1 include:${process.env.POSTAL_SPF_HOST ?? host} ~all`,
+        'spf',
+        false,
+      ),
+      record(
+        'CNAME',
+        `${returnPrefix}.${domain.name}`,
+        process.env.POSTAL_RETURN_PATH ?? host,
+        'return_path',
+        false,
+      ),
+    );
+  if (domain.receiving) result.push(record('MX', domain.name, host, 'receiving', false));
   if (domain.open_tracking || domain.click_tracking)
     result.push(
       record(
@@ -88,6 +106,7 @@ export function domainRecords(
         `${domain.tracking_subdomain}.${domain.name}`,
         new URL(process.env.TRACKING_URL ?? 'http://localhost:4000').hostname,
         'tracking',
+        false,
       ),
     );
   return result;
@@ -97,10 +116,12 @@ export interface DnsResolver {
   resolveMx(host: string): Promise<{ exchange: string; priority: number }[]>;
   resolveCname(host: string): Promise<string[]>;
 }
-const resolver = new Resolver({ timeout: 5000, tries: 2 });
+export const domainResolver = new Resolver({ timeout: 5000, tries: 2 });
 // Operator-controlled resolvers support private authoritative DNS; never accept these from a request.
 if (process.env.DOMAIN_DNS_SERVERS)
-  resolver.setServers(process.env.DOMAIN_DNS_SERVERS.split(',').map((server) => server.trim()));
+  domainResolver.setServers(
+    process.env.DOMAIN_DNS_SERVERS.split(',').map((server) => server.trim()),
+  );
 const normalizeHost = (s: string) => s.toLowerCase().replace(/\.$/, '');
 const txtTags = (value: string) =>
   Object.fromEntries(
@@ -110,11 +131,23 @@ const txtTags = (value: string) =>
       .filter((v) => v.length === 2)
       .map(([k, v]) => [k!.toLowerCase(), v!.trim()]),
   );
-export async function verifyRecords(records: DnsRecord[], dns: DnsResolver = resolver) {
+export async function verifyRecords(records: DnsRecord[], dns: DnsResolver = domainResolver) {
   return Promise.all(
     records.map(async (record) => {
       try {
         let valid = false;
+        if (record.purpose === 'dmarc') {
+          const dmarc = await resolveDmarc(record.name.replace(/^_dmarc\./, ''), dns);
+          return {
+            ...record,
+            status:
+              dmarc.status === 'verified'
+                ? ('verified' as const)
+                : dmarc.status === 'temporary_failure'
+                  ? ('temporary_failure' as const)
+                  : ('failed' as const),
+          };
+        }
         if (record.type === 'MX')
           valid = (await dns.resolveMx(record.name)).some(
             (r) => normalizeHost(r.exchange) === normalizeHost(record.value),
@@ -153,7 +186,8 @@ export async function verifyRecords(records: DnsRecord[], dns: DnsResolver = res
   );
 }
 export function verificationStatus(records: DnsRecord[]) {
-  const required = records.filter((v) => v.required);
+  const required = records.filter((v) => v.purpose === 'dkim');
+  if (!required.length) return 'failed';
   return required.some((v) => v.status === 'temporary_failure')
     ? 'temporary_failure'
     : required.every((v) => v.status === 'verified')
@@ -161,5 +195,5 @@ export function verificationStatus(records: DnsRecord[]) {
       : 'failed';
 }
 export function verificationDelay(attempt: number, verified: boolean) {
-  return verified ? 86400 : Math.min(86400, 30 * 2 ** Math.min(attempt, 12));
+  return verified ? 3600 : Math.min(86400, 30 * 2 ** Math.min(attempt, 12));
 }

@@ -97,11 +97,23 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
       const data = JSON.parse(text) as SessionResponse;
       const organization = data.organizations[0];
       const environment = organization?.environments[0];
-      if (!organization || !environment)
-        return NextResponse.json(
-          { message: 'This account has no organization access' },
-          { status: 403 },
-        );
+      if (!organization || !environment) {
+        const operator = await fetch(`${api()}/v1/operator/session`, {
+          headers: { Authorization: `Bearer ${data.token}` },
+          cache: 'no-store',
+          redirect: 'error',
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!operator.ok)
+          return NextResponse.json(
+            { message: 'This account has no organization access' },
+            { status: 403 },
+          );
+        jar.set(names.token, data.token, options);
+        jar.delete(names.org);
+        jar.delete(names.env);
+        return NextResponse.json({ organizations: [], operator_only: true });
+      }
       jar.set(names.token, data.token, options);
       jar.set(names.org, organization.id, options);
       jar.set(names.env, environment.id, options);
@@ -111,7 +123,11 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
     // Session validation also rejects revoked membership/context with 403.
     // Other resource-level 403 responses must not sign out a valid viewer.
     const sessionRejected = joined === 'session' && response.status === 403;
-    if (joined === 'auth/logout' || response.status === 401 || sessionRejected)
+    if (
+      ['auth/logout', 'operator/logout'].includes(joined) ||
+      response.status === 401 ||
+      sessionRejected
+    )
       for (const name of Object.values(names)) jar.delete(name);
     return new NextResponse(text || null, {
       status: sessionRejected ? 401 : response.status,

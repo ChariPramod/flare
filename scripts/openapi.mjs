@@ -138,245 +138,263 @@ for (const file of readdirSync('apps/api/src').filter(
         ['Get', 'Post', 'Put', 'Patch', 'Delete'].includes(d.expression.getText()),
       );
       if (!route) continue;
-      const http = route.expression.getText().toLowerCase(),
-        path = `/${[prefix, arg(route)].filter(Boolean).join('/')}`.replace(
-          /:([A-Za-z0-9_]+)/g,
-          '{$1}',
-        );
-      const id = `${controller.name.text}_${method.name.getText()}`;
-      const parameters = [];
-      let bodySchema;
-      for (const parameter of method.parameters) {
-        const body = deco(parameter, 'Body'),
-          query = deco(parameter, 'Query'),
-          param = deco(parameter, 'Param');
-        if (!body && !query && !param) continue;
-        const name = parameter.name.getText();
-        let validator;
-        const visit = (node) => {
-          if (
-            ts.isCallExpression(node) &&
-            ['parse', 'contentInput'].includes(node.expression.getText()) &&
-            node.arguments[1]?.getText() === name
-          ) {
-            try {
-              validator = evaluate(node.arguments[0].getText(), scope);
-            } catch (e) {
-              failures.push(`${id}: ${e.message}`);
-            }
-          }
-          ts.forEachChild(node, visit);
-        };
-        visit(method);
-        if (body) {
-          validator = overrides[id] ?? validator;
-          if (!validator) {
+      const variants = ts.isArrayLiteralExpression(route.arguments[0] ?? {})
+        ? route.arguments[0].elements.map((node) => {
+            if (!ts.isStringLiteral(node)) throw new Error('Route must be literal');
+            return node.text;
+          })
+        : [arg(route)];
+      for (const [variant, suffix] of variants.entries()) {
+        const http = route.expression.getText().toLowerCase(),
+          path = `/${[prefix, suffix].filter(Boolean).join('/')}`.replace(
+            /:([A-Za-z0-9_]+)/g,
+            '{$1}',
+          );
+        const id = `${controller.name.text}_${method.name.getText()}`;
+        const operationId = variant ? `${id}_instance` : id;
+        const operator = controller.name.text.startsWith('Operator');
+        const parameters = [];
+        let bodySchema;
+        for (const parameter of method.parameters) {
+          const body = deco(parameter, 'Body'),
+            query = deco(parameter, 'Query'),
+            param = deco(parameter, 'Param');
+          if (!body && !query && !param) continue;
+          const name = parameter.name.getText();
+          let validator;
+          const visit = (node) => {
             if (
-              id === 'MailEventController_sns' ||
-              id === 'MailEventController_postal' ||
-              id === 'InboundController_receive' ||
-              id === 'OperationsController_engineEvent'
-            )
-              bodySchema = {
-                ...json,
-                description: 'Signed native provider payload; see provider setup documentation.',
-              };
-            else failures.push(`${id}: body validator unresolved`);
-          } else bodySchema = schema(validator);
-        }
-        if (param)
-          parameters.push({
-            in: 'path',
-            name: arg(param),
-            required: true,
-            schema: validator ? schema(validator) : scalar,
-          });
-        if (query) {
-          const key = arg(query);
-          if (key)
+              ts.isCallExpression(node) &&
+              ['parse', 'contentInput'].includes(node.expression.getText()) &&
+              node.arguments[1]?.getText() === name
+            ) {
+              try {
+                validator = evaluate(node.arguments[0].getText(), scope);
+              } catch (e) {
+                failures.push(`${id}: ${e.message}`);
+              }
+            }
+            ts.forEachChild(node, visit);
+          };
+          visit(method);
+          if (body) {
+            validator = overrides[id] ?? validator;
+            if (!validator) {
+              if (
+                id === 'MailEventController_sns' ||
+                id === 'MailEventController_postal' ||
+                id === 'InboundController_receive' ||
+                id === 'OperationsController_engineEvent'
+              )
+                bodySchema = {
+                  ...json,
+                  description: 'Signed native provider payload; see provider setup documentation.',
+                };
+              else failures.push(`${id}: body validator unresolved`);
+            } else bodySchema = schema(validator);
+          }
+          if (param && path.includes(`{${arg(param)}}`))
             parameters.push({
-              in: 'query',
-              name: key,
-              required: !parameter.questionToken,
+              in: 'path',
+              name: arg(param),
+              required: true,
               schema: validator ? schema(validator) : scalar,
             });
-          else if (validator) {
-            const s = schema(validator);
-            for (const [key, value] of Object.entries(s.properties ?? {}))
+          if (query) {
+            const key = arg(query);
+            if (key)
               parameters.push({
                 in: 'query',
                 name: key,
-                required: s.required?.includes(key) ?? false,
-                schema: value,
+                required: !parameter.questionToken,
+                schema: validator ? schema(validator) : scalar,
               });
-          } else failures.push(`${id}: query validator unresolved`);
+            else if (validator) {
+              const s = schema(validator);
+              for (const [key, value] of Object.entries(s.properties ?? {}))
+                parameters.push({
+                  in: 'query',
+                  name: key,
+                  required: s.required?.includes(key) ?? false,
+                  schema: value,
+                });
+            } else failures.push(`${id}: query validator unresolved`);
+          }
         }
-      }
-      const isPublic = !!deco(method, 'Public'),
-        access = arg(deco(method, 'Access')) ?? (http === 'get' ? 'read' : 'write');
-      if (!isPublic)
-        parameters.push(
-          {
+        for (const match of path.matchAll(/\{([^}]+)\}/g))
+          if (!parameters.some((p) => p.in === 'path' && p.name === match[1]))
+            parameters.push({ in: 'path', name: match[1], required: true, schema: scalar });
+        const isPublic = !operator && !!deco(method, 'Public'),
+          access = operator
+            ? 'operator'
+            : (arg(deco(method, 'Access')) ?? (http === 'get' ? 'read' : 'write'));
+        if (!isPublic && !operator)
+          parameters.push(
+            {
+              in: 'header',
+              name: 'x-environment-id',
+              schema: { type: 'string', format: 'uuid' },
+              description:
+                'Required for user sessions. API keys are bound to one environment; supplying this header verifies that selection.',
+            },
+            {
+              in: 'header',
+              name: 'x-org-id',
+              schema: { type: 'string', format: 'uuid' },
+              description: 'Required for user sessions; optional tenant assertion for API keys.',
+            },
+          );
+        if (
+          [
+            'MailController_send',
+            'MailController_batch',
+            'WorkflowController_trigger',
+            'WorkflowController_bulk',
+          ].includes(id)
+        )
+          parameters.push({
             in: 'header',
-            name: 'x-environment-id',
-            schema: { type: 'string', format: 'uuid' },
+            name: 'Idempotency-Key',
+            schema: { type: 'string', minLength: 1, maxLength: 256 },
             description:
-              'Required for user sessions. API keys are bound to one environment; supplying this header verifies that selection.',
-          },
-          {
-            in: 'header',
-            name: 'x-org-id',
-            schema: { type: 'string', format: 'uuid' },
-            description: 'Required for user sessions; optional tenant assertion for API keys.',
-          },
-        );
-      if (
-        [
-          'MailController_send',
-          'MailController_batch',
-          'WorkflowController_trigger',
-          'WorkflowController_bulk',
-        ].includes(id)
-      )
-        parameters.push({
-          in: 'header',
-          name: 'Idempotency-Key',
-          schema: { type: 'string', minLength: 1, maxLength: 256 },
+              '24-hour validated-request deduplication. Reusing a key with different content returns 409.',
+          });
+        if (id === 'OperationsController_engineEvent')
+          bodySchema = schema(
+            z
+              .object({
+                type: z.string().regex(/^(workflow|message|notification)\.[a-z_.]+$/),
+                data: z.record(z.unknown()),
+              })
+              .passthrough(),
+          );
+        if (id === 'InboundController_receive')
+          bodySchema = schema(
+            z
+              .object({
+                id: z.union([z.string().min(1).max(200), z.number().int().nonnegative()]),
+                rcpt_to: z.string().email(),
+                mail_from: z.union([z.literal(''), z.string().email()]),
+                message: z.string(),
+                base64: z.literal(true),
+                size: z.number().int().nonnegative().max(26214400),
+              })
+              .passthrough(),
+          );
+        if (['MailEventController_postal', 'InboundController_receive'].includes(id))
+          parameters.push(
+            {
+              in: 'header',
+              name: 'x-postal-signature-256',
+              required: true,
+              schema: scalar,
+              description:
+                'Native Postal SHA-256 signature over the original body, verified against the configured public key.',
+            },
+            { in: 'header', name: 'x-postal-signature-kid', schema: scalar },
+          );
+        if (id === 'OperationsController_engineEvent')
+          for (const name of ['svix-id', 'svix-timestamp', 'svix-signature'])
+            parameters.push({ in: 'header', name, required: true, schema: scalar });
+        const sessionOnly =
+          operator ||
+          method.getText().includes('sessionOnly(req)') ||
+          ['manage_keys', 'manage_team'].includes(access);
+        const response = responseFor(id);
+        const operation = {
+          operationId,
+          tags: [controller.name.text.replace('Controller', '')],
+          summary: `${method.name.getText()} (${access})`,
           description:
-            '24-hour validated-request deduplication. Reusing a key with different content returns 409.',
-        });
-      if (id === 'OperationsController_engineEvent')
-        bodySchema = schema(
-          z
-            .object({
-              type: z.string().regex(/^(workflow|message|notification)\.[a-z_.]+$/),
-              data: z.record(z.unknown()),
-            })
-            .passthrough(),
-        );
-      if (id === 'InboundController_receive')
-        bodySchema = schema(
-          z
-            .object({
-              id: z.union([z.string().min(1).max(200), z.number().int().nonnegative()]),
-              rcpt_to: z.string().email(),
-              mail_from: z.union([z.literal(''), z.string().email()]),
-              message: z.string(),
-              base64: z.literal(true),
-              size: z.number().int().nonnegative().max(26214400),
-            })
-            .passthrough(),
-        );
-      if (['MailEventController_postal', 'InboundController_receive'].includes(id))
-        parameters.push(
-          {
-            in: 'header',
-            name: 'x-postal-signature-256',
-            required: true,
-            schema: scalar,
-            description:
-              'Native Postal SHA-256 signature over the original body, verified against the configured public key.',
-          },
-          { in: 'header', name: 'x-postal-signature-kid', schema: scalar },
-        );
-      if (id === 'OperationsController_engineEvent')
-        for (const name of ['svix-id', 'svix-timestamp', 'svix-signature'])
-          parameters.push({ in: 'header', name, required: true, schema: scalar });
-      const sessionOnly =
-        method.getText().includes('sessionOnly(req)') ||
-        ['manage_keys', 'manage_team'].includes(access);
-      const response = responseFor(id);
-      const operation = {
-        operationId: id,
-        tags: [controller.name.text.replace('Controller', '')],
-        summary: `${method.name.getText()} (${access})`,
-        description:
-          response.description ??
-          'Validated inputs may have additional semantic constraints documented in the resource guide.',
-        security: isPublic
-          ? []
-          : sessionOnly
-            ? [{ Session: [] }]
-            : [{ ApiKey: [] }, { Session: [] }],
-        parameters,
-        ...(bodySchema
-          ? {
-              requestBody: {
-                required: true,
-                content: { 'application/json': { schema: bodySchema } },
+            response.description ??
+            'Validated inputs may have additional semantic constraints documented in the resource guide.',
+          security: isPublic
+            ? []
+            : sessionOnly
+              ? [{ Session: [] }]
+              : [{ ApiKey: [] }, { Session: [] }],
+          parameters,
+          ...(bodySchema
+            ? {
+                requestBody: {
+                  required: true,
+                  content: { 'application/json': { schema: bodySchema } },
+                },
+              }
+            : {}),
+          responses: {
+            [http === 'post' ? '201' : '200']: {
+              description: 'Success',
+              content: {
+                [response.contentType ?? 'application/json']: { schema: response.schema ?? json },
               },
-            }
-          : {}),
-        responses: {
-          [http === 'post' ? '201' : '200']: {
-            description: 'Success',
-            content: {
-              [response.contentType ?? 'application/json']: { schema: response.schema ?? json },
-            },
-            headers: {
-              'x-request-id': { schema: scalar },
-              'RateLimit-Limit': { schema: { type: 'integer' } },
-              'RateLimit-Remaining': { schema: { type: 'integer' } },
-              'RateLimit-Reset': {
-                schema: { type: 'integer' },
-                description: 'Seconds until bucket refills',
+              headers: {
+                'x-request-id': { schema: scalar },
+                'RateLimit-Limit': { schema: { type: 'integer' } },
+                'RateLimit-Remaining': { schema: { type: 'integer' } },
+                'RateLimit-Reset': {
+                  schema: { type: 'integer' },
+                  description: 'Seconds until bucket refills',
+                },
               },
             },
+            ...Object.fromEntries(
+              [400, 401, 403, 404, 409, 413, 422, 429, 502, 503].map((status) => [
+                status,
+                {
+                  description:
+                    status === 429
+                      ? 'Rate limited'
+                      : status === 503
+                        ? 'Dependency unavailable'
+                        : 'Request failed',
+                  content: {
+                    'application/json': { schema: { $ref: '#/components/schemas/Error' } },
+                  },
+                  headers: { 'Retry-After': { schema: scalar } },
+                },
+              ]),
+            ),
           },
-          ...Object.fromEntries(
-            [400, 401, 403, 404, 409, 413, 422, 429, 502, 503].map((status) => [
-              status,
-              {
-                description:
-                  status === 429
-                    ? 'Rate limited'
-                    : status === 503
-                      ? 'Dependency unavailable'
-                      : 'Request failed',
-                content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
-                headers: { 'Retry-After': { schema: scalar } },
-              },
-            ]),
-          ),
-        },
-        'x-flare-access': access,
-      };
-      paths[path] ??= {};
-      paths[path][http] = operation;
-      const toolProperties = {};
-      const toolRequired = [];
-      for (const location of ['path', 'query']) {
-        const selected = parameters.filter((p) => p.in === location);
-        if (selected.length) {
-          const required = selected.filter((p) => p.required).map((p) => p.name);
-          toolProperties[location] = {
-            type: 'object',
-            properties: Object.fromEntries(selected.map((p) => [p.name, p.schema])),
-            required,
-            additionalProperties: false,
-          };
-          if (required.length) toolRequired.push(location);
+          'x-flare-access': access,
+        };
+        paths[path] ??= {};
+        paths[path][http] = operation;
+        const toolProperties = {};
+        const toolRequired = [];
+        for (const location of ['path', 'query']) {
+          const selected = parameters.filter((p) => p.in === location);
+          if (selected.length) {
+            const required = selected.filter((p) => p.required).map((p) => p.name);
+            toolProperties[location] = {
+              type: 'object',
+              properties: Object.fromEntries(selected.map((p) => [p.name, p.schema])),
+              required,
+              additionalProperties: false,
+            };
+            if (required.length) toolRequired.push(location);
+          }
         }
+        if (bodySchema) {
+          toolProperties.body = bodySchema;
+          toolRequired.push('body');
+        }
+        toolProperties.idempotencyKey = { type: 'string', maxLength: 256 };
+        manifest.push({
+          id: operationId,
+          method: http.toUpperCase(),
+          path,
+          access,
+          public: isPublic,
+          sessionOnly,
+          inputSchema: {
+            type: 'object',
+            properties: toolSchema(toolProperties),
+            required: toolRequired,
+            additionalProperties: false,
+          },
+        });
       }
-      if (bodySchema) {
-        toolProperties.body = bodySchema;
-        toolRequired.push('body');
-      }
-      toolProperties.idempotencyKey = { type: 'string', maxLength: 256 };
-      manifest.push({
-        id,
-        method: http.toUpperCase(),
-        path,
-        access,
-        public: isPublic,
-        sessionOnly,
-        inputSchema: {
-          type: 'object',
-          properties: toolSchema(toolProperties),
-          required: toolRequired,
-          additionalProperties: false,
-        },
-      });
     }
   }
 }
@@ -398,7 +416,8 @@ const document = {
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'JWT',
-        description: 'Dashboard session; supply organization and environment headers',
+        description:
+          'Dashboard session. Tenant routes require organization and environment headers. Operator routes require deployment allowlisting and recent MFA instead.',
       },
     },
     schemas: {
@@ -410,6 +429,7 @@ const document = {
           },
           statusCode: { type: 'integer' },
           errors: json,
+          code: scalar,
         },
         additionalProperties: true,
       },

@@ -1,9 +1,40 @@
 import assert from 'node:assert/strict';
-import { writeFileSync } from 'node:fs';
-import { randomBytes } from 'node:crypto';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { sql, json, session, until } from './common.mjs';
-import { encrypt } from '../../packages/shared/dist/index.js';
+import {
+  encrypt,
+  hashPassword,
+  hashToken,
+  newTotpSecret,
+} from '../../packages/shared/dist/index.js';
 try {
+  // A dedicated operator has no tenant memberships. Credentials never leave the
+  // host-owned private fixture; the generated allowlist is installed before API startup.
+  const operator = JSON.parse(readFileSync('/acceptance/operator.json', 'utf8'));
+  assert.equal(
+    process.env.FLARE_OPERATOR_USER_IDS,
+    operator.id,
+    'Dedicated acceptance operator is allowlisted',
+  );
+  const operatorFixture = {
+    id: operator.id,
+    email: `operator-${operator.id}@example.test`,
+    password: randomBytes(32).toString('base64url'),
+    secret: newTotpSecret(),
+    recoveryCodes: Array.from({ length: 10 }, () => randomBytes(20).toString('base64url')),
+    orgId: randomUUID(),
+  };
+  await sql`insert into users(id,email,name,password_hash,mfa_secret,recovery_hashes) values(${operatorFixture.id},${operatorFixture.email},'Acceptance platform operator',${await hashPassword(operatorFixture.password)},${encrypt(operatorFixture.secret, process.env.FLARE_ENCRYPTION_KEY, `mfa:${operatorFixture.id}`)},${sql.json(operatorFixture.recoveryCodes.map(hashToken))})`;
+  await sql`insert into organizations(id,name,slug) values(${operatorFixture.orgId},'Operator browser review fixture',${`operator-review-${operatorFixture.orgId}`})`;
+  assert.equal(
+    Number(
+      (await sql`select count(*) as n from memberships where user_id=${operatorFixture.id}`)[0].n,
+    ),
+    0,
+    'Operator fixture has no tenant memberships',
+  );
+  writeFileSync('/acceptance/operator.json', JSON.stringify(operatorFixture), { mode: 0o600 });
   const registration = await json('http://novu-api:3000/v1/auth/register', {
     method: 'POST',
     body: {

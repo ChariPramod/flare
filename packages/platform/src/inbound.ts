@@ -5,7 +5,7 @@ import { withTenant, toJson } from '@flare/db';
 import type { Sql, Transaction } from '@flare/db';
 import { fingerprint, canSend } from '@flare/shared';
 import type { Principal } from '@flare/shared';
-import { MailError, address, outbox, submitEmails } from '@flare/mail';
+import { MailError, address, outbox, submitEmails, evidenceFresh } from '@flare/mail';
 import type { ObjectStore, PipelineOptions } from '@flare/mail';
 
 export function inboundLimits() {
@@ -68,11 +68,20 @@ export async function acceptInbound(sql: Sql, store: ObjectStore, domainId: stri
   if (!mime.length || mime.length > limits.raw || mime.length !== input.data.size)
     throw new MailError(422, 'MIME size mismatch');
   const [domain] =
-    await sql`select id,org_id,environment_id,name,status,receiving from domains where id=${domainId}`;
+    await sql`select id,org_id,environment_id,name,status,receiving,records,checked_at from domains where id=${domainId}`;
   if (
     !domain ||
     domain.status !== 'verified' ||
     !domain.receiving ||
+    !evidenceFresh(domain.checked_at) ||
+    !Array.isArray(domain.records) ||
+    !domain.records.some(
+      (record: { purpose?: string; type?: string; name?: string; status?: string }) =>
+        record.purpose === 'receiving' &&
+        record.type === 'MX' &&
+        record.name === domain.name &&
+        record.status === 'verified',
+    ) ||
     input.data.rcpt_to.split('@')[1] !== domain.name
   )
     throw new MailError(403, 'Verified receiving domain required');
@@ -233,7 +242,7 @@ export async function forwardInbound(options: PipelineOptions, id: string) {
           ...tenant,
           actorId: id,
           role: 'developer',
-          kind: 'api_key',
+          kind: 'session',
           permission: 'full_access',
           production: false,
         },

@@ -114,7 +114,11 @@ export function createRelay(deps: RelayDependencies) {
           callback(
             smtpError(
               error instanceof MailError ? error.message : 'Temporary submission failure',
-              error instanceof MailError && error.status < 500 ? 550 : 451,
+              error instanceof MailError && error.status === 429
+                ? 452
+                : error instanceof MailError && error.status < 500
+                  ? 550
+                  : 451,
             ),
           ),
         );

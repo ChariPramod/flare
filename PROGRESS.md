@@ -4,7 +4,7 @@ Updated: 2026-10-14, America/Los_Angeles.
 
 ## Resume point — 2026-10-14
 
-- Active cycle: approved P0 sender-reputation plan. Checkpoint 1 adds protected provider suppressions, recipient-correct SES delays, conservative transport outcome classification and durable retry deadlines. Operator approval/quotas, domain readiness/routes and dashboard acceptance follow. See `docs/sender-reputation.md`. Verification and commit IDs are recorded below as each checkpoint completes; no live deliverability claim is made.
+- Active cycle: approved P0 sender-reputation plan. Feedback checkpoint `27882e7` passed all five jobs in [CI 38662181492](https://github.com/ChariPramod/flare/actions/runs/38662181492). The next integrated checkpoint implements operator approval/MFA, shared quotas and pacing, automatic suspension, named isolated route bindings, Production sender readiness, dashboard controls and acceptance fixtures. Policy and route checks share the same atomic delivery boundary and are being shipped together. See `docs/sender-reputation.md`. The new container checks remain pending until their candidate CI passes; no live deliverability claim is made.
 
 - Resume from current `main` in the public [ChariPramod/flare](https://github.com/ChariPramod/flare) repository. Latest implementation: `e178006`, with all five jobs green in [CI 38629040758](https://github.com/ChariPramod/flare/actions/runs/38629040758). The native-progress (`82729e7`), browser-MFA (`d65420c`) and native-crash/queue-loss (`ef54d28`) checkpoints also passed all five jobs independently.
 - Verified on `e178006`: lint/types/OpenAPI/build/packages/gitleaks/Ruff, 169 unit/database tests, 25 deterministic evals, 45 Python tests (four external staging checks intentionally skipped), 14 browser contracts, 12 real-service tests and eight live browser flows. Real browser MFA enrollment/recovery/revocation/viewer restrictions and native progress/cancellation passed alongside local TLS OIDC, native Postal callbacks with synthetic outcomes, clean shutdown, native actions and isolated Caddy checks.
@@ -31,6 +31,10 @@ Updated: 2026-10-14, America/Los_Angeles.
 | 8 — Hardening, SDK, CLI                         | Packages, load, recovery and isolated restore passed; deployment gates remain      |
 
 ## Checkpoint log
+
+- 2026-10-14: Integrated P0 approval/readiness checkpoint: deployment-allowlisted operators with live-session MFA step-up, audited policy revisions and protected suppression restoration; default 100-recipient rolling daily quota and 10-attempt/minute pacing across keys/channels; durable holds, campaign admission pauses and reservation cleanup; reviewed feedback watermark and cohort-correct automatic suspension. Named routes pin credentials/pools and prohibit cross-purpose failover. Ownership and Production readiness are separate, with strict DMARC, hourly DNS/SES polling, 24-hour received-evidence expiry and manual attestation provenance. New domain/operator dashboards, tenant status, typed SDK/CLI and migration preservation tests are included. Local lint, typecheck, OpenAPI, build and gitleaks pass, alongside 311 unit/database tests, 25 evals, all 22 Chrome browser contracts, SDK/CLI/MCP installation checks and 45 Python tests (four external staging skips). The isolated SMTP AUTH/STARTTLS helper smoke passes. Five added real-service policy scenarios and the new live operator browser flow are prepared for CI and remain unverified until that run completes.
+
+- 2026-10-14: Feedback checkpoint `27882e7` passed all five jobs in CI `38662181492`, including 14 browser contracts, 12 real-service tests and eight live browser flows. Later P0 controls were not part of that commit and require their own evidence.
 
 - 2026-10-14: Sender-reputation checkpoint 1: fixed SES recipient-specific delays, normalized bounded provider diagnostics, protected automatic suppressions, stopped permanent-refusal failover, quarantined uncertain HTTP outcomes, persisted retry deadlines and redacted outbound email content from logs. Local lint/types/OpenAPI/build/gitleaks, 226 tests across the current working tree and 25 evals pass; this includes independently developed later-checkpoint tests. The committed feedback subset is verified separately by CI. Docker integration and external deliverability evidence remain pending.
 
@@ -107,7 +111,7 @@ All five steps above are complete for the controlled CI environment, verified on
 
 ### Next work that does not require hosting
 
-The native progress/cancellation, real-browser MFA and targeted crash scenarios from the previous resume point are implemented and verified in CI. No implementation checkpoint is waiting to be pushed.
+The native progress/cancellation, real-browser MFA and targeted crash scenarios from the previous resume point are implemented and verified in CI. Those earlier checkpoints are pushed. The newer sender-reputation cycle above supersedes this historical work queue.
 
 1. **Longer mixed workloads:** run sustained email/inbound/Inbox traffic with delays, digests, burst limits and injected failures. Measure memory, backlog age, recovery time and duplicate bounds over longer periods. The current 54-send workload and bounded crash observations establish a narrower boundary.
 2. **Representative upgrades and rollback rehearsals:** exercise populated multi-environment data, published content versions, active operations and additive migrations. Document irreversible migration constraints and test restoration to the preceding release. Current baseline upgrade and synthetic restore evidence does not certify arbitrary downgrade paths.

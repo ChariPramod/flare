@@ -11,6 +11,15 @@ import { resolveEmailTemplate } from './templates.js';
 import { buildMime } from './mime.js';
 import type { ObjectStore } from './storage.js';
 import type { TransportAdapter } from './transports.js';
+import {
+  lockSendingPolicy,
+  sendingAdmission,
+  reserveSendingQuota,
+  releaseUnusedQuota,
+  SendingPolicyError,
+} from './sending-policy.js';
+import { resolveMailRoute } from './routes.js';
+import { sendingReadiness } from './readiness-gate.js';
 
 export interface PipelineOptions {
   sql: Sql;
@@ -71,6 +80,8 @@ export async function submitEmails(
   const uploaded: string[] = [];
   try {
     const run = async (tx: Transaction) => {
+      // Match operator/campaign/dispatch lock order, including idempotent admissions.
+      await lockSendingPolicy(tx, p.orgId);
       if (settings.key) {
         await tx`select pg_advisory_xact_lock(hashtextextended(${`${p.orgId}/${p.environmentId}/${operation}/${settings.key}`},0))`;
         await tx`delete from idempotency where operation=${operation} and key=${settings.key} and expires_at<=now()`;
@@ -106,6 +117,45 @@ export async function submitEmails(
         const accept = async (db: Transaction) => {
           const input = await resolveEmailTemplate(db, value.data);
           const domain = await sender(db, p, input, options.transports);
+          const sandbox =
+            options.transports.length > 0 &&
+            options.transports.every((transport) => transport.sandbox === true);
+          const admission = sandbox
+            ? null
+            : await sendingAdmission(
+                db,
+                p,
+                input.traffic_class,
+                Boolean(settings.campaign?.broadcastId),
+              );
+          const route = admission
+            ? await resolveMailRoute(
+                db,
+                {
+                  trust_tier: admission.policy.trust_tier,
+                  route_bindings: admission.policy.route_bindings,
+                },
+                admission.trafficClass,
+                admission.critical,
+                options.transports,
+              )
+            : null;
+          if (route) {
+            let ready = false;
+            for (const instance of route.instances) {
+              const transport = options.transports.find(
+                (candidate) => candidate.instance?.id === instance.id,
+              )!;
+              if (domain.enforce_tls && !(await transport.supportsRequiredTls())) continue;
+              if ((await sendingReadiness(db, p, domain, transport)).ready) ready = true;
+            }
+            if (!ready)
+              throw new SendingPolicyError(
+                403,
+                'sender_not_ready',
+                'No approved route has fresh sender authentication evidence',
+              );
+          }
           const at = schedule(input.scheduled_at, now);
           const id = randomUUID();
           const envelope = recipients(input);
@@ -178,6 +228,17 @@ export async function submitEmails(
                 recipient: recipient.address,
               });
           }
+          await db`update messages set sandbox=${sandbox},traffic_class=${admission?.trafficClass ?? (settings.campaign?.broadcastId ? 'marketing' : (input.traffic_class ?? null))},policy_revision=${admission?.policy.revision ?? null},submitting_key_id=${!sandbox && p.kind === 'api_key' ? p.actorId : null},route_snapshot=${route ? db.json(toJson(route)) : null},route_id=${route?.id ?? null},route_revision=${route?.revision ?? null} where id=${id}`;
+          if (admission && status === 'queued')
+            await reserveSendingQuota(
+              db,
+              p,
+              id,
+              envelope
+                .filter((recipient) => !blocked.has(recipient.address))
+                .map((recipient) => recipient.address),
+              Number(admission.policy.daily_limit),
+            );
           await outbox(db, p, status === 'scheduled' ? 'email.scheduled' : 'email.queued', {
             email_id: id,
             status,
@@ -235,6 +296,9 @@ async function sender(
   transports: TransportAdapter[],
 ) {
   const name = address(input.from).split('@')[1]!;
+  const [environment] =
+    await tx`select name from environments where id=${p.environmentId} and org_id=${p.orgId}`;
+  if (!environment) throw new MailError(403, 'Sending environment is unavailable');
   const [domain] = await tx`select * from domains where name=${name} for share`;
   if (!domain || domain.status !== 'verified' || !domain.sending)
     throw new MailError(403, `Sender domain ${name} is not verified for sending`);
@@ -249,15 +313,22 @@ async function sender(
 }
 export async function changeSchedule(sql: Sql, p: Principal, id: string, value: string | null) {
   return withTenant(sql, p, async (tx) => {
+    await lockSendingPolicy(tx, p.orgId);
     const [message] = await tx`select * from messages where id=${id} for update`;
     if (!message || !canSend(p, String(message.domain_id)))
       throw new MailError(404, 'Email not found');
-    if (!['queued', 'scheduled'].includes(String(message.status)) || message.delivery_started_at)
+    if (
+      !['queued', 'scheduled', 'held'].includes(String(message.status)) ||
+      message.delivery_started_at
+    )
       throw new MailError(409, 'Delivery has started or the email is terminal');
     const at = value === null ? null : schedule(value);
-    await tx`update messages set status=${at ? 'scheduled' : 'canceled'},scheduled_at=coalesce(${at},scheduled_at),updated_at=now() where id=${id}`;
+    await tx`update messages set status=${at ? 'scheduled' : 'canceled'},scheduled_at=coalesce(${at},scheduled_at),claim_id=null,lease_until=null,hold_reason=null,next_attempt_at=coalesce(${at},now()),updated_at=now() where id=${id}`;
     if (!at)
       await tx`update message_recipients set status='canceled' where message_id=${id} and status='queued'`;
+    if (at)
+      await tx`update sending_quota set state='released' where org_id=${p.orgId} and message_id=${id} and state='reserved'`;
+    else await releaseUnusedQuota(tx, p, id);
     await outbox(tx, p, at ? 'email.scheduled' : 'email.canceled', {
       email_id: id,
       scheduled_at: at?.toISOString(),

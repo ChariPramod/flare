@@ -25,6 +25,16 @@ export const createLogger = (name: string) =>
   });
 
 export const infrastructureConfig = z.object({
+  FLARE_OPERATOR_USER_IDS: z
+    .string()
+    .default('')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean),
+    )
+    .pipe(z.array(z.string().uuid())),
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
   JWT_SECRET: z.string().min(32),

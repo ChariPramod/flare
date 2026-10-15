@@ -13,6 +13,7 @@ import {
   normalizeFeedback,
   normalizeSesNotification,
   verifyTracking,
+  parseNamedTransports,
 } from '@flare/mail';
 import type { DeliveryEvent } from '@flare/mail';
 import { Public } from './auth.js';
@@ -32,15 +33,27 @@ const postalMessage = z
   .passthrough();
 @Controller()
 export class MailEventController {
-  @Public() @Post('v1/events/postal') async postal(
+  @Public() @Post(['v1/events/postal', 'v1/events/postal/:instanceId']) async postal(
     @Req() req: RawBodyRequest<Request>,
     @Body() body: unknown,
+    @Param('instanceId') instanceId?: string,
   ) {
-    const key = process.env.POSTAL_WEBHOOK_PUBLIC_KEY_FILE
-      ? readFileSync(process.env.POSTAL_WEBHOOK_PUBLIC_KEY_FILE, 'utf8')
-      : process.env.POSTAL_WEBHOOK_PUBLIC_KEY;
+    const instance =
+      instanceId && process.env.MAIL_TRANSPORTS
+        ? parseNamedTransports(process.env.MAIL_TRANSPORTS).find(
+            (item) => item.id === instanceId && item.kind === 'postal',
+          )
+        : undefined;
+    if (instanceId && !instance) throw new MailError(404, 'Postal instance is not configured');
+    const key =
+      instance?.kind === 'postal'
+        ? process.env[instance.webhook_public_key_env]
+        : process.env.POSTAL_WEBHOOK_PUBLIC_KEY_FILE
+          ? readFileSync(process.env.POSTAL_WEBHOOK_PUBLIC_KEY_FILE, 'utf8')
+          : process.env.POSTAL_WEBHOOK_PUBLIC_KEY;
     if (!key || !req.rawBody) throw new MailError(503, 'Postal verification is not configured');
     if (
+      !instance &&
       process.env.POSTAL_WEBHOOK_KEY_ID &&
       req.get('x-postal-signature-kid') !== process.env.POSTAL_WEBHOOK_KEY_ID
     )
@@ -71,13 +84,13 @@ export class MailEventController {
       throw new MailError(422, 'Missing or invalid Postal recipient');
     const rfcId = info.message_id?.match(/^<?([0-9a-f-]{36})@[^<>]+>?$/i)?.[1];
     const [message] =
-      await sql`select distinct m.id,m.org_id,m.environment_id from messages m join transport_attempts a on a.message_id=m.id where a.provider='postal' and (m.id::text=${rfcId ?? ''} or a.provider_ids->>${recipient ?? ''}=${info.token ?? ''}) limit 1`;
-    if (!message) throw new MailError(404, 'Postal message correlation not available yet');
+      await sql`select distinct m.id,m.org_id,m.environment_id from messages m join transport_attempts a on a.message_id=m.id and a.org_id=m.org_id and a.environment_id=m.environment_id where a.provider='postal' and a.instance_id=${instance?.id ?? 'postal'} and a.recipients ? ${recipient} and ((${!instance} and m.id::text=${rfcId ?? ''}) or (${Boolean(info.token)} and a.provider_ids->>${recipient}=${info.token ?? ''})) limit 1`;
+    if (!message) throw new MailError(503, 'Postal message correlation not available yet');
     return recordEvent(
       sql,
       { orgId: String(message.org_id), environmentId: String(message.environment_id) },
       {
-        source: 'postal',
+        source: instance ? `postal:${instance.id}` : 'postal',
         sourceId: event.uuid,
         messageId: String(message.id),
         recipient,
@@ -98,9 +111,24 @@ export class MailEventController {
       },
     );
   }
-  @Public() @Post('v1/events/sns') async sns(@Body() body: unknown) {
+  @Public() @Post(['v1/events/sns', 'v1/events/sns/:instanceId']) async sns(
+    @Body() body: unknown,
+    @Param('instanceId') instanceId?: string,
+  ) {
     const event = parse(snsSchema, body);
-    await verifySns(event, (process.env.SES_SNS_TOPIC_ARNS ?? '').split(',').filter(Boolean));
+    const instance =
+      instanceId && process.env.MAIL_TRANSPORTS
+        ? parseNamedTransports(process.env.MAIL_TRANSPORTS).find(
+            (item) => item.id === instanceId && item.kind === 'ses',
+          )
+        : undefined;
+    if (instanceId && !instance) throw new MailError(404, 'SES instance is not configured');
+    await verifySns(
+      event,
+      instance?.kind === 'ses'
+        ? [instance.sns_topic_arn]
+        : (process.env.SES_SNS_TOPIC_ARNS ?? '').split(',').filter(Boolean),
+    );
     if (event.Type === 'SubscriptionConfirmation') {
       if (!event.SubscribeURL) throw new MailError(400, 'Missing SNS subscription URL');
       const url = new URL(event.SubscribeURL);
@@ -130,13 +158,13 @@ export class MailEventController {
     if (!feedback.length) return { ignored: true };
     for (const item of feedback) {
       const [message] =
-        await sql`select m.id,m.org_id,m.environment_id from messages m join transport_attempts a on a.message_id=m.id where a.provider='ses' and a.provider_ids->>${item.recipient}=${item.providerId} limit 1`;
-      if (!message) throw new MailError(404, 'SES message correlation not available yet');
+        await sql`select m.id,m.org_id,m.environment_id from messages m join transport_attempts a on a.message_id=m.id and a.org_id=m.org_id and a.environment_id=m.environment_id where a.provider='ses' and a.instance_id=${instance?.id ?? 'ses'} and a.provider_ids->>${item.recipient}=${item.providerId} limit 1`;
+      if (!message) throw new MailError(503, 'SES message correlation not available yet');
       await recordEvent(
         sql,
         { orgId: String(message.org_id), environmentId: String(message.environment_id) },
         {
-          source: 'sns',
+          source: instance ? `sns:${instance.id}` : 'sns',
           sourceId: `${event.MessageId}/${item.recipient}`,
           messageId: String(message.id),
           recipient: item.recipient,

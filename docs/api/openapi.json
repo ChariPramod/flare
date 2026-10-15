@@ -23804,6 +23804,312 @@
         "x-flare-access": "write"
       }
     },
+    "/v1/events/postal/{instanceId}": {
+      "post": {
+        "operationId": "MailEventController_postal_instance",
+        "tags": [
+          "MailEvent"
+        ],
+        "summary": "postal (write)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instanceId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-postal-signature-256",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Native Postal SHA-256 signature over the original body, verified against the configured public key."
+          },
+          {
+            "in": "header",
+            "name": "x-postal-signature-kid",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "event": {
+                    "type": "string"
+                  },
+                  "uuid": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "payload": {
+                    "type": "object",
+                    "properties": {
+                      "message": {
+                        "type": "object",
+                        "properties": {
+                          "token": {
+                            "type": "string"
+                          },
+                          "message_id": {
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "original_message": {
+                        "type": "object",
+                        "properties": {
+                          "token": {
+                            "type": "string"
+                          },
+                          "message_id": {
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "event",
+                  "uuid",
+                  "payload"
+                ],
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "write"
+      }
+    },
     "/v1/events/sns": {
       "post": {
         "operationId": "MailEventController_sns",
@@ -23814,6 +24120,300 @@
         "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
         "security": [],
         "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "Type": {
+                    "type": "string",
+                    "enum": [
+                      "Notification",
+                      "SubscriptionConfirmation",
+                      "UnsubscribeConfirmation"
+                    ]
+                  },
+                  "Message": {
+                    "type": "string"
+                  },
+                  "MessageId": {
+                    "type": "string"
+                  },
+                  "TopicArn": {
+                    "type": "string"
+                  },
+                  "Timestamp": {
+                    "type": "string"
+                  },
+                  "SignatureVersion": {
+                    "type": "string",
+                    "enum": [
+                      "1",
+                      "2"
+                    ]
+                  },
+                  "Signature": {
+                    "type": "string"
+                  },
+                  "SigningCertURL": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "Subject": {
+                    "type": "string"
+                  },
+                  "Token": {
+                    "type": "string"
+                  },
+                  "SubscribeURL": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "Type",
+                  "Message",
+                  "MessageId",
+                  "TopicArn",
+                  "Timestamp",
+                  "SignatureVersion",
+                  "Signature",
+                  "SigningCertURL"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "write"
+      }
+    },
+    "/v1/events/sns/{instanceId}": {
+      "post": {
+        "operationId": "MailEventController_sns_instance",
+        "tags": [
+          "MailEvent"
+        ],
+        "summary": "sns (write)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instanceId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -24317,6 +24917,374 @@
         "x-flare-access": "read"
       }
     },
+    "/v1/sending-policy": {
+      "get": {
+        "operationId": "MailController_sendingPolicy",
+        "tags": [
+          "Mail"
+        ],
+        "summary": "sendingPolicy (read)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "Session": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-environment-id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Required for user sessions. API keys are bound to one environment; supplying this header verifies that selection."
+          },
+          {
+            "in": "header",
+            "name": "x-org-id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Required for user sessions; optional tenant assertion for API keys."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "org_id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "pending_review",
+                        "approved",
+                        "suspended"
+                      ]
+                    },
+                    "revision": {
+                      "type": "integer"
+                    },
+                    "daily_limit": {
+                      "type": "integer"
+                    },
+                    "per_minute_limit": {
+                      "type": "integer"
+                    },
+                    "complaint_threshold": {
+                      "type": "integer"
+                    },
+                    "hard_bounce_rate": {
+                      "type": "number"
+                    },
+                    "hard_bounce_min": {
+                      "type": "integer"
+                    },
+                    "marketing_enabled": {
+                      "type": "boolean"
+                    },
+                    "default_traffic_class": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "trust_tier": {
+                      "type": "string"
+                    },
+                    "route_bindings": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "suspension_reason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "reviewed_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "reserved": {
+                          "type": "integer"
+                        },
+                        "sent_24h": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "reserved",
+                        "sent_24h"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "feedback": {
+                      "type": "object",
+                      "properties": {
+                        "recipients_24h": {
+                          "type": "integer"
+                        },
+                        "hard_bounces": {
+                          "type": "integer"
+                        },
+                        "complaints": {
+                          "type": "integer"
+                        },
+                        "unknown": {
+                          "type": "integer"
+                        },
+                        "latest_at": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "recipients_24h",
+                        "hard_bounces",
+                        "complaints",
+                        "unknown",
+                        "latest_at"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "state",
+                    "revision",
+                    "daily_limit",
+                    "per_minute_limit",
+                    "complaint_threshold",
+                    "hard_bounce_rate",
+                    "hard_bounce_min",
+                    "marketing_enabled",
+                    "default_traffic_class",
+                    "trust_tier",
+                    "route_bindings",
+                    "suspension_reason",
+                    "reviewed_at",
+                    "updated_at",
+                    "usage",
+                    "feedback"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "read"
+      }
+    },
     "/v1/emails": {
       "post": {
         "operationId": "MailController_send",
@@ -24373,6 +25341,13 @@
                   "from": {
                     "type": "string",
                     "maxLength": 998
+                  },
+                  "traffic_class": {
+                    "type": "string",
+                    "enum": [
+                      "transactional",
+                      "marketing"
+                    ]
                   },
                   "to": {
                     "anyOf": [
@@ -24878,6 +25853,14 @@
                       "next_attempt_at": {
                         "type": "string"
                       },
+                      "hold_reason": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "traffic_class": {
+                        "type": "string",
+                        "nullable": true
+                      },
                       "created_at": {
                         "type": "string"
                       }
@@ -24890,6 +25873,8 @@
                       "status",
                       "scheduled_at",
                       "next_attempt_at",
+                      "hold_reason",
+                      "traffic_class",
                       "created_at"
                     ],
                     "additionalProperties": true
@@ -25156,6 +26141,13 @@
                           "type": "string",
                           "maxLength": 998
                         },
+                        "traffic_class": {
+                          "type": "string",
+                          "enum": [
+                            "transactional",
+                            "marketing"
+                          ]
+                        },
                         "to": {
                           "anyOf": [
                             {
@@ -25389,6 +26381,13 @@
                             "from": {
                               "type": "string",
                               "maxLength": 998
+                            },
+                            "traffic_class": {
+                              "type": "string",
+                              "enum": [
+                                "transactional",
+                                "marketing"
+                              ]
                             },
                             "to": {
                               "anyOf": [
@@ -25938,12 +26937,39 @@
                     "next_attempt_at": {
                       "type": "string"
                     },
+                    "hold_reason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "traffic_class": {
+                      "type": "string",
+                      "enum": [
+                        "transactional",
+                        "marketing"
+                      ],
+                      "nullable": true
+                    },
+                    "scheduled_at": {
+                      "type": "string"
+                    },
+                    "delivery_started_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "route_snapshot": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "nullable": true
+                    },
                     "attempts": {
                       "type": "array",
                       "items": {
                         "type": "object",
                         "properties": {
                           "provider": {
+                            "type": "string"
+                          },
+                          "instance_id": {
                             "type": "string"
                           },
                           "ordinal": {
@@ -25970,6 +26996,7 @@
                         },
                         "required": [
                           "provider",
+                          "instance_id",
                           "ordinal",
                           "status",
                           "error",
@@ -25988,6 +27015,11 @@
                     "request",
                     "error",
                     "next_attempt_at",
+                    "hold_reason",
+                    "traffic_class",
+                    "scheduled_at",
+                    "delivery_started_at",
+                    "route_snapshot",
                     "attempts"
                   ],
                   "additionalProperties": true
@@ -27042,6 +28074,73 @@
                       "status": {
                         "type": "string"
                       },
+                      "ownership_status": {
+                        "type": "string"
+                      },
+                      "dmarc_evidence": {
+                        "type": "object",
+                        "additionalProperties": true
+                      },
+                      "readiness": {
+                        "type": "object",
+                        "properties": {
+                          "environment": {
+                            "type": "string"
+                          },
+                          "blockers": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "transports": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "transport_instance": {
+                                  "type": "string"
+                                },
+                                "provider": {
+                                  "type": "string"
+                                },
+                                "ready": {
+                                  "type": "boolean"
+                                },
+                                "blockers": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "dkim_aligned": {
+                                  "type": "boolean",
+                                  "nullable": true
+                                },
+                                "spf_aligned": {
+                                  "type": "boolean",
+                                  "nullable": true
+                                }
+                              },
+                              "required": [
+                                "transport_instance",
+                                "provider",
+                                "ready",
+                                "blockers",
+                                "dkim_aligned",
+                                "spf_aligned"
+                              ],
+                              "additionalProperties": true
+                            }
+                          }
+                        },
+                        "required": [
+                          "environment",
+                          "blockers",
+                          "transports"
+                        ],
+                        "additionalProperties": true
+                      },
                       "records": {
                         "type": "array",
                         "items": {
@@ -27064,6 +28163,9 @@
                       "created_at",
                       "name",
                       "status",
+                      "ownership_status",
+                      "dmarc_evidence",
+                      "readiness",
                       "records",
                       "sending",
                       "receiving",
@@ -27655,6 +28757,73 @@
                     "status": {
                       "type": "string"
                     },
+                    "ownership_status": {
+                      "type": "string"
+                    },
+                    "dmarc_evidence": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "readiness": {
+                      "type": "object",
+                      "properties": {
+                        "environment": {
+                          "type": "string"
+                        },
+                        "blockers": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "transports": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "transport_instance": {
+                                "type": "string"
+                              },
+                              "provider": {
+                                "type": "string"
+                              },
+                              "ready": {
+                                "type": "boolean"
+                              },
+                              "blockers": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "dkim_aligned": {
+                                "type": "boolean",
+                                "nullable": true
+                              },
+                              "spf_aligned": {
+                                "type": "boolean",
+                                "nullable": true
+                              }
+                            },
+                            "required": [
+                              "transport_instance",
+                              "provider",
+                              "ready",
+                              "blockers",
+                              "dkim_aligned",
+                              "spf_aligned"
+                            ],
+                            "additionalProperties": true
+                          }
+                        }
+                      },
+                      "required": [
+                        "environment",
+                        "blockers",
+                        "transports"
+                      ],
+                      "additionalProperties": true
+                    },
                     "records": {
                       "type": "array",
                       "items": {
@@ -27677,6 +28846,9 @@
                     "created_at",
                     "name",
                     "status",
+                    "ownership_status",
+                    "dmarc_evidence",
+                    "readiness",
                     "records",
                     "sending",
                     "receiving",
@@ -33147,6 +34319,4531 @@
           }
         },
         "x-flare-access": "write"
+      }
+    },
+    "/v1/operator/organizations/{orgId}/domains/{domainId}/evidence": {
+      "get": {
+        "operationId": "OperatorReadinessController_list",
+        "tags": [
+          "OperatorReadiness"
+        ],
+        "summary": "list (operator)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "orgId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "path",
+            "name": "domainId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "operator"
+      },
+      "post": {
+        "operationId": "OperatorReadinessController_record",
+        "tags": [
+          "OperatorReadiness"
+        ],
+        "summary": "record (operator)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "orgId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "path",
+            "name": "domainId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expected_revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 2000
+                  },
+                  "evidence": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "received_headers"
+                        ]
+                      },
+                      "provenance": {
+                        "type": "string",
+                        "enum": [
+                          "operator_attested_receiver_headers"
+                        ]
+                      },
+                      "transport_instance": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "proof_reference": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024,
+                        "pattern": "^[^\\r\\n\\0]+$"
+                      },
+                      "checked_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "header_from_domain": {
+                        "type": "string",
+                        "maxLength": 253,
+                        "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$"
+                      },
+                      "dkim_domain": {
+                        "type": "string",
+                        "maxLength": 253,
+                        "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$"
+                      },
+                      "dkim_pass": {
+                        "type": "boolean"
+                      },
+                      "mail_from_domain": {
+                        "type": "string",
+                        "maxLength": 253,
+                        "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$"
+                      },
+                      "spf_pass": {
+                        "type": "boolean"
+                      },
+                      "dmarc_pass": {
+                        "type": "boolean"
+                      },
+                      "ses": {
+                        "type": "object",
+                        "properties": {
+                          "identity_verified": {
+                            "type": "boolean"
+                          },
+                          "mail_from_domain": {
+                            "type": "string",
+                            "maxLength": 253,
+                            "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "PENDING",
+                              "SUCCESS",
+                              "FAILED",
+                              "TEMPORARY_FAILURE"
+                            ]
+                          },
+                          "behavior_on_mx_failure": {
+                            "type": "string",
+                            "enum": [
+                              "USE_DEFAULT_VALUE",
+                              "REJECT_MESSAGE"
+                            ]
+                          },
+                          "checked_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "identity_verified",
+                          "mail_from_domain",
+                          "status",
+                          "behavior_on_mx_failure",
+                          "checked_at"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "provenance",
+                      "transport_instance",
+                      "proof_reference",
+                      "checked_at",
+                      "header_from_domain",
+                      "dkim_domain",
+                      "dkim_pass",
+                      "mail_from_domain",
+                      "spf_pass",
+                      "dmarc_pass"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "expected_revision",
+                  "reason",
+                  "evidence"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "operator"
+      }
+    },
+    "/v1/operator/organizations/{orgId}/domains/{domainId}/evidence/{instanceId}/revoke": {
+      "post": {
+        "operationId": "OperatorReadinessController_revoke",
+        "tags": [
+          "OperatorReadiness"
+        ],
+        "summary": "revoke (operator)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "orgId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "path",
+            "name": "domainId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "path",
+            "name": "instanceId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expected_revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "expected_revision",
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "operator"
+      }
+    },
+    "/v1/operator/mail-routes": {
+      "get": {
+        "operationId": "OperatorController_routes",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "routes (operator)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "operator"
+      },
+      "post": {
+        "operationId": "OperatorController_createRoute",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "createRoute (operator)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "expected_revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "traffic_class": {
+                    "type": "string",
+                    "enum": [
+                      "transactional",
+                      "marketing"
+                    ]
+                  },
+                  "trust_tier": {
+                    "type": "string",
+                    "enum": [
+                      "customer",
+                      "pareto"
+                    ]
+                  },
+                  "critical": {
+                    "type": "boolean"
+                  },
+                  "transport_instances": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}$"
+                    },
+                    "minItems": 1,
+                    "maxItems": 20
+                  },
+                  "physical_ips": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 2,
+                      "maxLength": 64
+                    },
+                    "maxItems": 1000
+                  },
+                  "proof_reference": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 2000
+                  },
+                  "verified": {
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "expected_revision",
+                  "name",
+                  "traffic_class",
+                  "trust_tier",
+                  "critical",
+                  "transport_instances",
+                  "physical_ips",
+                  "verified",
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "operator"
+      }
+    },
+    "/v1/operator/mail-routes/{id}/{revision}/disable": {
+      "post": {
+        "operationId": "OperatorController_disableRoute",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "disableRoute (operator)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "minimum": 0
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "operator"
+      }
+    },
+    "/v1/operator/logout": {
+      "post": {
+        "operationId": "OperatorController_logout",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "logout (operator)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "operator"
+      }
+    },
+    "/v1/operator/session": {
+      "get": {
+        "operationId": "OperatorController_session",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "session (operator)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "email"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "step_up_required": {
+                      "type": "boolean"
+                    },
+                    "verified_until": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "user",
+                    "step_up_required",
+                    "verified_until"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "operator"
+      }
+    },
+    "/v1/operator/step-up": {
+      "post": {
+        "operationId": "OperatorController_stepUp",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "stepUp (operator)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "verified_until": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "verified_until"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "operator"
+      }
+    },
+    "/v1/operator/sending-policies": {
+      "get": {
+        "operationId": "OperatorController_policies",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "policies (operator)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "org_id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "pending_review",
+                          "approved",
+                          "suspended"
+                        ]
+                      },
+                      "revision": {
+                        "type": "integer"
+                      },
+                      "daily_limit": {
+                        "type": "integer"
+                      },
+                      "per_minute_limit": {
+                        "type": "integer"
+                      },
+                      "complaint_threshold": {
+                        "type": "integer"
+                      },
+                      "hard_bounce_rate": {
+                        "type": "number"
+                      },
+                      "hard_bounce_min": {
+                        "type": "integer"
+                      },
+                      "marketing_enabled": {
+                        "type": "boolean"
+                      },
+                      "default_traffic_class": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "trust_tier": {
+                        "type": "string"
+                      },
+                      "route_bindings": {
+                        "type": "object",
+                        "additionalProperties": true
+                      },
+                      "suspension_reason": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "reviewed_at": {
+                        "type": "string",
+                        "nullable": true
+                      },
+                      "updated_at": {
+                        "type": "string"
+                      },
+                      "usage": {
+                        "type": "object",
+                        "properties": {
+                          "reserved": {
+                            "type": "integer"
+                          },
+                          "sent_24h": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "reserved",
+                          "sent_24h"
+                        ],
+                        "additionalProperties": true
+                      },
+                      "feedback": {
+                        "type": "object",
+                        "properties": {
+                          "recipients_24h": {
+                            "type": "integer"
+                          },
+                          "hard_bounces": {
+                            "type": "integer"
+                          },
+                          "complaints": {
+                            "type": "integer"
+                          },
+                          "unknown": {
+                            "type": "integer"
+                          },
+                          "latest_at": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "recipients_24h",
+                          "hard_bounces",
+                          "complaints",
+                          "unknown",
+                          "latest_at"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "state",
+                      "revision",
+                      "daily_limit",
+                      "per_minute_limit",
+                      "complaint_threshold",
+                      "hard_bounce_rate",
+                      "hard_bounce_min",
+                      "marketing_enabled",
+                      "default_traffic_class",
+                      "trust_tier",
+                      "route_bindings",
+                      "suspension_reason",
+                      "reviewed_at",
+                      "updated_at",
+                      "usage",
+                      "feedback"
+                    ],
+                    "additionalProperties": true
+                  }
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "operator"
+      }
+    },
+    "/v1/operator/sending-policies/{orgId}": {
+      "get": {
+        "operationId": "OperatorController_policy",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "policy (operator)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "orgId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "org_id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "pending_review",
+                        "approved",
+                        "suspended"
+                      ]
+                    },
+                    "revision": {
+                      "type": "integer"
+                    },
+                    "daily_limit": {
+                      "type": "integer"
+                    },
+                    "per_minute_limit": {
+                      "type": "integer"
+                    },
+                    "complaint_threshold": {
+                      "type": "integer"
+                    },
+                    "hard_bounce_rate": {
+                      "type": "number"
+                    },
+                    "hard_bounce_min": {
+                      "type": "integer"
+                    },
+                    "marketing_enabled": {
+                      "type": "boolean"
+                    },
+                    "default_traffic_class": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "trust_tier": {
+                      "type": "string"
+                    },
+                    "route_bindings": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "suspension_reason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "reviewed_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "reserved": {
+                          "type": "integer"
+                        },
+                        "sent_24h": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "reserved",
+                        "sent_24h"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "feedback": {
+                      "type": "object",
+                      "properties": {
+                        "recipients_24h": {
+                          "type": "integer"
+                        },
+                        "hard_bounces": {
+                          "type": "integer"
+                        },
+                        "complaints": {
+                          "type": "integer"
+                        },
+                        "unknown": {
+                          "type": "integer"
+                        },
+                        "latest_at": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "recipients_24h",
+                        "hard_bounces",
+                        "complaints",
+                        "unknown",
+                        "latest_at"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "state",
+                    "revision",
+                    "daily_limit",
+                    "per_minute_limit",
+                    "complaint_threshold",
+                    "hard_bounce_rate",
+                    "hard_bounce_min",
+                    "marketing_enabled",
+                    "default_traffic_class",
+                    "trust_tier",
+                    "route_bindings",
+                    "suspension_reason",
+                    "reviewed_at",
+                    "updated_at",
+                    "usage",
+                    "feedback"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "operator"
+      },
+      "patch": {
+        "operationId": "OperatorController_update",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "update (operator)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "orgId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expected_revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 2000
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "pending_review",
+                      "approved",
+                      "suspended"
+                    ]
+                  },
+                  "daily_limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000
+                  },
+                  "per_minute_limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000
+                  },
+                  "complaint_threshold": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
+                  },
+                  "hard_bounce_rate": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "hard_bounce_min": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000
+                  },
+                  "marketing_enabled": {
+                    "type": "boolean"
+                  },
+                  "default_traffic_class": {
+                    "type": "string",
+                    "enum": [
+                      "transactional",
+                      "marketing"
+                    ],
+                    "nullable": true
+                  },
+                  "trust_tier": {
+                    "type": "string",
+                    "enum": [
+                      "customer",
+                      "pareto"
+                    ]
+                  },
+                  "route_bindings": {
+                    "type": "object",
+                    "properties": {
+                      "transactional": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "revision": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "revision"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "marketing": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "revision": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "revision"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "critical": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "revision": {
+                            "type": "integer",
+                            "exclusiveMinimum": true,
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "revision"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "expected_revision",
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "org_id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "pending_review",
+                        "approved",
+                        "suspended"
+                      ]
+                    },
+                    "revision": {
+                      "type": "integer"
+                    },
+                    "daily_limit": {
+                      "type": "integer"
+                    },
+                    "per_minute_limit": {
+                      "type": "integer"
+                    },
+                    "complaint_threshold": {
+                      "type": "integer"
+                    },
+                    "hard_bounce_rate": {
+                      "type": "number"
+                    },
+                    "hard_bounce_min": {
+                      "type": "integer"
+                    },
+                    "marketing_enabled": {
+                      "type": "boolean"
+                    },
+                    "default_traffic_class": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "trust_tier": {
+                      "type": "string"
+                    },
+                    "route_bindings": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "suspension_reason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "reviewed_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "reserved": {
+                          "type": "integer"
+                        },
+                        "sent_24h": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "reserved",
+                        "sent_24h"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "feedback": {
+                      "type": "object",
+                      "properties": {
+                        "recipients_24h": {
+                          "type": "integer"
+                        },
+                        "hard_bounces": {
+                          "type": "integer"
+                        },
+                        "complaints": {
+                          "type": "integer"
+                        },
+                        "unknown": {
+                          "type": "integer"
+                        },
+                        "latest_at": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "recipients_24h",
+                        "hard_bounces",
+                        "complaints",
+                        "unknown",
+                        "latest_at"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "state",
+                    "revision",
+                    "daily_limit",
+                    "per_minute_limit",
+                    "complaint_threshold",
+                    "hard_bounce_rate",
+                    "hard_bounce_min",
+                    "marketing_enabled",
+                    "default_traffic_class",
+                    "trust_tier",
+                    "route_bindings",
+                    "suspension_reason",
+                    "reviewed_at",
+                    "updated_at",
+                    "usage",
+                    "feedback"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "operator"
+      }
+    },
+    "/v1/operator/sending-policies/{orgId}/audit": {
+      "get": {
+        "operationId": "OperatorController_audit",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "audit (operator)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "orgId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "operator"
+      }
+    },
+    "/v1/operator/sending-policies/{orgId}/restore-suppression": {
+      "post": {
+        "operationId": "OperatorController_restore",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "restore (operator)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "orgId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 2000
+                  },
+                  "expected_revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "email",
+                  "reason",
+                  "expected_revision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "operator"
+      }
+    },
+    "/v1/operator/organizations/{orgId}/credentials/{keyId}": {
+      "patch": {
+        "operationId": "OperatorController_credential",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "credential (operator)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [
+          {
+            "Session": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "orgId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "path",
+            "name": "keyId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expected_revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 2000
+                  },
+                  "traffic_class": {
+                    "type": "string",
+                    "enum": [
+                      "transactional",
+                      "marketing"
+                    ],
+                    "nullable": true
+                  },
+                  "critical_sending": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "expected_revision",
+                  "reason",
+                  "traffic_class",
+                  "critical_sending"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "org_id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "pending_review",
+                        "approved",
+                        "suspended"
+                      ]
+                    },
+                    "revision": {
+                      "type": "integer"
+                    },
+                    "daily_limit": {
+                      "type": "integer"
+                    },
+                    "per_minute_limit": {
+                      "type": "integer"
+                    },
+                    "complaint_threshold": {
+                      "type": "integer"
+                    },
+                    "hard_bounce_rate": {
+                      "type": "number"
+                    },
+                    "hard_bounce_min": {
+                      "type": "integer"
+                    },
+                    "marketing_enabled": {
+                      "type": "boolean"
+                    },
+                    "default_traffic_class": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "trust_tier": {
+                      "type": "string"
+                    },
+                    "route_bindings": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "suspension_reason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "reviewed_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "reserved": {
+                          "type": "integer"
+                        },
+                        "sent_24h": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "reserved",
+                        "sent_24h"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "feedback": {
+                      "type": "object",
+                      "properties": {
+                        "recipients_24h": {
+                          "type": "integer"
+                        },
+                        "hard_bounces": {
+                          "type": "integer"
+                        },
+                        "complaints": {
+                          "type": "integer"
+                        },
+                        "unknown": {
+                          "type": "integer"
+                        },
+                        "latest_at": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "recipients_24h",
+                        "hard_bounces",
+                        "complaints",
+                        "unknown",
+                        "latest_at"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "state",
+                    "revision",
+                    "daily_limit",
+                    "per_minute_limit",
+                    "complaint_threshold",
+                    "hard_bounce_rate",
+                    "hard_bounce_min",
+                    "marketing_enabled",
+                    "default_traffic_class",
+                    "trust_tier",
+                    "route_bindings",
+                    "suspension_reason",
+                    "reviewed_at",
+                    "updated_at",
+                    "usage",
+                    "feedback"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "operator"
       }
     },
     "/v1/publish/diff": {
@@ -41254,7 +46951,7 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "Dashboard session; supply organization and environment headers"
+        "description": "Dashboard session. Tenant routes require organization and environment headers. Operator routes require deployment allowlisting and recent MFA instead."
       }
     },
     "schemas": {
@@ -41284,6 +46981,9 @@
           "errors": {
             "type": "object",
             "additionalProperties": true
+          },
+          "code": {
+            "type": "string"
           }
         },
         "additionalProperties": true

@@ -47,6 +47,7 @@ export const attachmentSchema = z
 export const emailSchema = z
   .object({
     from: mailbox,
+    traffic_class: z.enum(['transactional', 'marketing']).optional(),
     to: addresses,
     cc: addresses.optional(),
     bcc: addresses.optional(),
@@ -138,6 +139,7 @@ export function recipients(input: EmailInput) {
 }
 export type MailState =
   | 'queued'
+  | 'held'
   | 'scheduled'
   | 'sent'
   | 'delivered'
@@ -148,8 +150,9 @@ export type MailState =
   | 'suppressed'
   | 'canceled';
 const transitions: Record<MailState, readonly MailState[]> = {
-  queued: ['sent', 'failed', 'suppressed', 'canceled', 'scheduled'],
-  scheduled: ['queued', 'sent', 'failed', 'suppressed', 'canceled'],
+  queued: ['held', 'sent', 'failed', 'suppressed', 'canceled', 'scheduled'],
+  scheduled: ['held', 'queued', 'sent', 'failed', 'suppressed', 'canceled'],
+  held: ['queued', 'scheduled', 'sent', 'failed', 'suppressed', 'canceled'],
   sent: ['delivered', 'delivery_delayed', 'bounced', 'complained', 'failed'],
   delivery_delayed: ['delivered', 'bounced', 'complained', 'failed'],
   delivered: ['bounced', 'complained'],

@@ -32,6 +32,7 @@ let db: PGlite;
 let server: PGLiteSocketServer;
 const accepted: TransportAdapter = {
   name: 'test',
+  sandbox: true,
   supportsRequiredTls: async () => true,
   send: async (m) => ({
     accepted: m.to,
@@ -85,7 +86,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await sql`truncate automations,contacts,contact_properties,audience_topics,audience_segments,email_templates,broadcasts,messages,event_outbox,idempotency,suppressions cascade`;
   await sql`truncate inbound_messages,forwarding_rules cascade`;
-  await sql`update domains set receiving=true,status='verified'`;
+  await sql`update domains set receiving=true,status='verified',checked_at=now(),records=${sql.json([{ purpose: 'receiving', type: 'MX', name: 'example.com', value: 'postal.example.com', status: 'verified' }])}`;
   objects.clear();
 });
 afterAll(async () => {
@@ -188,6 +189,16 @@ it('rejects unverified domains, mismatched recipients and malformed encoding; st
     (await sql`select status,attempts from inbound_messages where id=${result.id}`)[0],
   ).toMatchObject({ status: 'failed', attempts: 1 });
   expect(await sql`select * from event_outbox`).toHaveLength(0);
+});
+it('requires fresh verified receiving MX separately from domain ownership', async () => {
+  await sql`update domains set checked_at=now()-interval '25 hours' where id=${domainId}`;
+  await expect(acceptInbound(sql, options.store, domainId, payload())).rejects.toThrow('Verified');
+  await sql`update domains set checked_at=now(),records=${sql.json([{ purpose: 'receiving', type: 'MX', name: 'example.com', status: 'failed' }])} where id=${domainId}`;
+  await expect(acceptInbound(sql, options.store, domainId, payload())).rejects.toThrow('Verified');
+  await sql`update domains set records=${sql.json([{ purpose: 'receiving', type: 'MX', name: 'other.example.com', status: 'verified' }])} where id=${domainId}`;
+  await expect(acceptInbound(sql, options.store, domainId, payload())).rejects.toThrow('Verified');
+  expect(await sql`select * from inbound_messages`).toHaveLength(0);
+  expect(objects.size).toBe(0);
 });
 it('retries storage errors without acknowledging failed writes or losing pending parsing work', async () => {
   const broken = {

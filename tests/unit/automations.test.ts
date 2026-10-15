@@ -1,3 +1,4 @@
+import { configureMarketingFixture } from './helpers/sending-policy.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
@@ -6,7 +7,12 @@ import { beforeAll, beforeEach, afterAll, it, expect } from 'vitest';
 import { connectDatabase, withTenant } from '../../packages/db/src/index.js';
 import type { Sql } from '../../packages/db/src/index.js';
 import type { Principal } from '../../packages/shared/src/index.js';
-import { generateDomain, deliverEmail } from '../../packages/mail/src/index.js';
+import {
+  generateDomain,
+  deliverEmail,
+  submitEmails,
+  reserveSendingQuota,
+} from '../../packages/mail/src/index.js';
 import type { PipelineOptions, TransportAdapter } from '../../packages/mail/src/index.js';
 const org = randomUUID(),
   env = randomUUID(),
@@ -32,6 +38,7 @@ let db: PGlite;
 let server: PGLiteSocketServer;
 const accepted: TransportAdapter = {
   name: 'test',
+  sandbox: true,
   supportsRequiredTls: async () => true,
   send: async (m) => ({
     accepted: m.to,
@@ -85,6 +92,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await sql`truncate automations,contacts,contact_properties,audience_topics,audience_segments,email_templates,broadcasts,messages,event_outbox,idempotency,suppressions cascade`;
   objects.clear();
+  options.transports = [accepted];
 });
 afterAll(async () => {
   await sql.end();
@@ -310,4 +318,177 @@ it('rejects cycles, unreachable steps and unsafe JSON Logic operators', () => {
       ],
     }).success,
   ).toBe(false);
+});
+
+it('cancels unstarted held automation mail and releases quota without recalling a started send', async () => {
+  const { run, contact } = await setup();
+  const queries: { query: string; parameters: unknown[] }[] = [];
+  const debug = sql.options.debug;
+  sql.options.debug = (_connection, query, parameters) => {
+    queries.push({ query, parameters });
+  };
+  try {
+    await advanceAutomation(options, run);
+  } finally {
+    sql.options.debug = debug;
+  }
+  const organizationLock = queries.findIndex((entry) =>
+    entry.parameters.includes(`${org}/sending-policy`),
+  );
+  expect(organizationLock).toBeGreaterThanOrEqual(0);
+  expect(organizationLock).toBeLessThan(
+    queries.findIndex((entry) => /for update/i.test(entry.query)),
+  );
+  await submitEmails(
+    options,
+    principal,
+    [
+      { from: 'sender@example.com', to: ['second@example.net'], subject: 'Second', text: 'Second' },
+      { from: 'sender@example.com', to: ['third@example.net'], subject: 'Third', text: 'Third' },
+    ],
+    { campaign: { automationRunId: run, contactId: String(contact.id), topicId: null } },
+  );
+  const messages =
+    await sql`select m.id,r.address from messages m join message_recipients r on r.message_id=m.id order by m.id`;
+  // Represent pre-existing reservations; the test adapter itself remains sandboxed.
+  for (const row of messages)
+    await withTenant(sql, principal, (tx) =>
+      reserveSendingQuota(tx, principal, String(row.id), [String(row.address)], 100),
+    );
+  const [held, scheduled, started] = messages;
+  await sql`update messages set status='held',hold_reason='sending_rate_limited',claim_id=${randomUUID()},lease_until=now()+interval '2 minutes' where id=${held!.id}`;
+  await sql`update messages set status='scheduled',scheduled_at=now()+interval '1 hour' where id=${scheduled!.id}`;
+  const activeClaim = randomUUID();
+  await sql`update messages set delivery_started_at=now(),claim_id=${activeClaim},lease_until=now()+interval '2 minutes' where id=${started!.id}`;
+  await sql`update sending_quota set state='consumed',consumed_at=now() where message_id=${started!.id}`;
+  await expect(
+    cancelAutomation(sql, { orgId: otherOrg, environmentId: foreignEnv }, run),
+  ).rejects.toMatchObject({ status: 404 });
+  queries.length = 0;
+  sql.options.debug = (_connection, query, parameters) => {
+    queries.push({ query, parameters });
+  };
+  try {
+    await cancelAutomation(sql, principal, run);
+  } finally {
+    sql.options.debug = debug;
+  }
+  const cancelLock = queries.findIndex((entry) =>
+    entry.parameters.includes(`${org}/sending-policy`),
+  );
+  expect(cancelLock).toBeGreaterThanOrEqual(0);
+  expect(cancelLock).toBeLessThan(queries.findIndex((entry) => /for update/i.test(entry.query)));
+  expect(
+    await sql`select status,claim_id,lease_until,hold_reason from messages where id in ${sql([held!.id, scheduled!.id])}`,
+  ).toEqual([
+    { status: 'canceled', claim_id: null, lease_until: null, hold_reason: null },
+    { status: 'canceled', claim_id: null, lease_until: null, hold_reason: null },
+  ]);
+  expect(
+    (await sql`select status,claim_id from messages where id=${started!.id}`)[0],
+  ).toMatchObject({ status: 'queued', claim_id: activeClaim });
+  expect(await sql`select * from sending_quota where state='released'`).toHaveLength(2);
+  expect(await sql`select * from sending_quota where state='consumed'`).toHaveLength(1);
+  await cancelAutomation(sql, principal, run);
+  expect(await sql`select * from event_outbox where type='email.canceled'`).toHaveLength(2);
+  expect(await sql`select * from event_outbox where type='automation.canceled'`).toHaveLength(1);
+});
+
+it('releases held reservations when an opt-out automatically cancels the automation', async () => {
+  const { run, contact } = await setup();
+  await advanceAutomation(options, run);
+  const [message] = await sql`select id from messages`;
+  await withTenant(sql, principal, (tx) =>
+    reserveSendingQuota(tx, principal, String(message!.id), [String(contact.email)], 100),
+  );
+  await sql`update messages set status='held',hold_reason='sending_rate_limited' where id=${message!.id}`;
+  await sql`update contacts set unsubscribed=true where id=${contact.id}`;
+  await advanceAutomation(options, run);
+  expect((await sql`select status from automation_runs where id=${run}`)[0]?.status).toBe(
+    'canceled',
+  );
+  expect(
+    (await sql`select status,hold_reason from messages where id=${message!.id}`)[0],
+  ).toMatchObject({ status: 'canceled', hold_reason: null });
+  expect(await sql`select * from sending_quota where state='released'`).toHaveLength(1);
+  expect(await sql`select * from event_outbox where type='email.canceled'`).toHaveLength(1);
+});
+
+it('pauses the same automation step for exhausted quota and resumes it exactly once', async () => {
+  await configureMarketingFixture(options, principal);
+  const { run, contact } = await setup();
+  const prior = (
+    await submitEmails(
+      options,
+      { ...principal, kind: 'session' },
+      [{ from: 'sender@example.com', to: ['prior@example.net'], subject: 'Prior', text: 'Prior' }],
+      { campaign: { contactId: String(contact.id), topicId: null } },
+    )
+  ).data[0]!.id;
+  let failure: unknown;
+  try {
+    await advanceAutomation(options, run);
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toMatchObject({ status: 429, code: 'recipient_quota_exhausted' });
+  await failAutomation(sql, run, failure);
+  expect(
+    (
+      await sql`select status,current_step,attempts,error,next_step_at>now() as deferred from automation_runs where id=${run}`
+    )[0],
+  ).toMatchObject({
+    status: 'queued',
+    current_step: 'welcome',
+    attempts: 0,
+    deferred: true,
+    error: expect.stringContaining('recipient_quota_exhausted'),
+  });
+  expect(await sql`select * from automation_steps where run_id=${run}`).toHaveLength(0);
+  expect(await advanceAutomation(options, run)).toBeUndefined();
+  expect(await sql`select * from messages`).toHaveLength(1);
+  expect(await sql`select * from sending_quota where state='reserved'`).toHaveLength(1);
+  await sql`update sending_quota set state='consumed',consumed_at=now()-interval '25 hours' where message_id=${prior}`;
+  await sql`update automation_runs set next_step_at=now() where id=${run}`;
+  await advanceAutomation(options, run);
+  await advanceAutomation(options, run);
+  expect(await sql`select * from messages`).toHaveLength(2);
+  expect(await sql`select * from messages where automation_run_id=${run}`).toHaveLength(1);
+  expect(await sql`select * from sending_quota where state='reserved'`).toHaveLength(1);
+  expect(
+    (
+      await sql`select status,error from automation_steps where run_id=${run} and step_id='welcome'`
+    )[0],
+  ).toMatchObject({ status: 'completed', error: null });
+});
+
+it('does not consume automation failure retries while operator approval remains blocked', async () => {
+  const fixture = await configureMarketingFixture(options, principal);
+  const { run } = await setup();
+  await fixture.change({ state: 'suspended' });
+  for (let attempt = 0; attempt < 6; attempt++) {
+    await sql`update automation_runs set next_step_at=now() where id=${run}`;
+    try {
+      await advanceAutomation(options, run);
+    } catch (error) {
+      await failAutomation(sql, run, error);
+    }
+  }
+  expect(
+    (await sql`select status,current_step,attempts,error from automation_runs where id=${run}`)[0],
+  ).toMatchObject({
+    status: 'queued',
+    current_step: 'welcome',
+    attempts: 0,
+    error: expect.stringContaining('sending_not_approved'),
+  });
+  expect(await sql`select * from messages`).toHaveLength(0);
+  expect(await sql`select * from automation_steps`).toHaveLength(0);
+  await fixture.change({ state: 'approved' });
+  await sql`update automation_runs set next_step_at=now() where id=${run}`;
+  await advanceAutomation(options, run);
+  expect(await sql`select * from messages where automation_run_id=${run}`).toHaveLength(1);
+  expect(
+    (await sql`select error,current_step from automation_runs where id=${run}`)[0],
+  ).toMatchObject({ error: null, current_step: 'pause' });
 });

@@ -1415,6 +1415,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/events/postal/{instanceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * postal (write)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        post: operations["MailEventController_postal_instance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/events/sns": {
         parameters: {
             query?: never;
@@ -1435,6 +1455,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/events/sns/{instanceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * sns (write)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        post: operations["MailEventController_sns_instance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/t/{token}": {
         parameters: {
             query?: never;
@@ -1447,6 +1487,26 @@ export interface paths {
          * @description Validated inputs may have additional semantic constraints documented in the resource guide.
          */
         get: operations["MailEventController_track"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sending-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * sendingPolicy (read)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        get: operations["MailController_sendingPolicy"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1939,6 +1999,258 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/operator/organizations/{orgId}/domains/{domainId}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * list (operator)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        get: operations["OperatorReadinessController_list"];
+        put?: never;
+        /**
+         * record (operator)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        post: operations["OperatorReadinessController_record"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/operator/organizations/{orgId}/domains/{domainId}/evidence/{instanceId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * revoke (operator)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        post: operations["OperatorReadinessController_revoke"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/operator/mail-routes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * routes (operator)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        get: operations["OperatorController_routes"];
+        put?: never;
+        /**
+         * createRoute (operator)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        post: operations["OperatorController_createRoute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/operator/mail-routes/{id}/{revision}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * disableRoute (operator)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        post: operations["OperatorController_disableRoute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/operator/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * logout (operator)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        post: operations["OperatorController_logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/operator/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * session (operator)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        get: operations["OperatorController_session"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/operator/step-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * stepUp (operator)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        post: operations["OperatorController_stepUp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/operator/sending-policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * policies (operator)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        get: operations["OperatorController_policies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/operator/sending-policies/{orgId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * policy (operator)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        get: operations["OperatorController_policy"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * update (operator)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        patch: operations["OperatorController_update"];
+        trace?: never;
+    };
+    "/v1/operator/sending-policies/{orgId}/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * audit (operator)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        get: operations["OperatorController_audit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/operator/sending-policies/{orgId}/restore-suppression": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * restore (operator)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        post: operations["OperatorController_restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/operator/organizations/{orgId}/credentials/{keyId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * credential (operator)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        patch: operations["OperatorController_credential"];
+        trace?: never;
+    };
     "/v1/publish/diff": {
         parameters: {
             query?: never;
@@ -2339,6 +2651,7 @@ export interface components {
             errors?: {
                 [key: string]: unknown;
             };
+            code?: string;
         } & {
             [key: string]: unknown;
         };
@@ -14416,11 +14729,319 @@ export interface operations {
             };
         };
     };
+    MailEventController_postal_instance: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Native Postal SHA-256 signature over the original body, verified against the configured public key. */
+                "x-postal-signature-256": string;
+                "x-postal-signature-kid"?: string;
+            };
+            path: {
+                instanceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    event: string;
+                    uuid: string;
+                    payload: {
+                        message?: {
+                            token?: string;
+                            message_id?: string;
+                            to?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                        original_message?: {
+                            token?: string;
+                            message_id?: string;
+                            to?: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    } & {
+                        [key: string]: unknown;
+                    };
+                } & {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     MailEventController_sns: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    Type: "Notification" | "SubscriptionConfirmation" | "UnsubscribeConfirmation";
+                    Message: string;
+                    MessageId: string;
+                    TopicArn: string;
+                    Timestamp: string;
+                    /** @enum {string} */
+                    SignatureVersion: "1" | "2";
+                    Signature: string;
+                    /** Format: uri */
+                    SigningCertURL: string;
+                    Subject?: string;
+                    Token?: string;
+                    SubscribeURL?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    MailEventController_sns_instance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -14691,6 +15312,173 @@ export interface operations {
             };
         };
     };
+    MailController_sendingPolicy: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required for user sessions. API keys are bound to one environment; supplying this header verifies that selection. */
+                "x-environment-id"?: string;
+                /** @description Required for user sessions; optional tenant assertion for API keys. */
+                "x-org-id"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        org_id?: string;
+                        name: string;
+                        /** @enum {string} */
+                        state: "pending_review" | "approved" | "suspended";
+                        revision: number;
+                        daily_limit: number;
+                        per_minute_limit: number;
+                        complaint_threshold: number;
+                        hard_bounce_rate: number;
+                        hard_bounce_min: number;
+                        marketing_enabled: boolean;
+                        default_traffic_class: string | null;
+                        trust_tier: string;
+                        route_bindings: {
+                            [key: string]: unknown;
+                        };
+                        suspension_reason: string | null;
+                        reviewed_at: string | null;
+                        updated_at: string;
+                        usage: {
+                            reserved: number;
+                            sent_24h: number;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                        feedback: {
+                            recipients_24h: number;
+                            hard_bounces: number;
+                            complaints: number;
+                            unknown: number;
+                            latest_at: string | null;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    } & {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     MailController_list: {
         parameters: {
             query?: never;
@@ -14724,6 +15512,8 @@ export interface operations {
                         status: string;
                         scheduled_at: string;
                         next_attempt_at: string;
+                        hold_reason: string | null;
+                        traffic_class: string | null;
                         created_at: string;
                     } & {
                         [key: string]: unknown;
@@ -14850,6 +15640,8 @@ export interface operations {
             content: {
                 "application/json": {
                     from: string;
+                    /** @enum {string} */
+                    traffic_class?: "transactional" | "marketing";
                     to: string | string[];
                     cc?: string | string[];
                     bcc?: string | string[];
@@ -15023,6 +15815,8 @@ export interface operations {
             content: {
                 "application/json": {
                     from: string;
+                    /** @enum {string} */
+                    traffic_class?: "transactional" | "marketing";
                     to: string | string[];
                     cc?: string | string[];
                     bcc?: string | string[];
@@ -15057,6 +15851,8 @@ export interface operations {
                 }[] | {
                     emails: {
                         from: string;
+                        /** @enum {string} */
+                        traffic_class?: "transactional" | "marketing";
                         to: string | string[];
                         cc?: string | string[];
                         bcc?: string | string[];
@@ -15257,8 +16053,17 @@ export interface operations {
                         };
                         error: string | null;
                         next_attempt_at: string;
+                        hold_reason: string | null;
+                        /** @enum {string|null} */
+                        traffic_class: "transactional" | "marketing" | null;
+                        scheduled_at: string;
+                        delivery_started_at: string | null;
+                        route_snapshot: {
+                            [key: string]: unknown;
+                        } | null;
                         attempts: ({
                             provider: string;
+                            instance_id: string;
                             ordinal: number;
                             status: string;
                             error: string | null;
@@ -15819,6 +16624,26 @@ export interface operations {
                         created_at: string;
                         name: string;
                         status: string;
+                        ownership_status: string;
+                        dmarc_evidence: {
+                            [key: string]: unknown;
+                        };
+                        readiness: {
+                            environment: string;
+                            blockers: string[];
+                            transports: ({
+                                transport_instance: string;
+                                provider: string;
+                                ready: boolean;
+                                blockers: string[];
+                                dkim_aligned: boolean | null;
+                                spf_aligned: boolean | null;
+                            } & {
+                                [key: string]: unknown;
+                            })[];
+                        } & {
+                            [key: string]: unknown;
+                        };
                         records: {
                             [key: string]: unknown;
                         }[];
@@ -16118,6 +16943,26 @@ export interface operations {
                         created_at: string;
                         name: string;
                         status: string;
+                        ownership_status: string;
+                        dmarc_evidence: {
+                            [key: string]: unknown;
+                        };
+                        readiness: {
+                            environment: string;
+                            blockers: string[];
+                            transports: ({
+                                transport_instance: string;
+                                provider: string;
+                                ready: boolean;
+                                blockers: string[];
+                                dkim_aligned: boolean | null;
+                                spf_aligned: boolean | null;
+                            } & {
+                                [key: string]: unknown;
+                            })[];
+                        } & {
+                            [key: string]: unknown;
+                        };
                         records: {
                             [key: string]: unknown;
                         }[];
@@ -18756,6 +19601,2212 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    OperatorReadinessController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+                domainId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    OperatorReadinessController_record: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+                domainId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expected_revision: number;
+                    reason: string;
+                    evidence: {
+                        /** @enum {string} */
+                        kind: "received_headers";
+                        /** @enum {string} */
+                        provenance: "operator_attested_receiver_headers";
+                        transport_instance: string;
+                        proof_reference: string;
+                        /** Format: date-time */
+                        checked_at: string;
+                        header_from_domain: string;
+                        dkim_domain: string;
+                        dkim_pass: boolean;
+                        mail_from_domain: string;
+                        spf_pass: boolean;
+                        dmarc_pass: boolean;
+                        ses?: {
+                            identity_verified: boolean;
+                            mail_from_domain: string;
+                            /** @enum {string} */
+                            status: "PENDING" | "SUCCESS" | "FAILED" | "TEMPORARY_FAILURE";
+                            /** @enum {string} */
+                            behavior_on_mx_failure: "USE_DEFAULT_VALUE" | "REJECT_MESSAGE";
+                            /** Format: date-time */
+                            checked_at: string;
+                        };
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    OperatorReadinessController_revoke: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+                domainId: string;
+                instanceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expected_revision: number;
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    OperatorController_routes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    OperatorController_createRoute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    id?: string;
+                    expected_revision: number;
+                    name: string;
+                    /** @enum {string} */
+                    traffic_class: "transactional" | "marketing";
+                    /** @enum {string} */
+                    trust_tier: "customer" | "pareto";
+                    critical: boolean;
+                    transport_instances: string[];
+                    physical_ips: string[];
+                    proof_reference?: string;
+                    verified: boolean;
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    OperatorController_disableRoute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                revision: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    OperatorController_logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    OperatorController_session: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        user: {
+                            id: string;
+                            email: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                        step_up_required: boolean;
+                        verified_until: string | null;
+                    } & {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    OperatorController_stepUp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    code: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        verified_until: string;
+                    } & {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    OperatorController_policies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": ({
+                        org_id?: string;
+                        name: string;
+                        /** @enum {string} */
+                        state: "pending_review" | "approved" | "suspended";
+                        revision: number;
+                        daily_limit: number;
+                        per_minute_limit: number;
+                        complaint_threshold: number;
+                        hard_bounce_rate: number;
+                        hard_bounce_min: number;
+                        marketing_enabled: boolean;
+                        default_traffic_class: string | null;
+                        trust_tier: string;
+                        route_bindings: {
+                            [key: string]: unknown;
+                        };
+                        suspension_reason: string | null;
+                        reviewed_at: string | null;
+                        updated_at: string;
+                        usage: {
+                            reserved: number;
+                            sent_24h: number;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                        feedback: {
+                            recipients_24h: number;
+                            hard_bounces: number;
+                            complaints: number;
+                            unknown: number;
+                            latest_at: string | null;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    } & {
+                        [key: string]: unknown;
+                    })[];
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    OperatorController_policy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        org_id?: string;
+                        name: string;
+                        /** @enum {string} */
+                        state: "pending_review" | "approved" | "suspended";
+                        revision: number;
+                        daily_limit: number;
+                        per_minute_limit: number;
+                        complaint_threshold: number;
+                        hard_bounce_rate: number;
+                        hard_bounce_min: number;
+                        marketing_enabled: boolean;
+                        default_traffic_class: string | null;
+                        trust_tier: string;
+                        route_bindings: {
+                            [key: string]: unknown;
+                        };
+                        suspension_reason: string | null;
+                        reviewed_at: string | null;
+                        updated_at: string;
+                        usage: {
+                            reserved: number;
+                            sent_24h: number;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                        feedback: {
+                            recipients_24h: number;
+                            hard_bounces: number;
+                            complaints: number;
+                            unknown: number;
+                            latest_at: string | null;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    } & {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    OperatorController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expected_revision: number;
+                    reason: string;
+                    /** @enum {string} */
+                    state?: "pending_review" | "approved" | "suspended";
+                    daily_limit?: number;
+                    per_minute_limit?: number;
+                    complaint_threshold?: number;
+                    hard_bounce_rate?: number;
+                    hard_bounce_min?: number;
+                    marketing_enabled?: boolean;
+                    /** @enum {string|null} */
+                    default_traffic_class?: "transactional" | "marketing" | null;
+                    /** @enum {string} */
+                    trust_tier?: "customer" | "pareto";
+                    route_bindings?: {
+                        transactional?: {
+                            /** Format: uuid */
+                            id: string;
+                            revision: number;
+                        };
+                        marketing?: {
+                            /** Format: uuid */
+                            id: string;
+                            revision: number;
+                        };
+                        critical?: {
+                            /** Format: uuid */
+                            id: string;
+                            revision: number;
+                        };
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        org_id?: string;
+                        name: string;
+                        /** @enum {string} */
+                        state: "pending_review" | "approved" | "suspended";
+                        revision: number;
+                        daily_limit: number;
+                        per_minute_limit: number;
+                        complaint_threshold: number;
+                        hard_bounce_rate: number;
+                        hard_bounce_min: number;
+                        marketing_enabled: boolean;
+                        default_traffic_class: string | null;
+                        trust_tier: string;
+                        route_bindings: {
+                            [key: string]: unknown;
+                        };
+                        suspension_reason: string | null;
+                        reviewed_at: string | null;
+                        updated_at: string;
+                        usage: {
+                            reserved: number;
+                            sent_24h: number;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                        feedback: {
+                            recipients_24h: number;
+                            hard_bounces: number;
+                            complaints: number;
+                            unknown: number;
+                            latest_at: string | null;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    } & {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    OperatorController_audit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    OperatorController_restore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: email */
+                    email: string;
+                    reason: string;
+                    expected_revision: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    OperatorController_credential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+                keyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expected_revision: number;
+                    reason: string;
+                    /** @enum {string|null} */
+                    traffic_class: "transactional" | "marketing" | null;
+                    critical_sending: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        org_id?: string;
+                        name: string;
+                        /** @enum {string} */
+                        state: "pending_review" | "approved" | "suspended";
+                        revision: number;
+                        daily_limit: number;
+                        per_minute_limit: number;
+                        complaint_threshold: number;
+                        hard_bounce_rate: number;
+                        hard_bounce_min: number;
+                        marketing_enabled: boolean;
+                        default_traffic_class: string | null;
+                        trust_tier: string;
+                        route_bindings: {
+                            [key: string]: unknown;
+                        };
+                        suspension_reason: string | null;
+                        reviewed_at: string | null;
+                        updated_at: string;
+                        usage: {
+                            reserved: number;
+                            sent_24h: number;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                        feedback: {
+                            recipients_24h: number;
+                            hard_bounces: number;
+                            complaints: number;
+                            unknown: number;
+                            latest_at: string | null;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    } & {
                         [key: string]: unknown;
                     };
                 };

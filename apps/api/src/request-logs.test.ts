@@ -39,6 +39,7 @@ it('records tenant, route, latency and redacted bodies for completed and rejecte
     res.json({ request: { text: 'outgoing response content' } }),
   );
   app.get('/v1/private', (_req, res) => res.status(401).json({ message: 'Unauthorized' }));
+  app.post('/v1/events/sns/instance', (_req, res) => res.json({ received: true }));
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
   try {
@@ -70,7 +71,18 @@ it('records tenant, route, latency and redacted bodies for completed and rejecte
       }),
     }).then((r) => r.text());
     await flushRequestLogs();
-    expect(records).toHaveLength(4);
+    await fetch(`${origin}/v1/events/sns/instance`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        Message: JSON.stringify({
+          mail: { commonHeaders: { subject: 'callback private subject' } },
+          content: 'callback private content',
+        }),
+      }),
+    }).then((r) => r.text());
+    await flushRequestLogs();
+    expect(records).toHaveLength(5);
     expect(records[0]!.slice(1, 8)).toEqual([
       'org',
       'env',
@@ -84,6 +96,8 @@ it('records tenant, route, latency and redacted bodies for completed and rejecte
     expect(records[1]!.slice(1, 4)).toEqual([null, null, null]);
     const stored = JSON.stringify(records);
     for (const secret of [
+      'callback private subject',
+      'callback private content',
       'private encoded MIME',
       'private response body',
       'query-secret',

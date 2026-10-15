@@ -4259,6 +4259,95 @@
     }
   },
   {
+    "id": "MailEventController_postal_instance",
+    "method": "POST",
+    "path": "/v1/events/postal/{instanceId}",
+    "access": "write",
+    "public": true,
+    "sessionOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "instanceId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "instanceId"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string"
+            },
+            "uuid": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    },
+                    "message_id": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": true
+                },
+                "original_message": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    },
+                    "message_id": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "required": [
+            "event",
+            "uuid",
+            "payload"
+          ],
+          "additionalProperties": true
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "path",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "id": "MailEventController_sns",
     "method": "POST",
     "path": "/v1/events/sns",
@@ -4339,6 +4428,99 @@
     }
   },
   {
+    "id": "MailEventController_sns_instance",
+    "method": "POST",
+    "path": "/v1/events/sns/{instanceId}",
+    "access": "write",
+    "public": true,
+    "sessionOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "instanceId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "instanceId"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "type": "object",
+          "properties": {
+            "Type": {
+              "type": "string",
+              "enum": [
+                "Notification",
+                "SubscriptionConfirmation",
+                "UnsubscribeConfirmation"
+              ]
+            },
+            "Message": {
+              "type": "string"
+            },
+            "MessageId": {
+              "type": "string"
+            },
+            "TopicArn": {
+              "type": "string"
+            },
+            "Timestamp": {
+              "type": "string"
+            },
+            "SignatureVersion": {
+              "type": "string",
+              "enum": [
+                "1",
+                "2"
+              ]
+            },
+            "Signature": {
+              "type": "string"
+            },
+            "SigningCertURL": {
+              "type": "string",
+              "format": "uri"
+            },
+            "Subject": {
+              "type": "string"
+            },
+            "Token": {
+              "type": "string"
+            },
+            "SubscribeURL": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "Type",
+            "Message",
+            "MessageId",
+            "TopicArn",
+            "Timestamp",
+            "SignatureVersion",
+            "Signature",
+            "SigningCertURL"
+          ],
+          "additionalProperties": false
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "path",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "id": "MailEventController_track",
     "method": "GET",
     "path": "/t/{token}",
@@ -4372,6 +4554,25 @@
     }
   },
   {
+    "id": "MailController_sendingPolicy",
+    "method": "GET",
+    "path": "/v1/sending-policy",
+    "access": "read",
+    "public": false,
+    "sessionOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
     "id": "MailController_send",
     "method": "POST",
     "path": "/v1/emails",
@@ -4387,6 +4588,13 @@
             "from": {
               "type": "string",
               "maxLength": 998
+            },
+            "traffic_class": {
+              "type": "string",
+              "enum": [
+                "transactional",
+                "marketing"
+              ]
             },
             "to": {
               "anyOf": [
@@ -4638,6 +4846,13 @@
                     "type": "string",
                     "maxLength": 998
                   },
+                  "traffic_class": {
+                    "type": "string",
+                    "enum": [
+                      "transactional",
+                      "marketing"
+                    ]
+                  },
                   "to": {
                     "anyOf": [
                       {
@@ -4870,6 +5085,13 @@
                       "from": {
                         "type": "string",
                         "maxLength": 998
+                      },
+                      "traffic_class": {
+                        "type": "string",
+                        "enum": [
+                          "transactional",
+                          "marketing"
+                        ]
                       },
                       "to": {
                         "anyOf": [
@@ -6191,6 +6413,913 @@
             "data"
           ],
           "additionalProperties": true
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "path",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "OperatorReadinessController_list",
+    "method": "GET",
+    "path": "/v1/operator/organizations/{orgId}/domains/{domainId}/evidence",
+    "access": "operator",
+    "public": false,
+    "sessionOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "orgId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "domainId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "orgId",
+            "domainId"
+          ],
+          "additionalProperties": false
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "OperatorReadinessController_record",
+    "method": "POST",
+    "path": "/v1/operator/organizations/{orgId}/domains/{domainId}/evidence",
+    "access": "operator",
+    "public": false,
+    "sessionOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "orgId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "domainId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "orgId",
+            "domainId"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "type": "object",
+          "properties": {
+            "expected_revision": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 2000
+            },
+            "evidence": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "received_headers"
+                  ]
+                },
+                "provenance": {
+                  "type": "string",
+                  "enum": [
+                    "operator_attested_receiver_headers"
+                  ]
+                },
+                "transport_instance": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "proof_reference": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024,
+                  "pattern": "^[^\\r\\n\\0]+$"
+                },
+                "checked_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "header_from_domain": {
+                  "type": "string",
+                  "maxLength": 253,
+                  "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$"
+                },
+                "dkim_domain": {
+                  "type": "string",
+                  "maxLength": 253,
+                  "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$"
+                },
+                "dkim_pass": {
+                  "type": "boolean"
+                },
+                "mail_from_domain": {
+                  "type": "string",
+                  "maxLength": 253,
+                  "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$"
+                },
+                "spf_pass": {
+                  "type": "boolean"
+                },
+                "dmarc_pass": {
+                  "type": "boolean"
+                },
+                "ses": {
+                  "type": "object",
+                  "properties": {
+                    "identity_verified": {
+                      "type": "boolean"
+                    },
+                    "mail_from_domain": {
+                      "type": "string",
+                      "maxLength": 253,
+                      "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "PENDING",
+                        "SUCCESS",
+                        "FAILED",
+                        "TEMPORARY_FAILURE"
+                      ]
+                    },
+                    "behavior_on_mx_failure": {
+                      "type": "string",
+                      "enum": [
+                        "USE_DEFAULT_VALUE",
+                        "REJECT_MESSAGE"
+                      ]
+                    },
+                    "checked_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "identity_verified",
+                    "mail_from_domain",
+                    "status",
+                    "behavior_on_mx_failure",
+                    "checked_at"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "kind",
+                "provenance",
+                "transport_instance",
+                "proof_reference",
+                "checked_at",
+                "header_from_domain",
+                "dkim_domain",
+                "dkim_pass",
+                "mail_from_domain",
+                "spf_pass",
+                "dmarc_pass"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "expected_revision",
+            "reason",
+            "evidence"
+          ],
+          "additionalProperties": false
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "path",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "OperatorReadinessController_revoke",
+    "method": "POST",
+    "path": "/v1/operator/organizations/{orgId}/domains/{domainId}/evidence/{instanceId}/revoke",
+    "access": "operator",
+    "public": false,
+    "sessionOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "orgId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "domainId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "instanceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "orgId",
+            "domainId",
+            "instanceId"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "type": "object",
+          "properties": {
+            "expected_revision": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "expected_revision",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "path",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "OperatorController_routes",
+    "method": "GET",
+    "path": "/v1/operator/mail-routes",
+    "access": "operator",
+    "public": false,
+    "sessionOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "OperatorController_createRoute",
+    "method": "POST",
+    "path": "/v1/operator/mail-routes",
+    "access": "operator",
+    "public": false,
+    "sessionOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expected_revision": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "traffic_class": {
+              "type": "string",
+              "enum": [
+                "transactional",
+                "marketing"
+              ]
+            },
+            "trust_tier": {
+              "type": "string",
+              "enum": [
+                "customer",
+                "pareto"
+              ]
+            },
+            "critical": {
+              "type": "boolean"
+            },
+            "transport_instances": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}$"
+              },
+              "minItems": 1,
+              "maxItems": 20
+            },
+            "physical_ips": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 64
+              },
+              "maxItems": 1000
+            },
+            "proof_reference": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 2000
+            },
+            "verified": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "expected_revision",
+            "name",
+            "traffic_class",
+            "trust_tier",
+            "critical",
+            "transport_instances",
+            "physical_ips",
+            "verified",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "OperatorController_disableRoute",
+    "method": "POST",
+    "path": "/v1/operator/mail-routes/{id}/{revision}/disable",
+    "access": "operator",
+    "public": false,
+    "sessionOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "revision": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "id",
+            "revision"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 2000
+            }
+          },
+          "required": [
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "path",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "OperatorController_logout",
+    "method": "POST",
+    "path": "/v1/operator/logout",
+    "access": "operator",
+    "public": false,
+    "sessionOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "OperatorController_session",
+    "method": "GET",
+    "path": "/v1/operator/session",
+    "access": "operator",
+    "public": false,
+    "sessionOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "OperatorController_stepUp",
+    "method": "POST",
+    "path": "/v1/operator/step-up",
+    "access": "operator",
+    "public": false,
+    "sessionOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "code"
+          ],
+          "additionalProperties": false
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "OperatorController_policies",
+    "method": "GET",
+    "path": "/v1/operator/sending-policies",
+    "access": "operator",
+    "public": false,
+    "sessionOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "OperatorController_policy",
+    "method": "GET",
+    "path": "/v1/operator/sending-policies/{orgId}",
+    "access": "operator",
+    "public": false,
+    "sessionOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "orgId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "orgId"
+          ],
+          "additionalProperties": false
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "OperatorController_update",
+    "method": "PATCH",
+    "path": "/v1/operator/sending-policies/{orgId}",
+    "access": "operator",
+    "public": false,
+    "sessionOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "orgId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "orgId"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "type": "object",
+          "properties": {
+            "expected_revision": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 2000
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "pending_review",
+                "approved",
+                "suspended"
+              ]
+            },
+            "daily_limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000
+            },
+            "per_minute_limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            "complaint_threshold": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "hard_bounce_rate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "hard_bounce_min": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            },
+            "marketing_enabled": {
+              "type": "boolean"
+            },
+            "default_traffic_class": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "transactional",
+                "marketing"
+              ]
+            },
+            "trust_tier": {
+              "type": "string",
+              "enum": [
+                "customer",
+                "pareto"
+              ]
+            },
+            "route_bindings": {
+              "type": "object",
+              "properties": {
+                "transactional": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "revision"
+                  ],
+                  "additionalProperties": false
+                },
+                "marketing": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "revision"
+                  ],
+                  "additionalProperties": false
+                },
+                "critical": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "revision"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "expected_revision",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "path",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "OperatorController_audit",
+    "method": "GET",
+    "path": "/v1/operator/sending-policies/{orgId}/audit",
+    "access": "operator",
+    "public": false,
+    "sessionOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "orgId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "orgId"
+          ],
+          "additionalProperties": false
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "OperatorController_restore",
+    "method": "POST",
+    "path": "/v1/operator/sending-policies/{orgId}/restore-suppression",
+    "access": "operator",
+    "public": false,
+    "sessionOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "orgId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "orgId"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "type": "object",
+          "properties": {
+            "email": {
+              "type": "string",
+              "format": "email"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 2000
+            },
+            "expected_revision": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "email",
+            "reason",
+            "expected_revision"
+          ],
+          "additionalProperties": false
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "path",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "OperatorController_credential",
+    "method": "PATCH",
+    "path": "/v1/operator/organizations/{orgId}/credentials/{keyId}",
+    "access": "operator",
+    "public": false,
+    "sessionOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "orgId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "keyId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "orgId",
+            "keyId"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "type": "object",
+          "properties": {
+            "expected_revision": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 2000
+            },
+            "traffic_class": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "transactional",
+                "marketing"
+              ]
+            },
+            "critical_sending": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "expected_revision",
+            "reason",
+            "traffic_class",
+            "critical_sending"
+          ],
+          "additionalProperties": false
         },
         "idempotencyKey": {
           "type": "string",

@@ -36,8 +36,11 @@ export default function Login() {
     setBusy(true);
     setError(undefined);
     try {
-      await api('auth/login', 'POST', { ...values, ...(!values.code ? { code: undefined } : {}) });
-      router.replace(next);
+      const result = await api<{ operator_only?: boolean }>('auth/login', 'POST', {
+        ...values,
+        ...(!values.code ? { code: undefined } : {}),
+      });
+      router.replace(result.operator_only ? '/operator' : next);
       router.refresh();
     } catch (e) {
       setError(e);
@@ -95,12 +98,12 @@ export default function Login() {
               onSubmit={(e) => {
                 e.preventDefault();
                 setBusy(true);
-                void api('auth/exchange', 'POST', {
+                void api<{ operator_only?: boolean }>('auth/exchange', 'POST', {
                   code: exchange,
                   ...(mfa ? { mfa_code: mfa } : {}),
                 })
-                  .then(() => {
-                    router.replace(next);
+                  .then((result) => {
+                    router.replace(result.operator_only ? '/operator' : next);
                     router.refresh();
                   })
                   .catch(setError)

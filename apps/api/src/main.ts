@@ -33,6 +33,9 @@ import { OperationsController } from './operations.js';
 import { AudienceController } from './audience.js';
 import { MetricsController } from './metrics.js';
 import { requestLogs, flushRequestLogs } from './request-logs.js';
+import { OperatorController } from './operator.js';
+import { OperatorGuard } from './operator-auth.js';
+import { OperatorReadinessController } from './operator-readiness.js';
 
 startTelemetry();
 const readinessStore = objectStore();
@@ -72,8 +75,11 @@ class HealthController {
     ContentController,
     PublicationController,
     DeadLettersController,
+    OperatorController,
+    OperatorReadinessController,
   ],
   providers: [
+    OperatorGuard,
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_FILTER, useClass: MailExceptionFilter },
   ],

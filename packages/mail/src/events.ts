@@ -7,6 +7,7 @@ import type { Tenant } from '@flare/shared';
 import { canTransition, MailError } from './validation.js';
 import type { MailState } from './validation.js';
 import { outbox } from './pipeline.js';
+import { evaluateFeedbackPolicy, lockSendingPolicy } from './sending-policy.js';
 
 export type FeedbackClassification =
   'hard_bounce' | 'soft_bounce' | 'complaint' | 'delivered' | 'transient' | 'policy' | 'unknown';
@@ -346,7 +347,10 @@ export async function recordEvent(sql: Sql, tenant: Tenant, event: DeliveryEvent
               ? 'policy'
               : 'unknown';
   const data = { ...event.data, classification };
-  return withTenant(sql, tenant, async (tx) => {
+  const result = await withTenant(sql, tenant, async (tx) => {
+    // Serialize receipt with operator review before timestamping it. Transaction
+    // start time can predate a blocked resume and must not hide unseen evidence.
+    if (/^(postal|sns|ses)(:|$)/.test(event.source)) await lockSendingPolicy(tx, tenant.orgId);
     const [message] = await tx`select * from messages where id=${event.messageId} for update`;
     if (!message) throw new MailError(404, 'Message not found');
     if (event.recipient) {
@@ -355,7 +359,7 @@ export async function recordEvent(sql: Sql, tenant: Tenant, event: DeliveryEvent
       if (!recipient) throw new MailError(422, 'Event recipient does not belong to this message');
     }
     const rows =
-      await tx`insert into delivery_events(org_id,environment_id,message_id,source,source_id,type,recipient,data) values(${tenant.orgId},${tenant.environmentId},${event.messageId},${event.source},${event.sourceId},${event.type},${event.recipient ?? null},${tx.json(toJson(data))}) on conflict(source,source_id) do nothing returning id`;
+      await tx`insert into delivery_events(org_id,environment_id,message_id,source,source_id,type,recipient,data,created_at) values(${tenant.orgId},${tenant.environmentId},${event.messageId},${event.source},${event.sourceId},${event.type},${event.recipient ?? null},${tx.json(toJson(data))},clock_timestamp()) on conflict(source,source_id) do nothing returning id`;
     if (!rows.length) return { duplicate: true };
     if (event.recipient && ['bounced', 'complained'].includes(event.type)) {
       // Serialize suppression counters across environments for the same organization/address.
@@ -427,4 +431,7 @@ export async function recordEvent(sql: Sql, tenant: Tenant, event: DeliveryEvent
     });
     return { duplicate: false };
   });
+  // Persisted feedback can be reevaluated after a crash, including duplicate callbacks.
+  if (/^(postal|sns|ses)(:|$)/.test(event.source)) await evaluateFeedbackPolicy(sql, tenant.orgId);
+  return result;
 }

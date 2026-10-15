@@ -10,8 +10,16 @@ import {
   renderText,
 } from '@flare/shared';
 import type { Automation, Principal, Tenant } from '@flare/shared';
-import { address, MailError, outbox, submitEmails } from '@flare/mail';
+import {
+  address,
+  MailError,
+  outbox,
+  submitEmails,
+  lockSendingPolicy,
+  releaseUnusedQuota,
+} from '@flare/mail';
 import type { PipelineOptions } from '@flare/mail';
+import { sendingPause } from './sending-pause.js';
 
 export async function validateAutomation(
   tx: Transaction,
@@ -95,20 +103,25 @@ export async function fanOutAutomationEvents(sql: Sql) {
     return created;
   });
 }
+async function cancelAutomationMessages(tx: Transaction, tenant: Tenant, id: string) {
+  const messages =
+    await tx`update messages set status='canceled',claim_id=null,lease_until=null,hold_reason=null,updated_at=now() where automation_run_id=${id} and status in ('queued','scheduled','held') and delivery_started_at is null returning id`;
+  for (const message of messages) {
+    await tx`update message_recipients set status='canceled' where message_id=${message.id} and status='queued'`;
+    await releaseUnusedQuota(tx, tenant, String(message.id));
+    await outbox(tx, tenant, 'email.canceled', { email_id: message.id });
+  }
+}
 export async function cancelAutomation(sql: Sql, tenant: Tenant, id: string) {
   return withTenant(sql, tenant, async (tx) => {
+    await lockSendingPolicy(tx, tenant.orgId);
     const [run] = await tx`select status from automation_runs where id=${id} for update`;
     if (!run) throw new MailError(404, 'Automation run not found');
     if (!['queued', 'waiting', 'canceled'].includes(String(run.status)))
       throw new MailError(409, 'Run is already terminal');
     await tx`update automation_runs set status='canceled',finished_at=now(),updated_at=now() where id=${id}`;
     await tx`update automation_steps set status='canceled',finished_at=now() where run_id=${id} and status='waiting'`;
-    const messages =
-      await tx`update messages set status='canceled',updated_at=now() where automation_run_id=${id} and status in ('queued','scheduled') and delivery_started_at is null returning id`;
-    for (const message of messages) {
-      await tx`update message_recipients set status='canceled' where message_id=${message.id} and status='queued'`;
-      await outbox(tx, tenant, 'email.canceled', { email_id: message.id });
-    }
+    await cancelAutomationMessages(tx, tenant, id);
     if (run.status !== 'canceled') await outbox(tx, tenant, 'automation.canceled', { id });
     return { id, status: 'canceled' };
   });
@@ -119,6 +132,8 @@ export async function advanceAutomation(options: PipelineOptions, id: string) {
   if (!lookup) return;
   const tenant = { orgId: String(lookup.org_id), environmentId: String(lookup.environment_id) };
   return withTenant(options.sql, tenant, async (tx) => {
+    // Acquire organization policy before run/contact rows and mail admission.
+    await lockSendingPolicy(tx, tenant.orgId);
     const [run] =
       await tx`select * from automation_runs where id=${id} and status in ('queued','waiting') and next_step_at<=now() for update skip locked`;
     if (!run) return;
@@ -126,6 +141,7 @@ export async function advanceAutomation(options: PipelineOptions, id: string) {
     if (!contact || contact.deleted_at || contact.unsubscribed) {
       await tx`update automation_runs set status='canceled',error='Contact deleted or unsubscribed',finished_at=now(),updated_at=now() where id=${id}`;
       await tx`update automation_steps set status='canceled',finished_at=now() where run_id=${id} and status='waiting'`;
+      await cancelAutomationMessages(tx, tenant, id);
       await outbox(tx, tenant, 'automation.canceled', {
         id,
         reason: 'Contact unavailable or unsubscribed',
@@ -241,6 +257,11 @@ export async function failAutomation(sql: Sql, id: string, error: unknown) {
     const [run] =
       await tx`select * from automation_runs where id=${id} and status in ('queued','waiting') for update`;
     if (!run) return;
+    const pause = sendingPause(error);
+    if (pause) {
+      await tx`update automation_runs set error=${pause.reason},next_step_at=now()+${pause.seconds}*interval '1 second',updated_at=now() where id=${id}`;
+      return;
+    }
     const attempts = Number(run.attempts) + 1,
       terminal = attempts >= 5 || (error instanceof MailError && error.status < 500);
     await tx`update automation_runs set attempts=${attempts},status=${terminal ? 'failed' : run.status},error=${message},next_step_at=now()+${Math.min(300, 2 ** attempts)}*interval '1 second',finished_at=${terminal ? new Date() : null},updated_at=now() where id=${id}`;

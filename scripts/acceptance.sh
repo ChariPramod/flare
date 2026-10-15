@@ -44,7 +44,7 @@ check_independent postal-native-persistence "${compose[@]}" exec -T flare-api no
 check_independent native-actions "${compose[@]}" exec -T flare-api node scripts/acceptance/actions.mjs
 check_independent native-engine-restart bash scripts/acceptance/engine-restart.sh "$acceptance_dir" "$project"
 # Execute browsers on the host; credentials are read from the private generated env file.
-check_independent live-browser node scripts/acceptance/browser.mjs "$acceptance_dir/.env"
+check_independent live-browser node scripts/acceptance/browser.mjs "$acceptance_dir/.env" "$project"
 "${compose[@]}" stop --timeout 40 flare-worker
 worker_container=$("${compose[@]}" ps --all -q flare-worker)
 if [[ "$(docker inspect --format '{{.State.ExitCode}}' "$worker_container")" != 0 ]]; then

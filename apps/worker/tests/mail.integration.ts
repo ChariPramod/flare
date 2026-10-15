@@ -40,6 +40,7 @@ let worker: ReturnType<typeof startMailWorker> | undefined;
 beforeAll(async () => {
   Object.assign(process.env, {
     TRANSPORT: 'smtp',
+    MAIL_SANDBOX: 'true',
     TRANSPORT_PRIORITY: '',
     SMTP_HOST: '127.0.0.1',
     SMTP_PORT: '11025',
@@ -110,6 +111,7 @@ it('serializes cancel against a live delivery claim on independent connections',
     transports: [
       {
         name: 'test',
+        sandbox: true,
         supportsRequiredTls: async () => true,
         send: async (message: { to: string[] }) => {
           started();
@@ -150,6 +152,7 @@ it('persists transient SMTP retries before failing over to Mailpit', async () =>
       deliveryTlsRequired: false,
     });
     first.name = 'busy-smtp';
+    first.sandbox = true;
     const options = {
       sql,
       store: objectStore(),

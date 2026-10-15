@@ -5,8 +5,26 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
 import { parseEnv } from 'node:util';
-import { preflight, publicHostname, validateStagingEnv } from '../../scripts/staging/preflight.mjs';
+import {
+  preflight,
+  publicHostname,
+  validateStagingEnv,
+  validateNamedStagingTransports,
+} from '../../scripts/staging/preflight.mjs';
 
+const fixturePublicKey = generateKeyPairSync('rsa', { modulusLength: 2048 })
+  .publicKey.export({ type: 'spki', format: 'pem' })
+  .toString();
+const postalInstance = {
+  id: 'staging-postal',
+  kind: 'postal',
+  server_id: 'staging-server',
+  pool_id: 'transactional',
+  credential_version: 'v1',
+  url: 'http://postal:5000',
+  api_key_env: 'POSTAL_API_KEY',
+  webhook_public_key_env: 'STAGING_POSTAL_PUBLIC_KEY',
+};
 function environment() {
   const env = parseEnv(readFileSync('.env.example', 'utf8'));
   for (const [index, field] of [
@@ -27,6 +45,10 @@ function environment() {
   return {
     ...env,
     NODE_ENV: 'production',
+    FLARE_OPERATOR_USER_IDS: '00000000-0000-4000-8000-000000000010',
+    MAIL_SANDBOX: 'false',
+    MAIL_TRANSPORTS: JSON.stringify([postalInstance]),
+    STAGING_POSTAL_PUBLIC_KEY: fixturePublicKey,
     SEED_API_KEY: `fl_${'k'.repeat(40)}`,
     FLARE_ENCRYPTION_KEY: Buffer.alloc(32, 17).toString('base64'),
     DATABASE_URL: `postgres://flare:${env.POSTGRES_PASSWORD}@postgres:5432/flare`,
@@ -81,7 +103,7 @@ describe('staging offline preflight', () => {
         'strong-secret-required',
         'proxy-address-mismatch',
         'public-url-mismatch',
-        'provider-setting-required',
+        'named-credential-reference-unavailable',
       ]),
     );
     expect(JSON.stringify(report)).not.toContain('sensitive-short-value');
@@ -90,6 +112,7 @@ describe('staging offline preflight', () => {
     const result = validateStagingEnv({
       ...environment(),
       TRANSPORT: 'smtp',
+      MAIL_TRANSPORTS: '',
       OIDC_ISSUER: 'http://issuer.local',
     });
     expect(result.map((issue: { code: string }) => issue.code)).toEqual(
@@ -98,6 +121,116 @@ describe('staging offline preflight', () => {
         'smtp-tls-guarantee-required',
         'oidc-setting-required',
         'https-required',
+      ]),
+    );
+  });
+  it('rejects sandbox mode and missing operator authority for staging', () => {
+    expect(validateStagingEnv({ ...environment(), MAIL_SANDBOX: 'true' })).toContainEqual({
+      code: 'sandbox-config-forbidden',
+      field: 'MAIL_SANDBOX',
+    });
+    for (const value of ['', 'owner', '00000000-0000-4000-8000-000000000010,not-a-uuid'])
+      expect(
+        validateStagingEnv({ ...environment(), FLARE_OPERATOR_USER_IDS: value }),
+      ).toContainEqual({ code: 'operator-allowlist-required', field: 'FLARE_OPERATOR_USER_IDS' });
+    expect(
+      validateStagingEnv({
+        ...environment(),
+        FLARE_OPERATOR_USER_IDS:
+          '00000000-0000-4000-8000-000000000010, 00000000-0000-4000-8000-000000000011',
+      }),
+    ).toEqual([]);
+    expect(
+      validateNamedStagingTransports({ ...environment(), MAIL_TRANSPORTS: '' }),
+    ).toContainEqual({ code: 'named-transports-required', field: 'MAIL_TRANSPORTS' });
+  });
+  it('validates named transport references without leaking configuration or credentials', () => {
+    const env = environment();
+    expect(validateNamedStagingTransports(env)).toEqual([]);
+    expect(
+      validateNamedStagingTransports({
+        ...env,
+        MAIL_TRANSPORTS: JSON.stringify([{ ...postalInstance, id: 'postal' }]),
+      }),
+    ).toContainEqual({ code: 'named-instance-reserved', field: 'MAIL_TRANSPORTS' });
+    for (const instance of [
+      { ...postalInstance, password: 'private-marker-do-not-output' },
+      { ...postalInstance, api_key_env: 'private-marker-do-not-output' },
+      { ...postalInstance, api_key_env: 'UNAVAILABLE_KEY' },
+      { ...postalInstance, url: 'https://user:private-marker-do-not-output@mail.pareto.dev' },
+    ]) {
+      const report = validateNamedStagingTransports({
+        ...env,
+        MAIL_TRANSPORTS: JSON.stringify([instance]),
+      });
+      expect(report.length).toBeGreaterThan(0);
+      expect(JSON.stringify(report)).not.toContain('private-marker-do-not-output');
+      expect(report.every((issue: { field: string }) => issue.field === 'MAIL_TRANSPORTS')).toBe(
+        true,
+      );
+    }
+    expect(validateNamedStagingTransports({ ...env, MAIL_TRANSPORTS: '{broken' })).toContainEqual({
+      code: 'named-transports-invalid',
+      field: 'MAIL_TRANSPORTS',
+    });
+    expect(
+      validateNamedStagingTransports({
+        ...env,
+        MAIL_TRANSPORTS: JSON.stringify([postalInstance, postalInstance]),
+      }),
+    ).toContainEqual({ code: 'named-instance-duplicate', field: 'MAIL_TRANSPORTS' });
+    expect(
+      validateNamedStagingTransports({ ...env, STAGING_POSTAL_PUBLIC_KEY: 'not a PEM' }),
+    ).toContainEqual({ code: 'named-postal-public-key-invalid', field: 'MAIL_TRANSPORTS' });
+  });
+  it('validates named SES topics and SMTP capability without contacting providers', () => {
+    const env = {
+      ...environment(),
+      NAMED_ACCESS: 'synthetic-access',
+      NAMED_SECRET: 'synthetic-secret',
+    };
+    const ses = {
+      id: 'ses-1',
+      kind: 'ses',
+      server_id: 'account-1',
+      pool_id: 'transactional',
+      credential_version: 'v1',
+      region: 'us-east-1',
+      configuration_set: 'staging',
+      access_key_id_env: 'NAMED_ACCESS',
+      secret_access_key_env: 'NAMED_SECRET',
+      sns_topic_arn: 'arn:aws:sns:us-east-1:123456789012:staging',
+    };
+    const smtp = {
+      id: 'smtp-1',
+      kind: 'smtp',
+      server_id: 'relay-1',
+      pool_id: 'transactional',
+      credential_version: 'v1',
+      host: 'smtp.pareto.dev',
+      port: 587,
+      secure: false,
+      delivery_tls_required: true,
+      username_env: 'NAMED_ACCESS',
+      password_env: 'NAMED_SECRET',
+    };
+    expect(
+      validateNamedStagingTransports({ ...env, MAIL_TRANSPORTS: JSON.stringify([ses, smtp]) }),
+    ).toEqual([]);
+    const issues = validateNamedStagingTransports({
+      ...env,
+      MAIL_TRANSPORTS: JSON.stringify([
+        ses,
+        { ...ses, id: 'ses-2' },
+        { ...smtp, host: 'mailpit', delivery_tls_required: false, password_env: undefined },
+      ]),
+    });
+    expect(issues.map((issue: { code: string }) => issue.code)).toEqual(
+      expect.arrayContaining([
+        'named-sns-topic-duplicate',
+        'named-smtp-provider-required',
+        'named-smtp-tls-guarantee-required',
+        'named-smtp-auth-pair-required',
       ]),
     );
   });
@@ -121,7 +254,7 @@ describe('staging offline preflight', () => {
       writeFileSync(
         join(root, '.env'),
         Object.entries(env)
-          .map(([k, v]) => `${k}=${v}`)
+          .map(([k, v]) => `${k}='${v}'`)
           .join('\n'),
         { mode: 0o600 },
       );
