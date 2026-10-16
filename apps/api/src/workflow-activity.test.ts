@@ -6,6 +6,7 @@ import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { connectDatabase } from '../../../packages/db/src/index.js';
 import type { Sql } from '../../../packages/db/src/index.js';
 import { workflowActivity } from './workflow-activity.js';
+import { acceptedWorkflowInventory, inspectWorkflow } from './workflow-reconciliation.js';
 
 const orgId = randomUUID(),
   environmentId = randomUUID(),
@@ -282,4 +283,120 @@ it('uses a shared deadline and keeps a completed sibling summary when another de
   } finally {
     deadline.mockRestore();
   }
+});
+
+it('inventories only accepted tenant/environment work with lossless timestamp/id pagination', async () => {
+  const first = await createRun(),
+    second = await createRun(),
+    third = await createRun();
+  await createRun('queued');
+  await sql`update workflow_runs set created_at='2026-01-01T00:00:00.123456Z' where id in (${first.id},${second.id})`;
+  await sql`update workflow_runs set created_at='2026-01-01T00:00:00.123457Z' where id=${third.id}`;
+  await sql`insert into workflow_runs(org_id,environment_id,workflow_id,transaction_id,parent_transaction_id,payload,status) values
+    (${otherOrg},${otherEnvironment},'foreign','foreign','foreign',${sql.json({ secret: 'foreign payload' })},'accepted'),
+    (${orgId},${production},'production','production','production',${sql.json({ secret: 'production payload' })},'accepted')`;
+  const ids: string[] = [],
+    before = '2027-01-01T00:00:00Z';
+  let cursor: string | undefined;
+  do {
+    const page = await acceptedWorkflowInventory(sql, tenant, { before, limit: 1, cursor });
+    ids.push(...page.data.map((row) => row.id));
+    expect(ids.length).toBeLessThanOrEqual(3);
+    expect(JSON.stringify(page)).not.toMatch(/payload|Durable local|foreign|production/);
+    cursor = page.next_cursor ?? undefined;
+  } while (cursor);
+  expect(ids).toEqual([first.id, second.id].sort().concat(third.id));
+});
+it('binds cursors to tenant/environment and before; excludes newer concurrent inserts', async () => {
+  const a = await createRun(),
+    b = await createRun();
+  await sql`update workflow_runs set created_at='2026-01-01' where id in (${a.id},${b.id})`;
+  const before = '2026-01-02T00:00:00Z';
+  const page = await acceptedWorkflowInventory(sql, tenant, { before, limit: 1 });
+  await createRun();
+  const next = await acceptedWorkflowInventory(sql, tenant, {
+    before,
+    limit: 20,
+    cursor: page.next_cursor!,
+  });
+  expect(next.data).toHaveLength(1);
+  for (const [scope, filter, cursor] of [
+    [{ orgId, environmentId: production }, before, page.next_cursor!],
+    [tenant, '2026-01-03T00:00:00Z', page.next_cursor!],
+    [tenant, before, 'malformed'],
+  ] as const)
+    await expect(
+      acceptedWorkflowInventory(sql, scope, { before: filter, limit: 1, cursor }),
+    ).rejects.toThrow('Invalid reconciliation cursor');
+});
+it('authorizes inspection before native access and excludes payload, engine bodies and arbitrary job types', async () => {
+  const run = await createRun();
+  const lookup = vi.fn(async () => [
+    { _id: 'native', transactionId: run.transaction, payload: 'engine-secret' },
+  ]);
+  const detail = vi.fn(async () => ({
+    _id: 'native',
+    transactionId: run.transaction,
+    payload: 'subscriber-secret',
+    jobs: [{ _id: 'job', status: 'pending', type: 'private content' }],
+  }));
+  await expect(
+    inspectWorkflow(sql, { orgId, environmentId: production }, run.id, lookup, detail),
+  ).rejects.toThrow();
+  await expect(
+    inspectWorkflow(
+      sql,
+      { orgId: otherOrg, environmentId: otherEnvironment },
+      run.id,
+      lookup,
+      detail,
+    ),
+  ).rejects.toThrow();
+  expect(lookup).not.toHaveBeenCalled();
+  const result = await inspectWorkflow(sql, tenant, run.id, lookup, detail);
+  expect(result).toMatchObject({
+    queue_presence: 'unknown',
+    replay_allowed: false,
+    observation_age_ms: expect.any(Number),
+  });
+  expect(JSON.stringify(result)).not.toMatch(
+    /payload|engine-secret|subscriber-secret|Durable local|private content/,
+  );
+  expect(result.engine_observation.notifications[0]?.jobs[0]?.type).toBe('unknown');
+});
+it('reports mismatch/outage as incomplete without mutating accepted jobs or permitting replay', async () => {
+  const run = await createRun();
+  const before = (await sql`select * from workflow_runs where id=${run.id}`)[0];
+  for (const lookup of [
+    async () => {
+      throw new Error('credential=private-content');
+    },
+    async () => [{ _id: 'native', transactionId: 'wrong-identity' }],
+    async () => [],
+  ]) {
+    const detail = vi.fn(async () => ({}));
+    const report = await inspectWorkflow(sql, tenant, run.id, lookup, detail);
+    expect(report).toMatchObject({
+      partial: true,
+      queue_presence: 'unknown',
+      replay_allowed: false,
+      cancellation: { eligible: false },
+    });
+    expect(detail).not.toHaveBeenCalled();
+    expect(JSON.stringify(report)).not.toContain('private-content');
+  }
+  const mismatch = await inspectWorkflow(
+    sql,
+    tenant,
+    run.id,
+    async () => [{ _id: 'native', transactionId: run.transaction }],
+    async () => ({
+      _id: 'other',
+      transactionId: run.transaction,
+      jobs: [{ type: 'delay', status: 'pending' }],
+    }),
+  );
+  expect(mismatch.partial).toBe(true);
+  expect(mismatch.cancellation.eligible).toBe(false);
+  expect((await sql`select * from workflow_runs where id=${run.id}`)[0]).toEqual(before);
 });

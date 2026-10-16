@@ -8472,6 +8472,84 @@
     }
   },
   {
+    "id": "WorkflowController_reconciliation",
+    "method": "GET",
+    "path": "/v1/activity/reconciliation",
+    "access": "read",
+    "public": false,
+    "sessionOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "object",
+          "properties": {
+            "before": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "cursor": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            }
+          },
+          "required": [
+            "before"
+          ],
+          "additionalProperties": false
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "WorkflowController_inspection",
+    "method": "GET",
+    "path": "/v1/activity/{id}/inspection",
+    "access": "read",
+    "public": false,
+    "sessionOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "id": "WorkflowController_activityDetail",
     "method": "GET",
     "path": "/v1/activity/{id}",

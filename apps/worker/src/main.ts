@@ -1,6 +1,6 @@
 import { dependencyReady } from '@flare/shared';
 import { periodicTask } from './lifecycle.js';
-import { objectStore } from '@flare/mail';
+import { objectStore, sweepObjectUploads } from '@flare/mail';
 import {
   startTelemetry,
   stopTelemetry,
@@ -86,6 +86,11 @@ const webhookDispatch = periodicTask(
 const retentionDays = Number(process.env.LOG_RETENTION_DAYS ?? 30);
 if (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 3650)
   throw new Error('LOG_RETENTION_DAYS must be 1–3650');
+const objectCleanup = periodicTask(
+  60000,
+  () => sweepObjectUploads(client, readinessStore),
+  () => logger.error('Object upload cleanup failed; journal retained for retry'),
+);
 const retention = periodicTask(
   60000,
   () =>
@@ -163,6 +168,7 @@ for (const signal of ['SIGTERM', 'SIGINT'])
       domainPolling.stop(),
       webhookDispatch.stop(),
       retention.stop(),
+      objectCleanup.stop(),
       broadcastDispatch.stop(),
       automationDispatch.stop(),
     ])

@@ -158,3 +158,38 @@ it('exposes tenant sending-policy and held-mail details with structured policy e
     details: { code: 'recipient_quota_exhausted' },
   });
 });
+
+it('native inspection helpers use only tenant-scoped GET operations and never submit replay or cancellation', async () => {
+  const calls: { url: URL; init: RequestInit }[] = [];
+  const fetcher = vi.fn(async (url: URL | RequestInfo, init?: RequestInit) => {
+    calls.push({ url: new URL(String(url)), init: init! });
+    return new Response(
+      JSON.stringify(
+        String(url).includes('/reconciliation')
+          ? { data: [], before: '2026-01-01T00:00:00.000Z', next_cursor: null }
+          : {
+              id: '00000000-0000-4000-8000-000000000002',
+              queue_presence: 'unknown',
+              replay_allowed: false,
+            },
+      ),
+      { status: 200 },
+    );
+  }) as typeof fetch;
+  const client = new FlareClient({
+    baseUrl: 'https://flare.example.test',
+    environmentId,
+    apiKey,
+    fetch: fetcher,
+  });
+  await client.inspectWorkflow('00000000-0000-4000-8000-000000000002');
+  const report = await client.reconcileWorkflows({ before: '2026-01-01T00:00:00Z' });
+  expect(report).toMatchObject({ complete: true, inventory_complete: true, data: [] });
+  expect(calls.map((call) => call.init.method)).toEqual(['GET', 'GET']);
+  expect(calls.every((call) => call.init.body === undefined)).toBe(true);
+  expect(calls[0]!.init.headers).toMatchObject({ 'x-environment-id': environmentId });
+  expect(calls[0]!.url.pathname).toBe(
+    '/v1/activity/00000000-0000-4000-8000-000000000002/inspection',
+  );
+  expect(calls[1]!.url.searchParams.get('before')).toBe('2026-01-01T00:00:00.000Z');
+});

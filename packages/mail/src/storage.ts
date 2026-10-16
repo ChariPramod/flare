@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import type { LookupFunction } from 'node:net';
@@ -9,6 +10,7 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
   HeadBucketCommand,
+  GetBucketVersioningCommand,
 } from '@aws-sdk/client-s3';
 import { MailError, mailLimits } from './validation.js';
 import type { EmailInput } from './validation.js';
@@ -77,9 +79,28 @@ export async function downloadAttachment(url: string, limit: number): Promise<Bu
   }
 }
 export interface ObjectStore {
+  /** Present on every production S3 store; absent only on injected memory stores. */
+  readonly identity?: string;
+  /** Refuse deletion for versioned/suspended buckets or unavailable metadata. */
+  assertUnversioned?(): Promise<void>;
   put(key: string, body: Buffer, contentType: string): Promise<void>;
   get(key: string, limit: number): Promise<Buffer>;
   remove(key: string): Promise<void>;
+}
+export function storageIdentity(endpoint: string | undefined, region: string, bucket: string) {
+  const target = new URL(endpoint ?? `https://s3.${region}.amazonaws.com`);
+  if (
+    !['http:', 'https:'].includes(target.protocol) ||
+    target.username ||
+    target.password ||
+    target.search ||
+    target.hash
+  )
+    throw new Error('Object storage endpoint must not contain credentials, query or fragment');
+  target.pathname = target.pathname.replace(/\/+$/, '') || '/';
+  return createHash('sha256')
+    .update(JSON.stringify([target.href, region, bucket]))
+    .digest('hex');
 }
 export function objectStore(): ObjectStore & { ready(): Promise<void> } {
   const client = new S3Client({
@@ -94,6 +115,18 @@ export function objectStore(): ObjectStore & { ready(): Promise<void> } {
   });
   const Bucket = process.env.S3_BUCKET ?? 'flare';
   return {
+    identity: storageIdentity(
+      process.env.S3_ENDPOINT,
+      process.env.S3_REGION ?? 'us-east-1',
+      Bucket,
+    ),
+    async assertUnversioned() {
+      const result = await client.send(new GetBucketVersioningCommand({ Bucket }), {
+        abortSignal: AbortSignal.timeout(2000),
+      });
+      if (result.Status !== undefined)
+        throw new Error('Object cleanup requires an unversioned bucket');
+    },
     async ready() {
       await client.send(new HeadBucketCommand({ Bucket }), {
         abortSignal: AbortSignal.timeout(2000),
@@ -122,7 +155,7 @@ export function objectStore(): ObjectStore & { ready(): Promise<void> } {
     },
     async remove(Key) {
       await client.send(new DeleteObjectCommand({ Bucket, Key }), {
-        abortSignal: AbortSignal.timeout(30_000),
+        abortSignal: AbortSignal.timeout(5000),
       });
     },
   };

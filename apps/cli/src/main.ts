@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { workflowInspectionCommand } from './workflow-inspection.js';
 import { parseArgs } from 'node:util';
 import { readFile, stat } from 'node:fs/promises';
 import { FlareClient, operationCatalog } from '@pareto-labs/flare-sdk';
@@ -9,6 +10,8 @@ Commands:
   config save | config show
   operations
   workflow trigger --file request.json [--idempotency-key key]
+  workflow inspect RUN_UUID
+  workflow reconcile --before ISO_TIMESTAMP [--cursor TOKEN] [--max-runs 100] [--concurrency 2] [--deadline-ms 30000]
   email send --file email.json [--idempotency-key key]
   email status ID
   sending-policy show
@@ -26,6 +29,11 @@ try {
     options: {
       help: { type: 'boolean', short: 'h' },
       file: { type: 'string' },
+      before: { type: 'string' },
+      cursor: { type: 'string' },
+      'max-runs': { type: 'string' },
+      concurrency: { type: 'string' },
+      'deadline-ms': { type: 'string' },
       path: { type: 'string' },
       query: { type: 'string' },
       'idempotency-key': { type: 'string' },
@@ -65,6 +73,8 @@ try {
   const id = args[2];
   if (action === 'config save') result = await saveConfig();
   else if (action === 'config show') result = config;
+  else if (action === 'workflow inspect' || action === 'workflow reconcile')
+    result = await workflowInspectionCommand(client, args, values);
   else if (action === 'workflow trigger')
     result = await client.operation('POST', '/v1/events/trigger', {
       body,

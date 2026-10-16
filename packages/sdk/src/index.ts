@@ -1,3 +1,16 @@
+import { reconcileWorkflows } from './reconciliation.js';
+import type {
+  ReconciliationOptions,
+  WorkflowInventory,
+  WorkflowInspection,
+} from './reconciliation.js';
+export type {
+  ReconciliationOptions,
+  WorkflowInventory,
+  WorkflowInspection,
+  WorkflowReconciliation,
+  WorkflowRunMetadata,
+} from './reconciliation.js';
 import operations from './operations.json' with { type: 'json' };
 import type { paths, operations as Operations } from './schema.js';
 export type { paths, Operations };
@@ -182,6 +195,27 @@ export class FlareClient {
   }
   sendEmail(body: EmailInput, idempotencyKey?: string) {
     return this.request('post', '/v1/emails', { body, idempotencyKey });
+  }
+  workflowInventory(input: {
+    before: string;
+    cursor?: string;
+    limit?: number;
+    signal?: AbortSignal;
+  }) {
+    const { signal, ...query } = input;
+    return this.operation('GET', '/v1/activity/reconciliation', {
+      query,
+      signal,
+    }) as Promise<WorkflowInventory>;
+  }
+  inspectWorkflow(id: string, signal?: AbortSignal) {
+    return this.operation('GET', '/v1/activity/{id}/inspection', {
+      path: { id },
+      signal,
+    }) as Promise<WorkflowInspection>;
+  }
+  reconcileWorkflows(options: ReconciliationOptions) {
+    return reconcileWorkflows(this, options);
   }
   sendingPolicy() {
     return this.request('get', '/v1/sending-policy', {});

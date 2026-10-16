@@ -2483,6 +2483,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/activity/reconciliation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * reconciliation (read)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        get: operations["WorkflowController_reconciliation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/activity/{id}/inspection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inspection (read)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        get: operations["WorkflowController_inspection"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/activity/{id}": {
         parameters: {
             query?: never;
@@ -24040,6 +24080,345 @@ export interface operations {
                         limit?: number;
                     } & {
                         [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    WorkflowController_reconciliation: {
+        parameters: {
+            query: {
+                before: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: {
+                /** @description Required for user sessions. API keys are bound to one environment; supplying this header verifies that selection. */
+                "x-environment-id"?: string;
+                /** @description Required for user sessions; optional tenant assertion for API keys. */
+                "x-org-id"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            workflow_id: string;
+                            transaction_id: string;
+                            parent_transaction_id: string | null;
+                            status: string;
+                            attempts: number;
+                            cancellation_status: string;
+                            /** Format: date-time */
+                            created_at: string;
+                            /** Format: date-time */
+                            updated_at: string;
+                            /** @enum {string} */
+                            queue_presence: "unknown";
+                            /** @enum {boolean} */
+                            replay_allowed: false;
+                        }[];
+                        /** Format: date-time */
+                        before: string;
+                        next_cursor: string | null;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    WorkflowController_inspection: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required for user sessions. API keys are bound to one environment; supplying this header verifies that selection. */
+                "x-environment-id"?: string;
+                /** @description Required for user sessions; optional tenant assertion for API keys. */
+                "x-org-id"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        workflow_id: string;
+                        transaction_id: string;
+                        parent_transaction_id: string | null;
+                        status: string;
+                        attempts: number;
+                        cancellation_status: string;
+                        /** Format: date-time */
+                        created_at: string;
+                        /** Format: date-time */
+                        updated_at: string;
+                        /** @enum {string} */
+                        queue_presence: "unknown";
+                        /** @enum {boolean} */
+                        replay_allowed: false;
+                        engine_observation: {
+                            /** @enum {string} */
+                            status: "available" | "unavailable" | "not_found" | "not_requested";
+                            /** Format: date-time */
+                            checked_at: string | null;
+                            partial: boolean;
+                            notifications: {
+                                id: string;
+                                /** @enum {string} */
+                                status: "pending" | "running" | "completed" | "failed" | "canceled" | "unknown";
+                                /** Format: date-time */
+                                created_at: string | null;
+                                /** Format: date-time */
+                                updated_at: string | null;
+                                jobs: {
+                                    id: string | null;
+                                    type: string;
+                                    /** @enum {string} */
+                                    status: "pending" | "queued" | "running" | "completed" | "failed" | "delayed" | "canceled" | "merged" | "skipped" | "unknown";
+                                    /** Format: date-time */
+                                    created_at: string | null;
+                                    /** Format: date-time */
+                                    updated_at: string | null;
+                                }[];
+                            }[];
+                        };
+                        cancellation: {
+                            eligible: boolean;
+                            transaction_id: string;
+                            /** @enum {string} */
+                            scope: "trigger";
+                            /** @enum {string} */
+                            reason: "queued" | "pending_action" | "local_state" | "unknown" | "no_pending_action";
+                        };
+                        observation_age_ms: number | null;
+                        partial: boolean;
                     };
                 };
             };

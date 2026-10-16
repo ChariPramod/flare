@@ -128,14 +128,14 @@ describe('persistent email pipeline', () => {
       requests[0]!.data[0]!.id,
     );
   });
-  it('rolls back an entire strict batch and removes uploaded objects', async () => {
+  it('rolls back an entire strict batch and leaves cleanup to the durable journal', async () => {
     await expect(
       submitEmails(options, principal, [body, { ...body, from: 'sender@unverified.com' }], {
         batch: true,
       }),
     ).rejects.toMatchObject({ status: 403 });
     expect(await sql`select * from messages`).toHaveLength(0);
-    expect(objects.size).toBe(0);
+    expect(objects.size).toBeGreaterThan(0);
     expect(await sql`select * from event_outbox`).toHaveLength(0);
     const result = await submitEmails(
       options,

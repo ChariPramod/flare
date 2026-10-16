@@ -42,9 +42,15 @@ The printed elapsed time measures this small synthetic fixture, not a production
 
 The local Apple Silicon Mac passed the expanded drill on `953a0b5` in 27 seconds, including Redis RDB-to-AOF conversion/restart. The latest [CI 38701429054](https://github.com/ChariPramod/flare/actions/runs/38701429054) independently passed the expanded drill on `982ec8e` in 46 seconds; see the [acceptance ledger](acceptance.md) for the full measurements. The production infrastructure drill, encrypted off-host custody and provider reconciliation remain pending.
 
-### Unreferenced object residue after interrupted writes
+### Journaled uploads and orphan cleanup
 
-Inbound parsing and forwarded-message admission commit their references and logical work atomically in PostgreSQL, but MinIO writes happen before that commit. Abrupt process death can leave unreferenced body, attachment or MIME objects. There is currently no general orphan-object collector; normal error handlers cannot clean up after SIGKILL. Include this residue in storage capacity and data-retention planning. Do not apply a blanket age-based deletion policy to application objects, because accepted mail and active uncommitted uploads may still need them. Automatic cleanup requires durable upload tracking or another protocol that excludes active writers and rechecks committed references. The disposable crash tests remove only their own fixture objects; they do not provide production garbage collection.
+New inbound raw/body/attachment and outbound attachment/MIME uploads are journaled by migration `0018`. Each upload intent commits through a separate bounded database pool before PUT. The owning transaction locks the intent through PUT and adoption with its resource reference. The worker checks up to ten due journal entries every minute, skips active locks and checks all committed inbound/outbound reference locations before deletion. No bucket listing or legacy-object discovery occurs.
+
+Cleanup requires `s3:GetBucketVersioning` in addition to normal object permissions. Enabled or suspended versioning, unavailable metadata and changed storage identities refuse deletion; admission can still proceed. Identity includes endpoint, region and bucket, never credentials. Restoring to a different endpoint/bucket therefore preserves old journal objects until an operator reviews namespace migration. Do not blindly rewrite identities or treat a fixture restore as proof of cleanup continuity.
+
+New intents wait one hour before inspection, referenced objects are reconsidered after one day, and tombstones are retried hourly indefinitely. A tombstone commits before DELETE and prevents key reuse. Retaining it matters because an upload accepted before a crash may finish after DELETE; client timeouts do not fence server-side writes. SQL, metadata and deletion calls are bounded; the ten-second batch budget is checked between entries, not a strict overall deadline. Each service may lazily use two extra database connections for upload intents; budget these separately from the main pool.
+
+The composite environment foreign key restricts hard tenant/environment deletion while journal entries exist. There is no automatic tombstone retirement or version-history cleanup. Legacy untracked objects remain outside collection. Plan retention and tenant retirement explicitly; never apply blanket age-only deletion or bucket-wide orphan scripts to active application storage.
 
 ## Troubleshooting
 

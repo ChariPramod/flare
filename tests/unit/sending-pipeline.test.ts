@@ -201,7 +201,7 @@ it('pins the operator route during acceptance and charges idempotent recipients 
   expect(await sql`select * from sending_quota where state='consumed'`).toHaveLength(1);
 });
 
-it('rolls back the complete strict batch, quota, outbox and stored MIME when quota is exhausted', async () => {
+it('rolls back strict batch references, quota and outbox while deferring upload cleanup', async () => {
   await policy({ daily_limit: 1 });
   await expect(
     submitEmails(options, principal, [body, { ...body, to: ['second@example.net'] }], {
@@ -213,7 +213,10 @@ it('rolls back the complete strict batch, quota, outbox and stored MIME when quo
   expect(await sql`select * from sending_quota`).toHaveLength(0);
   expect(await sql`select * from event_outbox`).toHaveLength(0);
   expect(await sql`select * from idempotency`).toHaveLength(0);
-  expect(objects.size).toBe(0);
+  // Memory stores have no durable journal. Real rollback collection is covered
+  // by object-uploads.integration.ts; no request catch may delete uncertain PUTs.
+  expect(objects.size).toBe(2);
+  expect(send).not.toHaveBeenCalled();
 });
 
 it('checks Production from the database even when the principal claims development', async () => {

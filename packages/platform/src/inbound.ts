@@ -5,7 +5,14 @@ import { withTenant, toJson } from '@flare/db';
 import type { Sql, Transaction } from '@flare/db';
 import { fingerprint, canSend } from '@flare/shared';
 import type { Principal } from '@flare/shared';
-import { MailError, address, outbox, submitEmails, evidenceFresh } from '@flare/mail';
+import {
+  MailError,
+  address,
+  outbox,
+  submitEmails,
+  evidenceFresh,
+  putManagedObject,
+} from '@flare/mail';
 import type { ObjectStore, PipelineOptions } from '@flare/mail';
 import { sendingPause } from './sending-pause.js';
 
@@ -68,68 +75,53 @@ export async function acceptInbound(sql: Sql, store: ObjectStore, domainId: stri
   const mime = Buffer.from(encoded, 'base64');
   if (!mime.length || mime.length > limits.raw || mime.length !== input.data.size)
     throw new MailError(422, 'MIME size mismatch');
-  const [domain] =
-    await sql`select org_id,environment_id from domains where id=${domainId}`;
+  const [domain] = await sql`select org_id,environment_id from domains where id=${domainId}`;
   if (!domain) throw new MailError(403, 'Verified receiving domain required');
   const tenant = { orgId: String(domain.org_id), environmentId: String(domain.environment_id) };
   const hash = fingerprint({ mime: encoded, from: input.data.mail_from, to: input.data.rcpt_to });
-  let uploaded: string | undefined;
-  try {
-    return await withTenant(sql, tenant, async (tx) => {
-      await tx`select pg_advisory_xact_lock(hashtextextended(${`${domainId}/inbound/${input.data.id}`},0))`;
-      const [existing] =
-        await tx`select id,content_hash,status from inbound_messages where domain_id=${domainId} and postal_id=${input.data.id}`;
-      if (existing) {
-        if (existing.content_hash !== hash)
-          throw new MailError(409, 'Postal message ID conflicts with accepted content');
-        return { id: String(existing.id), status: String(existing.status), duplicate: true };
-      }
-      // A lost acknowledgement must remain retryable after later DNS drift or
-      // disabling receipt. Only NEW content needs current receiving eligibility.
-      // Hold that eligibility through persistence so a concurrent disable either
-      // commits before admission (rejected) or after the accepted receipt.
-      const [current] =
-        await tx`select name,status,receiving,records,checked_at from domains where id=${domainId} for share`;
-      if (
-        !current ||
-        current.status !== 'verified' ||
-        !current.receiving ||
-        !evidenceFresh(current.checked_at) ||
-        !Array.isArray(current.records) ||
-        !current.records.some(
-          (record: { purpose?: string; type?: string; name?: string; status?: string }) =>
-            record.purpose === 'receiving' &&
-            record.type === 'MX' &&
-            record.name === current.name &&
-            record.status === 'verified',
-        ) ||
-        input.data.rcpt_to.split('@')[1] !== current.name
-      )
-        throw new MailError(403, 'Verified receiving domain required');
-      const id = randomUUID();
-      uploaded = `${tenant.orgId}/${tenant.environmentId}/inbound/${id}/raw.eml`;
-      await store.put(uploaded, mime, 'message/rfc822');
-      await tx`insert into inbound_messages(id,org_id,environment_id,domain_id,postal_id,content_hash,mail_from,rcpt_to,raw_key,size) values(${id},${tenant.orgId},${tenant.environmentId},${domainId},${input.data.id},${hash},${input.data.mail_from},${input.data.rcpt_to},${uploaded},${mime.length})`;
-      return { id, status: 'pending', duplicate: false };
-    });
-  } catch (error) {
-    if (uploaded) {
-      // A lost commit response must not delete an object referenced by a committed receipt.
-      const key = uploaded;
-      await sql`select id from inbound_messages where raw_key=${key}`
-        .then(async (rows) => {
-          if (!rows.length) await store.remove(key);
-        })
-        .catch(() => undefined);
+  return await withTenant(sql, tenant, async (tx) => {
+    await tx`select pg_advisory_xact_lock(hashtextextended(${`${domainId}/inbound/${input.data.id}`},0))`;
+    const [existing] =
+      await tx`select id,content_hash,status from inbound_messages where domain_id=${domainId} and postal_id=${input.data.id}`;
+    if (existing) {
+      if (existing.content_hash !== hash)
+        throw new MailError(409, 'Postal message ID conflicts with accepted content');
+      return { id: String(existing.id), status: String(existing.status), duplicate: true };
     }
-    throw error;
-  }
+    // A lost acknowledgement must remain retryable after later DNS drift or
+    // disabling receipt. Only NEW content needs current receiving eligibility.
+    // Hold that eligibility through persistence so a concurrent disable either
+    // commits before admission (rejected) or after the accepted receipt.
+    const [current] =
+      await tx`select name,status,receiving,records,checked_at from domains where id=${domainId} for share`;
+    if (
+      !current ||
+      current.status !== 'verified' ||
+      !current.receiving ||
+      !evidenceFresh(current.checked_at) ||
+      !Array.isArray(current.records) ||
+      !current.records.some(
+        (record: { purpose?: string; type?: string; name?: string; status?: string }) =>
+          record.purpose === 'receiving' &&
+          record.type === 'MX' &&
+          record.name === current.name &&
+          record.status === 'verified',
+      ) ||
+      input.data.rcpt_to.split('@')[1] !== current.name
+    )
+      throw new MailError(403, 'Verified receiving domain required');
+    const id = randomUUID();
+    const uploaded = `${tenant.orgId}/${tenant.environmentId}/inbound/${id}/raw.eml`;
+    await putManagedObject(sql, tx, store, tenant, uploaded, mime, 'message/rfc822');
+    await tx`insert into inbound_messages(id,org_id,environment_id,domain_id,postal_id,content_hash,mail_from,rcpt_to,raw_key,size) values(${id},${tenant.orgId},${tenant.environmentId},${domainId},${input.data.id},${hash},${input.data.mail_from},${input.data.rcpt_to},${uploaded},${mime.length})`;
+    return { id, status: 'pending', duplicate: false };
+  });
 }
+
 export async function parseInbound(sql: Sql, store: ObjectStore, id: string) {
   const [lookup] = await sql`select org_id,environment_id from inbound_messages where id=${id}`;
   if (!lookup) return;
   const tenant = { orgId: String(lookup.org_id), environmentId: String(lookup.environment_id) };
-  const uploaded: string[] = [];
   try {
     return await withTenant(sql, tenant, async (tx) => {
       const [row] =
@@ -155,8 +147,7 @@ export async function parseInbound(sql: Sql, store: ObjectStore, id: string) {
       const prefix = `${tenant.orgId}/${tenant.environmentId}/inbound/${id}/${randomUUID()}`;
       for (const [index, file] of parsed.attachments.entries()) {
         const key = `${prefix}/${index}`;
-        uploaded.push(key);
-        await store.put(key, file.content, file.contentType);
+        await putManagedObject(sql, tx, store, tenant, key, file.content, file.contentType);
         await tx`insert into inbound_attachments(org_id,environment_id,inbound_id,filename,content_type,size,content_id,object_key) values(${tenant.orgId},${tenant.environmentId},${id},${(file.filename ?? `attachment-${index + 1}`).replace(/[\r\n\0/\\]/g, '_').slice(0, 255)},${file.contentType},${file.content.length},${file.cid ?? null},${key})`;
       }
       const bodyKey = `${prefix}/body.json`;
@@ -169,8 +160,15 @@ export async function parseInbound(sql: Sql, store: ObjectStore, id: string) {
             .filter((v): v is string => Boolean(v && z.string().email().safeParse(v).success))
             .slice(0, 1) ?? [],
       };
-      uploaded.push(bodyKey);
-      await store.put(bodyKey, Buffer.from(JSON.stringify(body)), 'application/json');
+      await putManagedObject(
+        sql,
+        tx,
+        store,
+        tenant,
+        bodyKey,
+        Buffer.from(JSON.stringify(body)),
+        'application/json',
+      );
       const headers = parsed.headerLines.filter((v) => v.key.toLowerCase() !== 'bcc');
       const subject = (parsed.subject ?? '').replace(/[\r\n\0]/g, ' ').slice(0, 998);
       await tx`update inbound_messages set status='parsed',subject=${subject},headers=${tx.json(toJson(headers))},body_key=${bodyKey},attempts=attempts+1,error=null,parsed_at=now() where id=${id}`;
@@ -192,13 +190,6 @@ export async function parseInbound(sql: Sql, store: ObjectStore, id: string) {
         await tx`insert into inbound_forwards(org_id,environment_id,inbound_id,rule_id,rule,status,error) values(${tenant.orgId},${tenant.environmentId},${id},${rule.id},${tx.json(toJson({ sender: rule.sender, destinations: rule.destinations }))},${loop ? 'skipped' : 'pending'},${loop ? 'Automatic, bounce or previously forwarded message' : null}) on conflict(inbound_id,rule_id) do nothing`;
     });
   } catch (error) {
-    await Promise.allSettled(
-      uploaded.map(async (key) => {
-        const rows =
-          await sql`select id from inbound_messages where body_key=${key} union all select id from inbound_attachments where object_key=${key}`;
-        if (!rows.length) await store.remove(key);
-      }),
-    );
     await withTenant(sql, tenant, async (tx) => {
       const [row] =
         await tx`select attempts from inbound_messages where id=${id} and status='pending' for update`;

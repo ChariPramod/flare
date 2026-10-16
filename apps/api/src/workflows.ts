@@ -1,4 +1,4 @@
-import { correlation } from '@flare/shared';
+import { correlation, reconciliationQuery } from '@flare/shared';
 import { cancelWorkflow } from '@flare/platform';
 import { createHmac, randomUUID } from 'node:crypto';
 import {
@@ -42,6 +42,7 @@ import { audit } from './identity.js';
 import { idempotent } from './idempotency.js';
 import { novu, novuKey } from './novu.js';
 import { workflowActivity } from './workflow-activity.js';
+import { acceptedWorkflowInventory, inspectWorkflow } from './workflow-reconciliation.js';
 
 const ajv = new Ajv({ allErrors: true, strict: false });
 const safeId = (value: string) => parse(z.string().min(1).max(128), value);
@@ -299,6 +300,40 @@ export class WorkflowController {
       page: input.page,
       limit: input.limit,
     }));
+  }
+  @Get('activity/reconciliation') async reconciliation(
+    @Req() req: AuthRequest,
+    @Query() query: unknown,
+  ) {
+    return acceptedWorkflowInventory(sql, req.principal, parse(reconciliationQuery, query));
+  }
+  @Get('activity/:id/inspection') async inspection(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+  ) {
+    return inspectWorkflow(
+      sql,
+      req.principal,
+      parse(z.string().uuid(), id),
+      (transactionId, signal) =>
+        novu(
+          req.principal,
+          `/v1/notifications?transactionId=${encodeURIComponent(transactionId)}&limit=11`,
+          'GET',
+          undefined,
+          undefined,
+          signal,
+        ),
+      (notificationId, signal) =>
+        novu(
+          req.principal,
+          `/v1/notifications/${encodeURIComponent(notificationId)}`,
+          'GET',
+          undefined,
+          undefined,
+          signal,
+        ),
+    );
   }
   @Get('activity/:id') async activityDetail(@Req() req: AuthRequest, @Param('id') id: string) {
     return workflowActivity(

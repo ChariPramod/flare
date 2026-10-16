@@ -7,7 +7,7 @@ import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { connectDatabase } from '@flare/db';
-import { generateDomain, objectStore } from '@flare/mail';
+import { generateDomain, objectStore, sweepObjectUploads } from '@flare/mail';
 import { acceptInbound, forwardInbound, parseInbound } from '@flare/platform';
 import { startInboundWorker } from '../src/inbound.js';
 import { startMailWorker } from '../src/mail.js';
@@ -101,6 +101,16 @@ async function killAndAwaitRollback() {
       ).length === 0,
     'database rollback after real process death',
   );
+}
+async function expectDurableUploadIntents(keys: string[]) {
+  expect(keys).toHaveLength(2);
+  // This independent connection cannot see the child's uncommitted adoption.
+  // Prepared rows must already be durable while the owning transaction is live.
+  const rows = await sql`select object_key,state,storage_identity from object_uploads
+    where org_id=${orgId} and environment_id=${environmentId} and object_key in ${sql(keys)}`;
+  expect(rows.map((row) => String(row.object_key)).sort()).toEqual([...keys].sort());
+  for (const row of rows)
+    expect(row).toMatchObject({ state: 'prepared', storage_identity: store.identity });
 }
 async function removeFixtureObject(key: string) {
   if (!key.startsWith(prefix)) throw new Error('Refusing non-fixture object cleanup');
@@ -205,6 +215,8 @@ it('recovers SIGKILL during inbound parsing and forwarding with transaction roll
   expect(await store.get(String(receipt!.raw_key), 1024 * 1024)).toEqual(raw);
   await pauseBeforeCommit('parse', id);
   expect(fixtureObjects.size).toBe(2); // Real parsed attachment and body exist before commit.
+  const parseOrphans = [...fixtureObjects];
+  await expectDurableUploadIntents(parseOrphans);
   expect(await sql`select status,attempts,body_key from inbound_messages where id=${id}`).toEqual([
     { status: 'pending', attempts: 0, body_key: null },
   ]);
@@ -213,6 +225,7 @@ it('recovers SIGKILL during inbound parsing and forwarding with transaction roll
   await parseInbound(sql, store, id);
   expect(await sql`select id from inbound_attempts where inbound_id=${id}`).toHaveLength(0);
   await killAndAwaitRollback();
+  await expectDurableUploadIntents(parseOrphans);
   expect(
     await sql`select raw_key,content_hash,created_at,next_attempt_at from inbound_messages where id=${id}`,
   ).toEqual([receipt]);
@@ -245,6 +258,8 @@ it('recovers SIGKILL during inbound parsing and forwarding with transaction roll
   expect(forward).toMatchObject({ status: 'pending', attempts: 0 });
   await pauseBeforeCommit('forward', String(forward!.id));
   expect(fixtureObjects.size).toBe(4); // Additional outbound attachment + final signed MIME.
+  const forwardOrphans = [...fixtureObjects].filter((key) => !parseOrphans.includes(key));
+  await expectDurableUploadIntents(forwardOrphans);
   expect(await sql`select id from messages where org_id=${orgId}`).toHaveLength(0);
   // Forwarding shares submitEmails' transaction; a concurrent forward skips its row lock.
   const { configuredTransports } = await import('@flare/mail');
@@ -253,6 +268,7 @@ it('recovers SIGKILL during inbound parsing and forwarding with transaction roll
     String(forward!.id),
   );
   await killAndAwaitRollback();
+  await expectDurableUploadIntents(forwardOrphans);
   expect(
     await sql`select id,status,attempts,next_attempt_at from inbound_forwards where inbound_id=${id}`,
   ).toEqual([forward]);
@@ -282,6 +298,43 @@ it('recovers SIGKILL during inbound parsing and forwarding with transaction roll
   expect(mime).not.toMatch(/^Bcc:/im);
   expect(mime).toMatch(/^Reply-To: sender@example.net\r?$/m);
   expect(await store.get(String(outbound!.request.attachments[0].key), 1024)).toEqual(attachment);
+  const committedKeys = [
+    String(receipt!.raw_key),
+    String(parsed!.body_key),
+    String(files[0]!.object_key),
+    String(outbound!.mime_key),
+    String(outbound!.request.attachments[0].key),
+  ];
+  const orphanKeys = [...parseOrphans, ...forwardOrphans];
+  expect(new Set([...committedKeys, ...orphanKeys]).size).toBe(9);
+  const committedBytes = await Promise.all(committedKeys.map((key) => store.get(key, 1024 * 1024)));
+  for (const key of orphanKeys)
+    expect((await store.get(key, 1024 * 1024)).length).toBeGreaterThan(0);
+  // Only accelerate these fixture journal entries. Work leases, retry schedules
+  // and every non-fixture object's cleanup eligibility remain untouched.
+  await sql`update object_uploads set next_check_at=now()-interval '1 second'
+    where org_id=${orgId} and environment_id=${environmentId}
+    and storage_identity=${store.identity!} and object_key in ${sql([...orphanKeys, ...committedKeys])}`;
+  expect(await sweepObjectUploads(sql, store, 100)).toMatchObject({ deleted: 4, referenced: 5 });
+  const tombstones = await sql`select object_key,state,delete_attempts,last_deleted_at
+    from object_uploads where org_id=${orgId} and environment_id=${environmentId}
+    and object_key in ${sql(orphanKeys)}`;
+  expect(tombstones).toHaveLength(4);
+  for (const row of tombstones) {
+    expect(row).toMatchObject({ state: 'tombstoned', delete_attempts: 1 });
+    expect(row.last_deleted_at).not.toBeNull();
+    await expect(store.get(String(row.object_key), 1024 * 1024)).rejects.toMatchObject({
+      $metadata: { httpStatusCode: 404 },
+    });
+  }
+  expect(
+    await sql`select state from object_uploads where org_id=${orgId}
+      and environment_id=${environmentId} and object_key in ${sql(committedKeys)}`,
+  ).toEqual(Array.from({ length: 5 }, () => ({ state: 'adopted' })));
+  expect(await Promise.all(committedKeys.map((key) => store.get(key, 1024 * 1024)))).toEqual(
+    committedBytes,
+  );
+  // Delivery below proves the preserved MIME and attachments remain usable.
   mailWorker = startMailWorker(sql, redis, encryptionKey, encryptionKey);
   await mailWorker.dispatch();
   await until(

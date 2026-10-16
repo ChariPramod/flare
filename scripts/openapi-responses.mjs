@@ -344,6 +344,44 @@ const mappings = {
   IntegrationController_list: arr(json),
   IntegrationController_catalog: arr(json),
 };
+// Reconciliation exposes a deliberately closed metadata projection, never run payloads.
+const reconciliationRun = {
+  id: str,
+  workflow_id: str,
+  transaction_id: str,
+  parent_transaction_id: { type: 'string', nullable: true },
+  status: str,
+  attempts: int,
+  cancellation_status: str,
+  created_at: { type: 'string', format: 'date-time' },
+  updated_at: { type: 'string', format: 'date-time' },
+  queue_presence: { type: 'string', enum: ['unknown'] },
+  replay_allowed: { type: 'boolean', enum: [false] },
+};
+function closed(schema) {
+  if (Array.isArray(schema)) return schema.map(closed);
+  if (!schema || typeof schema !== 'object') return schema;
+  return {
+    ...Object.fromEntries(Object.entries(schema).map(([key, value]) => [key, closed(value)])),
+    ...(schema.type === 'object' ? { additionalProperties: false } : {}),
+  };
+}
+mappings.WorkflowController_reconciliation = closed(
+  obj({
+    data: arr(obj(reconciliationRun)),
+    before: { type: 'string', format: 'date-time' },
+    next_cursor: { type: 'string', nullable: true },
+  }),
+);
+mappings.WorkflowController_inspection = closed(
+  obj({
+    ...reconciliationRun,
+    engine_observation: mappings.WorkflowController_activityDetail.properties.engine_observation,
+    cancellation: mappings.WorkflowController_activityDetail.properties.cancellation,
+    observation_age_ms: { type: 'number', minimum: 0, nullable: true },
+    partial: bool,
+  }),
+);
 export function responseFor(id) {
   if (id === 'OperationsController_exportLogs') return { schema: str, contentType: 'text/csv' };
   return { schema: mappings[id] ?? json };

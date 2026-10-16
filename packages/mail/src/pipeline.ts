@@ -7,6 +7,7 @@ import type { Principal, Tenant } from '@flare/shared';
 import { z } from 'zod';
 import { emailSchema, MailError, address, recipients, schedule } from './validation.js';
 import type { EmailInput } from './validation.js';
+import { putManagedObject } from './object-uploads.js';
 import { resolveEmailTemplate } from './templates.js';
 import { buildMime } from './mime.js';
 import type { ObjectStore } from './storage.js';
@@ -77,224 +78,205 @@ export async function submitEmails(
     mode: settings.mode ?? 'strict',
   });
   const operation = settings.batch ? 'mail.batch' : 'mail.send';
-  const uploaded: string[] = [];
-  try {
-    const run = async (tx: Transaction) => {
-      // Match operator/campaign/dispatch lock order, including idempotent admissions.
-      await lockSendingPolicy(tx, p.orgId);
-      if (settings.key) {
-        await tx`select pg_advisory_xact_lock(hashtextextended(${`${p.orgId}/${p.environmentId}/${operation}/${settings.key}`},0))`;
-        await tx`delete from idempotency where operation=${operation} and key=${settings.key} and expires_at<=now()`;
-        const [existing] =
-          await tx`select body_hash,response from idempotency where operation=${operation} and key=${settings.key}`;
-        if (existing) {
-          if (existing.body_hash !== hash)
-            throw new MailError(409, 'Idempotency key was used with a different request');
-          // A domain-scoped key cannot obtain another domain's cached response.
-          if (p.domainId)
-            for (const value of parsed)
-              if (value.success) {
-                const [domain] =
-                  await tx`select id from domains where name=${address(value.data.from).split('@')[1]!}`;
-                if (!domain || domain.id !== p.domainId)
-                  throw new MailError(403, 'API key is scoped to another domain');
-              }
-          return existing.response as {
-            data: { id: string }[];
-            errors: { index: number; message: string }[];
-          };
-        }
+  const run = async (tx: Transaction) => {
+    // Match operator/campaign/dispatch lock order, including idempotent admissions.
+    await lockSendingPolicy(tx, p.orgId);
+    if (settings.key) {
+      await tx`select pg_advisory_xact_lock(hashtextextended(${`${p.orgId}/${p.environmentId}/${operation}/${settings.key}`},0))`;
+      await tx`delete from idempotency where operation=${operation} and key=${settings.key} and expires_at<=now()`;
+      const [existing] =
+        await tx`select body_hash,response from idempotency where operation=${operation} and key=${settings.key}`;
+      if (existing) {
+        if (existing.body_hash !== hash)
+          throw new MailError(409, 'Idempotency key was used with a different request');
+        // A domain-scoped key cannot obtain another domain's cached response.
+        if (p.domainId)
+          for (const value of parsed)
+            if (value.success) {
+              const [domain] =
+                await tx`select id from domains where name=${address(value.data.from).split('@')[1]!}`;
+              if (!domain || domain.id !== p.domainId)
+                throw new MailError(403, 'API key is scoped to another domain');
+            }
+        return existing.response as {
+          data: { id: string }[];
+          errors: { index: number; message: string }[];
+        };
       }
-      const data: { id: string }[] = [];
-      const errors: { index: number; message: string }[] = [];
-      const now = new Date();
-      // PostgreSQL savepoints keep permissive failures from poisoning the surrounding transaction.
-      for (const [index, value] of parsed.entries()) {
-        if (!value.success) {
-          errors.push({ index, message: value.error.message });
-          continue;
-        }
-        const accept = async (db: Transaction) => {
-          const input = await resolveEmailTemplate(db, value.data);
-          const domain = await sender(db, p, input, options.transports);
-          const sandbox =
-            options.transports.length > 0 &&
-            options.transports.every((transport) => transport.sandbox === true);
-          const admission = sandbox
-            ? null
-            : await sendingAdmission(
-                db,
-                p,
-                input.traffic_class,
-                Boolean(settings.campaign?.broadcastId),
-              );
-          const route = admission
-            ? await resolveMailRoute(
-                db,
-                {
-                  trust_tier: admission.policy.trust_tier,
-                  route_bindings: admission.policy.route_bindings,
-                },
-                admission.trafficClass,
-                admission.critical,
-                options.transports,
-              )
-            : null;
-          if (route) {
-            let ready = false;
-            let tlsReady = !domain.enforce_tls;
-            for (const instance of route.instances) {
-              const transport = options.transports.find(
-                (candidate) => candidate.instance?.id === instance.id,
-              )!;
-              if (domain.enforce_tls && !(await requiredTls([transport]))) continue;
-              tlsReady = true;
-              if ((await sendingReadiness(db, p, domain, transport)).ready) ready = true;
-            }
-            if (!ready)
-              throw new SendingPolicyError(
-                403,
-                tlsReady ? 'sender_not_ready' : 'required_tls_unavailable',
-                tlsReady
-                  ? 'No approved route has fresh sender authentication evidence'
-                  : 'No approved route can currently honor this domain’s delivery requirements',
-              );
-          }
-          const at = schedule(input.scheduled_at, now);
-          const id = randomUUID();
-          const envelope = recipients(input);
-          const suppressed =
-            await db`select address from suppressions where address in ${db(envelope.map((v) => v.address))}`;
-          const blocked = new Set(suppressed.map((v) => String(v.address)));
-          const status = envelope.every((v) => blocked.has(v.address))
-            ? 'suppressed'
-            : input.scheduled_at
-              ? 'scheduled'
-              : 'queued';
-          let mimeKey: string | null = null;
-          const metadata: Record<string, unknown>[] = [];
-          if (status !== 'suppressed') {
-            const mimeInput = settings.forwardedId
-              ? {
-                  ...input,
-                  headers: { ...input.headers, 'X-Flare-Forwarded': settings.forwardedId },
-                }
-              : input;
-            const built = await buildMime(
-              settings.smtpHeaders
-                ? { ...mimeInput, to: settings.smtpHeaders.to, cc: settings.smtpHeaders.cc }
-                : mimeInput,
-              id,
-              {
-                name: String(domain.name),
-                dkim_selector: String(domain.dkim_selector),
-                privateKey: decrypt(
-                  String(domain.dkim_private_cipher),
-                  options.encryptionKey,
-                  `${p.orgId}/${p.environmentId}`,
-                ),
-                open_tracking: Boolean(domain.open_tracking),
-                click_tracking: Boolean(domain.click_tracking),
-                trackingUrl: `https://${domain.tracking_subdomain}.${domain.name}`,
-              },
-              options.trackingKey,
-            );
-            const prefix = `${p.orgId}/${p.environmentId}/${id}`;
-            for (const [fileIndex, file] of built.files.entries()) {
-              const objectKey = `${prefix}/attachments/${fileIndex}`;
-              uploaded.push(objectKey);
-              await options.store.put(
-                objectKey,
-                file.content,
-                file.contentType ?? 'application/octet-stream',
-              );
-              metadata.push({
-                filename: file.filename,
-                content_type: file.contentType,
-                size: file.content.length,
-                key: objectKey,
-              });
-            }
-            mimeKey = `${prefix}/message.eml`;
-            uploaded.push(mimeKey);
-            await options.store.put(mimeKey, built.raw, 'message/rfc822');
-          }
-          const stored = { ...input, attachments: metadata };
-          await db`insert into messages(id,org_id,environment_id,domain_id,request,mime_key,envelope_from,status,scheduled_at,request_id,traceparent) values(${id},${p.orgId},${p.environmentId},${domain.id},${db.json(toJson(stored))},${mimeKey},${address(input.from)},${status},${at},${correlation()?.requestId ?? null},${correlation()?.traceparent ?? null})`;
-          if (settings.campaign)
-            await db`update messages set broadcast_id=${settings.campaign.broadcastId ?? null},automation_run_id=${settings.campaign.automationRunId ?? null},contact_id=${settings.campaign.contactId},audience_topic_id=${settings.campaign.topicId} where id=${id}`;
-          for (const recipient of envelope) {
-            const recipientStatus = blocked.has(recipient.address) ? 'suppressed' : 'queued';
-            await db`insert into message_recipients(org_id,environment_id,message_id,address,kind,status) values(${p.orgId},${p.environmentId},${id},${recipient.address},${recipient.kind},${recipientStatus})`;
-            if (recipientStatus === 'suppressed')
-              await outbox(db, p, 'email.suppressed', {
-                email_id: id,
-                recipient: recipient.address,
-              });
-          }
-          await db`update messages set sandbox=${sandbox},traffic_class=${admission?.trafficClass ?? (settings.campaign?.broadcastId ? 'marketing' : (input.traffic_class ?? null))},policy_revision=${admission?.policy.revision ?? null},submitting_key_id=${!sandbox && p.kind === 'api_key' ? p.actorId : null},route_snapshot=${route ? db.json(toJson(route)) : null},route_id=${route?.id ?? null},route_revision=${route?.revision ?? null} where id=${id}`;
-          if (admission && status === 'queued')
-            await reserveSendingQuota(
+    }
+    const data: { id: string }[] = [];
+    const errors: { index: number; message: string }[] = [];
+    const now = new Date();
+    // PostgreSQL savepoints keep permissive failures from poisoning the surrounding transaction.
+    for (const [index, value] of parsed.entries()) {
+      if (!value.success) {
+        errors.push({ index, message: value.error.message });
+        continue;
+      }
+      const accept = async (db: Transaction) => {
+        const input = await resolveEmailTemplate(db, value.data);
+        const domain = await sender(db, p, input, options.transports);
+        const sandbox =
+          options.transports.length > 0 &&
+          options.transports.every((transport) => transport.sandbox === true);
+        const admission = sandbox
+          ? null
+          : await sendingAdmission(
               db,
               p,
-              id,
-              envelope
-                .filter((recipient) => !blocked.has(recipient.address))
-                .map((recipient) => recipient.address),
-              Number(admission.policy.daily_limit),
+              input.traffic_class,
+              Boolean(settings.campaign?.broadcastId),
             );
-          await outbox(db, p, status === 'scheduled' ? 'email.scheduled' : 'email.queued', {
-            email_id: id,
-            status,
-            scheduled_at: at.toISOString(),
-          });
-          return { id };
-        };
-        if (settings.mode === 'permissive') {
-          const start = uploaded.length;
-          try {
-            data.push((await tx.savepoint(accept)) as { id: string });
-          } catch (error) {
-            // Infrastructure failures abort the whole batch, preserving retry semantics.
-            if (!(error instanceof MailError)) throw error;
-            await Promise.all(
-              uploaded.splice(start).map((k) => options.store.remove(k).catch(() => undefined)),
-            );
-            errors.push({ index, message: error.message });
+        const route = admission
+          ? await resolveMailRoute(
+              db,
+              {
+                trust_tier: admission.policy.trust_tier,
+                route_bindings: admission.policy.route_bindings,
+              },
+              admission.trafficClass,
+              admission.critical,
+              options.transports,
+            )
+          : null;
+        if (route) {
+          let ready = false;
+          let tlsReady = !domain.enforce_tls;
+          for (const instance of route.instances) {
+            const transport = options.transports.find(
+              (candidate) => candidate.instance?.id === instance.id,
+            )!;
+            if (domain.enforce_tls && !(await requiredTls([transport]))) continue;
+            tlsReady = true;
+            if ((await sendingReadiness(db, p, domain, transport)).ready) ready = true;
           }
-        } else data.push(await accept(tx));
-      }
-      const response = { data, errors };
-      if (settings.key)
-        await tx`insert into idempotency(org_id,environment_id,operation,key,body_hash,response) values(${p.orgId},${p.environmentId},${operation},${settings.key},${hash},${tx.json(toJson(response))})`;
-      return response;
-    };
-    return await (settings.transaction
-      ? run(settings.transaction)
-      : withTenant(options.sql, p, run));
-  } catch (error) {
-    // An outer transaction owns commit/rollback; its result is not known here.
-    // Preserve objects rather than risk deleting committed MIME. A general
-    // orphan collector is not implemented; interrupted uploads can leave residue.
-    if (settings.transaction) throw error;
-    // A lost COMMIT response is ambiguous too. Retain objects unless PostgreSQL
-    // confirms they are unreferenced; an outage must never destroy accepted MIME.
-    try {
-      const persisted = uploaded.length
-        ? await options.sql`select mime_key from messages where mime_key in ${options.sql(uploaded)}`
-        : [];
-      const prefixes = persisted.map((v) => String(v.mime_key).replace(/\/message\.eml$/, ''));
-      await Promise.all(
-        uploaded
-          .filter((k) => !prefixes.some((prefix) => k.startsWith(`${prefix}/`)))
-          .map((k) => options.store.remove(k).catch(() => undefined)),
-      );
-    } catch {
-      /* Preserve uncertain objects; no general orphan collector runs yet. */
+          if (!ready)
+            throw new SendingPolicyError(
+              403,
+              tlsReady ? 'sender_not_ready' : 'required_tls_unavailable',
+              tlsReady
+                ? 'No approved route has fresh sender authentication evidence'
+                : 'No approved route can currently honor this domain’s delivery requirements',
+            );
+        }
+        const at = schedule(input.scheduled_at, now);
+        const id = randomUUID();
+        const envelope = recipients(input);
+        const suppressed =
+          await db`select address from suppressions where address in ${db(envelope.map((v) => v.address))}`;
+        const blocked = new Set(suppressed.map((v) => String(v.address)));
+        const status = envelope.every((v) => blocked.has(v.address))
+          ? 'suppressed'
+          : input.scheduled_at
+            ? 'scheduled'
+            : 'queued';
+        let mimeKey: string | null = null;
+        const metadata: Record<string, unknown>[] = [];
+        if (status !== 'suppressed') {
+          const mimeInput = settings.forwardedId
+            ? {
+                ...input,
+                headers: { ...input.headers, 'X-Flare-Forwarded': settings.forwardedId },
+              }
+            : input;
+          const built = await buildMime(
+            settings.smtpHeaders
+              ? { ...mimeInput, to: settings.smtpHeaders.to, cc: settings.smtpHeaders.cc }
+              : mimeInput,
+            id,
+            {
+              name: String(domain.name),
+              dkim_selector: String(domain.dkim_selector),
+              privateKey: decrypt(
+                String(domain.dkim_private_cipher),
+                options.encryptionKey,
+                `${p.orgId}/${p.environmentId}`,
+              ),
+              open_tracking: Boolean(domain.open_tracking),
+              click_tracking: Boolean(domain.click_tracking),
+              trackingUrl: `https://${domain.tracking_subdomain}.${domain.name}`,
+            },
+            options.trackingKey,
+          );
+          const prefix = `${p.orgId}/${p.environmentId}/${id}`;
+          for (const [fileIndex, file] of built.files.entries()) {
+            const objectKey = `${prefix}/attachments/${fileIndex}`;
+            await putManagedObject(
+              options.sql,
+              db,
+              options.store,
+              p,
+              objectKey,
+              file.content,
+              file.contentType ?? 'application/octet-stream',
+            );
+            metadata.push({
+              filename: file.filename,
+              content_type: file.contentType,
+              size: file.content.length,
+              key: objectKey,
+            });
+          }
+          mimeKey = `${prefix}/message.eml`;
+          await putManagedObject(
+            options.sql,
+            db,
+            options.store,
+            p,
+            mimeKey,
+            built.raw,
+            'message/rfc822',
+          );
+        }
+        const stored = { ...input, attachments: metadata };
+        await db`insert into messages(id,org_id,environment_id,domain_id,request,mime_key,envelope_from,status,scheduled_at,request_id,traceparent) values(${id},${p.orgId},${p.environmentId},${domain.id},${db.json(toJson(stored))},${mimeKey},${address(input.from)},${status},${at},${correlation()?.requestId ?? null},${correlation()?.traceparent ?? null})`;
+        if (settings.campaign)
+          await db`update messages set broadcast_id=${settings.campaign.broadcastId ?? null},automation_run_id=${settings.campaign.automationRunId ?? null},contact_id=${settings.campaign.contactId},audience_topic_id=${settings.campaign.topicId} where id=${id}`;
+        for (const recipient of envelope) {
+          const recipientStatus = blocked.has(recipient.address) ? 'suppressed' : 'queued';
+          await db`insert into message_recipients(org_id,environment_id,message_id,address,kind,status) values(${p.orgId},${p.environmentId},${id},${recipient.address},${recipient.kind},${recipientStatus})`;
+          if (recipientStatus === 'suppressed')
+            await outbox(db, p, 'email.suppressed', {
+              email_id: id,
+              recipient: recipient.address,
+            });
+        }
+        await db`update messages set sandbox=${sandbox},traffic_class=${admission?.trafficClass ?? (settings.campaign?.broadcastId ? 'marketing' : (input.traffic_class ?? null))},policy_revision=${admission?.policy.revision ?? null},submitting_key_id=${!sandbox && p.kind === 'api_key' ? p.actorId : null},route_snapshot=${route ? db.json(toJson(route)) : null},route_id=${route?.id ?? null},route_revision=${route?.revision ?? null} where id=${id}`;
+        if (admission && status === 'queued')
+          await reserveSendingQuota(
+            db,
+            p,
+            id,
+            envelope
+              .filter((recipient) => !blocked.has(recipient.address))
+              .map((recipient) => recipient.address),
+            Number(admission.policy.daily_limit),
+          );
+        await outbox(db, p, status === 'scheduled' ? 'email.scheduled' : 'email.queued', {
+          email_id: id,
+          status,
+          scheduled_at: at.toISOString(),
+        });
+        return { id };
+      };
+      if (settings.mode === 'permissive') {
+        try {
+          data.push((await tx.savepoint(accept)) as { id: string });
+        } catch (error) {
+          // Infrastructure failures abort the whole batch, preserving retry semantics.
+          if (!(error instanceof MailError)) throw error;
+          errors.push({ index, message: error.message });
+        }
+      } else data.push(await accept(tx));
     }
-    throw error;
-  }
+    const response = { data, errors };
+    if (settings.key)
+      await tx`insert into idempotency(org_id,environment_id,operation,key,body_hash,response) values(${p.orgId},${p.environmentId},${operation},${settings.key},${hash},${tx.json(toJson(response))})`;
+    return response;
+  };
+  return await (settings.transaction ? run(settings.transaction) : withTenant(options.sql, p, run));
 }
+
 async function sender(
   tx: Transaction,
   p: Principal,

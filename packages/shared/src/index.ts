@@ -49,3 +49,5 @@ export * from './audience.js';
 export * from './automations.js';
 
 export * from './telemetry.js';
+
+export { reconciliationQuery } from './reconciliation.js';

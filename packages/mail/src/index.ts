@@ -14,3 +14,4 @@ export * from './dmarc.js';
 export * from './readiness.js';
 export * from './domain-readiness-service.js';
 export * from './readiness-gate.js';
+export * from './object-uploads.js';
