@@ -17,6 +17,7 @@ import {
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Request, Response } from 'express';
+import type { Transaction } from '@flare/db';
 import { SignJWT, jwtVerify } from 'jose';
 import * as oidc from 'openid-client';
 import { z } from 'zod';
@@ -33,6 +34,7 @@ import {
 import type { Action, Role } from '@flare/shared';
 import { config, parse, redis, sql } from './context.js';
 import type { AuthRequest } from './context.js';
+import { withMfaProof } from './mfa-proof.js';
 
 export const Public = () => SetMetadata('public', true);
 export const Access = (action: Action | 'send') => SetMetadata('access', action);
@@ -78,7 +80,7 @@ export class AuthGuard implements CanActivate {
         context.getClass(),
       ])
     ) {
-      if (req.path.startsWith('/v1/auth/'))
+      if (req.path.toLowerCase().startsWith('/v1/auth/'))
         await enforceLimit(
           res,
           `auth:${hashToken(req.ip ?? 'unknown')}`,
@@ -138,9 +140,9 @@ export class AuthGuard implements CanActivate {
   }
 }
 
-async function issueSession(userId: string) {
+async function issueSession(userId: string, db: Transaction) {
   const [session] =
-    await sql`insert into sessions (user_id, expires_at) values (${userId}, now() + interval '12 hours') returning id`;
+    await db`insert into sessions (user_id, expires_at) values (${userId}, now() + interval '12 hours') returning id`;
   const token = await new SignJWT({})
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(userId)
@@ -151,30 +153,10 @@ async function issueSession(userId: string) {
     .setExpirationTime('12h')
     .sign(jwtKey);
   const organizations =
-    await sql`select o.id, o.name, m.role, coalesce(json_agg(json_build_object('id', e.id, 'name', e.name) order by e.name), '[]') as environments from memberships m join organizations o on o.id = m.org_id join environments e on e.org_id = o.id where m.user_id = ${userId} group by o.id, m.role order by o.created_at`;
+    await db`select o.id, o.name, m.role, coalesce(json_agg(json_build_object('id', e.id, 'name', e.name) order by e.name), '[]') as environments from memberships m join organizations o on o.id = m.org_id join environments e on e.org_id = o.id where m.user_id = ${userId} group by o.id, m.role order by o.created_at`;
   const [user] =
-    await sql`select id, name, email, mfa_secret is not null as mfa_enabled from users where id = ${userId}`;
+    await db`select id, name, email, mfa_secret is not null as mfa_enabled from users where id = ${userId}`;
   return { token, expires_in: 43200, user, organizations };
-}
-async function consumeMfa(userId: string, code?: string) {
-  return sql.begin(async (tx) => {
-    const [user] = await tx`select * from users where id = ${userId} for update`;
-    if (!user?.mfa_secret) return;
-    const counter = verifyTotp(
-      decrypt(String(user.mfa_secret), config.FLARE_ENCRYPTION_KEY, `mfa:${userId}`),
-      code ?? '',
-      Number(user.mfa_last_counter),
-    );
-    if (counter !== null) {
-      await tx`update users set mfa_last_counter = ${counter} where id = ${userId}`;
-      return;
-    }
-    const recovery = user.recovery_hashes as string[];
-    const index = recovery.indexOf(hashToken(code ?? ''));
-    if (index < 0) throw new UnauthorizedException('A valid MFA or recovery code is required');
-    recovery.splice(index, 1);
-    await tx`update users set recovery_hashes = ${tx.json(recovery)} where id = ${userId}`;
-  });
 }
 const sessionOnly = (req: AuthRequest) => {
   if (req.principal.kind !== 'session') throw new ForbiddenException('A user session is required');
@@ -219,8 +201,9 @@ export class AuthController {
       !user?.password_hash
     )
       throw new UnauthorizedException('Invalid credentials');
-    await consumeMfa(String(user.id), input.code);
-    return issueSession(String(user.id));
+    return withMfaProof(sql, String(user.id), input.code, config.FLARE_ENCRYPTION_KEY, (tx) =>
+      issueSession(String(user.id), tx),
+    );
   }
   @Access('read') @Post('logout') async logout(@Req() req: AuthRequest) {
     sessionOnly(req);
@@ -293,11 +276,16 @@ export class AuthController {
     const [user] = await sql`select password_hash from users where id = ${req.principal.actorId}`;
     if (!user?.password_hash || !(await verifyPassword(password, String(user.password_hash))))
       throw new UnauthorizedException();
-    await consumeMfa(req.principal.actorId, code);
-    await sql.begin(async (tx) => {
-      await tx`update users set mfa_secret = null, mfa_pending = null, recovery_hashes = '[]', mfa_last_counter = -1 where id = ${req.principal.actorId}`;
-      await tx`update sessions set operator_mfa_at=null where user_id=${req.principal.actorId}`;
-    });
+    await withMfaProof(
+      sql,
+      req.principal.actorId,
+      code,
+      config.FLARE_ENCRYPTION_KEY,
+      async (tx) => {
+        await tx`update users set mfa_secret = null, mfa_pending = null, recovery_hashes = '[]', mfa_last_counter = -1 where id = ${req.principal.actorId}`;
+        await tx`update sessions set operator_mfa_at=null where user_id=${req.principal.actorId}`;
+      },
+    );
     return { success: true };
   }
   @Public() @Get('oidc') async oidcStart(@Res() res: Response) {
@@ -374,16 +362,17 @@ export class AuthController {
     const exchangeKey = `oidc-exchange:${hashToken(code)}`;
     const userId = await redis.get(exchangeKey);
     if (!userId) throw new UnauthorizedException('Exchange code expired or already used');
-    await consumeMfa(userId, mfa_code);
-    const consumed = await redis.eval(
-      "if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) else return 0 end",
-      1,
-      exchangeKey,
-      userId,
-    );
-    if (Number(consumed) !== 1)
-      throw new UnauthorizedException('Exchange code expired or already used');
-    return issueSession(userId);
+    return withMfaProof(sql, userId, mfa_code, config.FLARE_ENCRYPTION_KEY, async (tx) => {
+      const consumed = await redis.eval(
+        "if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) else return 0 end",
+        1,
+        exchangeKey,
+        userId,
+      );
+      if (Number(consumed) !== 1)
+        throw new UnauthorizedException('Exchange code expired or already used');
+      return issueSession(userId, tx);
+    });
   }
   @Public() @Post('accept-invite') async acceptInvite(@Req() req: Request, @Body() body: unknown) {
     const input = parse(
@@ -397,7 +386,7 @@ export class AuthController {
       body,
     );
     const passwordHash = await hashPassword(input.password);
-    const userId = await sql.begin(async (tx) => {
+    const result = await sql.begin(async (tx) => {
       const [invite] =
         await tx`select * from invites where token_hash = ${hashToken(input.token)} and expires_at > now() and accepted_at is null for update`;
       if (!invite) throw new BadRequestException('Invalid or expired invitation');
@@ -412,8 +401,10 @@ export class AuthController {
       await tx`insert into memberships (org_id, user_id, role) values (${invite.org_id}, ${user!.id}, ${invite.role})`;
       await tx`update invites set accepted_at = now() where id = ${invite.id}`;
       await tx`insert into audit_logs (org_id, actor_id, action, resource_id) values (${invite.org_id}, ${String(user!.id)}, 'member.joined', ${String(user!.id)})`;
-      return String(user!.id);
+      // The new user and initial session commit together, so concurrent MFA
+      // enrollment cannot miss this session when revoking older login state.
+      return issueSession(String(user!.id), tx);
     });
-    return issueSession(userId);
+    return result;
   }
 }

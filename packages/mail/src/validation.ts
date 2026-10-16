@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import parseMailboxes from 'nodemailer/lib/addressparser/index.js';
 import { parseDate } from 'chrono-node';
 import { propertyName, propertyValue } from '@flare/shared';
 
@@ -15,9 +16,25 @@ const line = z
   .max(998)
   .refine((v) => !/[\r\n\0]/.test(v), 'Header contains a control character');
 export function address(value: string): string {
-  const match = /^(?:[^<>]*<)?([^<>\s]+@[^<>\s]+)>?$/.exec(value.trim());
-  const parsed = z.string().email().safeParse(match?.[1]);
-  if (!parsed.success || /[\r\n\0]/.test(value)) throw new MailError(422, 'Invalid email address');
+  const match = /^(?:[^<>]*<([^<>\s]+@[^<>\s]+)>|([^<>\s]+@[^<>\s]+))$/.exec(value.trim());
+  const parsed = z
+    .string()
+    .email()
+    .safeParse(match?.[1] ?? match?.[2]);
+  if (!parsed.success || value.length > 998 || /[\r\n\0]/.test(value))
+    throw new MailError(422, 'Invalid email address');
+  // Authorization and MIME must interpret the same single mailbox. A regex
+  // alone accepts "other@domain, Name <approved@domain>" as the approved sender,
+  // while Nodemailer emits two From addresses. Groups are not single mailboxes.
+  const mailboxes = parseMailboxes(value);
+  const mailbox = mailboxes[0];
+  if (
+    mailboxes.length !== 1 ||
+    !mailbox ||
+    !('address' in mailbox) ||
+    mailbox.address.toLowerCase() !== parsed.data.toLowerCase()
+  )
+    throw new MailError(422, 'Supply exactly one email address per mailbox');
   return parsed.data.toLowerCase();
 }
 const mailbox = line.refine((v) => {

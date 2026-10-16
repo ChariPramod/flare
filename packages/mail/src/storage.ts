@@ -138,20 +138,29 @@ export function objectStore(): ObjectStore & { ready(): Promise<void> } {
       });
     },
     async get(Key, limit) {
+      if (!Number.isSafeInteger(limit) || limit < 0)
+        throw new MailError(422, 'Stored object limit must be a nonnegative safe integer');
       const result = await client.send(new GetObjectCommand({ Bucket, Key }), {
         abortSignal: AbortSignal.timeout(30_000),
       });
-      if (!result.Body || (result.ContentLength ?? 0) > limit)
-        throw new MailError(413, 'Stored MIME exceeds limit');
-      const chunks: Buffer[] = [];
-      let size = 0;
-      for await (const chunk of result.Body as AsyncIterable<Uint8Array>) {
-        const buffer = Buffer.from(chunk);
-        size += buffer.length;
-        if (size > limit) throw new MailError(413, 'Stored MIME exceeds limit');
-        chunks.push(buffer);
+      try {
+        if (!result.Body || (result.ContentLength ?? 0) > limit)
+          throw new MailError(413, 'Stored MIME exceeds limit');
+        const chunks: Buffer[] = [];
+        let size = 0;
+        for await (const chunk of result.Body as AsyncIterable<Uint8Array>) {
+          const buffer = Buffer.from(chunk);
+          size += buffer.length;
+          if (size > limit) throw new MailError(413, 'Stored MIME exceeds limit');
+          chunks.push(buffer);
+        }
+        return Buffer.concat(chunks);
+      } finally {
+        // Rejecting from ContentLength happens before iteration can close the
+        // response. Always release the Node HTTP stream/socket, including early
+        // size rejection, overflow and a transport error while reading.
+        if (result.Body && 'destroy' in result.Body) result.Body.destroy();
       }
-      return Buffer.concat(chunks);
     },
     async remove(Key) {
       await client.send(new DeleteObjectCommand({ Bucket, Key }), {

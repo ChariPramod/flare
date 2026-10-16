@@ -151,7 +151,7 @@ export class OperatorGuard implements CanActivate {
     // A policy save refreshes several independent dashboard resources together.
     // Keep this separate from API-key admission and the tighter MFA-proof bucket.
     await enforceLimit(res, `operator:${req.operator.actorId}`, 10, 30);
-    if (req.method === 'POST' && req.path === '/v1/operator/step-up')
+    if (req.method === 'POST' && /^\/v1\/operator\/step-up\/?$/i.test(req.path))
       await enforceLimit(res, `operator-proof:${req.operator.actorId}`, 1 / 6, 5);
     return true;
   }

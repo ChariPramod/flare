@@ -64,6 +64,25 @@ async function queueEvent() {
   await fanOutEvents(sql);
   return (await sql`select * from webhook_deliveries where event_id=${event!.id}`)[0]!;
 }
+it('fans out at PostgreSQL microsecond precision without including later endpoints', async () => {
+  const event = randomUUID(),
+    later = randomUUID();
+  try {
+    await sql`update webhook_endpoints set created_at='2026-01-01T00:00:00.123400Z' where id=${endpoint}`;
+    await sql`insert into webhook_endpoints(id,org_id,environment_id,name,url,secret_cipher,created_at) values(${later},${org},${env},'Later','https://hooks.example.com','unused','2026-01-01T00:00:00.123600Z')`;
+    await sql`insert into event_outbox(id,org_id,environment_id,type,data,created_at) values(${event},${org},${env},'email.sent','{}','2026-01-01T00:00:00.123500Z')`;
+    expect(await fanOutEvents(sql)).toBe(1);
+    expect(await sql`select endpoint_id from webhook_deliveries where event_id=${event}`).toEqual([
+      { endpoint_id: endpoint },
+    ]);
+    expect(await fanOutEvents(sql)).toBe(0);
+  } finally {
+    await sql`delete from webhook_deliveries where event_id=${event}`;
+    await sql`delete from event_outbox where id=${event}`;
+    await sql`delete from webhook_endpoints where id=${later}`;
+    await sql`update webhook_endpoints set created_at=now() where id=${endpoint}`;
+  }
+});
 it('takes one delivery claim across concurrent PostgreSQL connections', async () => {
   const delivery = await queueEvent();
   let calls = 0;

@@ -554,3 +554,87 @@ it.each(['domain drift', 'TLS outage', 'route TLS outage'] as const)(
     ).toBe('completed');
   },
 );
+
+it('preserves outbox timestamp precision and fans out only automations existing at the exact event time', async () => {
+  const { contact } = await setup();
+  await sql`delete from event_outbox`;
+  const definition = automationSchema.parse({
+    trigger: 'contact.created',
+    entry: 'wait',
+    steps: [{ id: 'wait', name: 'Wait', type: 'wait', seconds: 1, next: null }],
+  });
+  const earlier = randomUUID(),
+    later = randomUUID(),
+    eventId = randomUUID();
+  await sql`insert into automations(id,org_id,environment_id,identifier,name,definition,enabled,created_at) values
+    (${earlier},${org},${env},'precision-earlier','Earlier',${sql.json(definition)},true,'2026-01-01T00:00:00.123455Z'),
+    (${later},${org},${env},'precision-later','Later',${sql.json(definition)},true,'2026-01-01T00:00:00.123457Z')`;
+  await sql`insert into event_outbox(id,org_id,environment_id,type,data,created_at) values(${eventId},${org},${env},'contact.created',${sql.json({ id: contact.id })},'2026-01-01T00:00:00.123456Z')`;
+  await fanOutAutomationEvents(sql);
+  const [event] =
+    await sql`select id,to_char(created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as timestamp from automation_events where external_id=${`outbox:${eventId}`}`;
+  expect(event!.timestamp).toBe('2026-01-01T00:00:00.123456Z');
+  expect(await sql`select automation_id from automation_runs where event_id=${event!.id}`).toEqual([
+    { automation_id: earlier },
+  ]);
+  await fanOutAutomationEvents(sql);
+  expect(
+    await sql`select automation_id from automation_runs where event_id=${event!.id}`,
+  ).toHaveLength(1);
+});
+
+it('matches wait events against exact start and deadline boundaries without admitting earlier microseconds', async () => {
+  const { run, contact } = await setup();
+  await sql`update automation_runs set current_step='conversion' where id=${run}`;
+  await advanceAutomation(options, run);
+  await sql`update automation_steps set started_at='2026-01-01T00:00:00.123455Z',wake_at='2026-01-01T00:00:00.123457Z' where run_id=${run} and step_id='conversion'`;
+  const early = randomUUID(),
+    valid = randomUUID(),
+    late = randomUUID();
+  await sql`insert into automation_events(id,org_id,environment_id,contact_id,name,external_id,data,created_at) values
+    (${early},${org},${env},${contact.id},'purchased','microsecond-early','{}','2026-01-01T00:00:00.123454Z'),
+    (${valid},${org},${env},${contact.id},'purchased','microsecond-valid','{}','2026-01-01T00:00:00.123456Z'),
+    (${late},${org},${env},${contact.id},'purchased','microsecond-late','{}','2026-01-01T00:00:00.123458Z')`;
+  await sql`update automation_runs set next_step_at=now() where id=${run}`;
+  await advanceAutomation(options, run);
+  expect(
+    (
+      await sql`select matched_event_id from automation_steps where run_id=${run} and step_id='conversion'`
+    )[0]!.matched_event_id,
+  ).toBe(valid);
+  expect(
+    (await sql`select current_step from automation_runs where id=${run}`)[0]!.current_step,
+  ).toBe('branch');
+});
+
+it('does not match an event one microsecond before a wait begins', async () => {
+  const { run, contact } = await setup();
+  await sql`update automation_runs set current_step='conversion' where id=${run}`;
+  await advanceAutomation(options, run);
+  await sql`update automation_steps set started_at='2026-01-01T00:00:00.123455Z',wake_at='2026-01-01T00:00:01.123457Z' where run_id=${run} and step_id='conversion'`;
+  await sql`insert into automation_events(org_id,environment_id,contact_id,name,external_id,data,created_at) values
+    (${org},${env},${contact.id},'purchased','before-wait-microsecond','{}','2026-01-01T00:00:00.123454Z')`;
+  await sql`update automation_runs set next_step_at=now() where id=${run}`;
+  await advanceAutomation(options, run);
+  expect(
+    (
+      await sql`select matched_event_id from automation_steps where run_id=${run} and step_id='conversion'`
+    )[0]!.matched_event_id,
+  ).toBeNull();
+  expect(
+    (await sql`select status,current_step from automation_runs where id=${run}`)[0],
+  ).toMatchObject({ status: 'completed', current_step: null });
+});
+it('preserves a waiting step deadline when an unrelated event wakes the run', async () => {
+  const { run } = await setup();
+  await sql`update automation_runs set current_step='conversion' where id=${run}`;
+  await advanceAutomation(options, run);
+  await sql`update automation_steps set wake_at='2050-01-01T00:00:00.123456Z' where run_id=${run} and step_id='conversion'`;
+  await sql`update automation_runs set next_step_at=now() where id=${run}`;
+  expect(await advanceAutomation(options, run)).toEqual({ status: 'waiting' });
+  expect(
+    (
+      await sql`select r.next_step_at=s.wake_at as exact from automation_runs r join automation_steps s on s.run_id=r.id and s.step_id='conversion' where r.id=${run}`
+    )[0]!.exact,
+  ).toBe(true);
+});

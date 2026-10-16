@@ -246,3 +246,98 @@ it('interprets HTTP rejection, unknown acceptance and unconfirmed cancellation d
   );
   vi.unstubAllGlobals();
 });
+
+it('bounds crash-recovered cancellation attempts, preserves backoff and rejects late completion', async () => {
+  const id = await run();
+  await dispatchWorkflow(sql, id, async () => ({ kind: 'accepted' }));
+  await cancelWorkflow(sql, principal, id);
+  for (let ordinal = 1; ordinal <= 4; ordinal++) {
+    let release!: () => void, entered!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const ready = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const sending = dispatchWorkflow(sql, id, async (_row, cancel) => {
+      expect(cancel).toBe(true);
+      entered();
+      await gate;
+      return { kind: 'accepted' };
+    });
+    await ready;
+    await sql`update workflow_runs set lease_until=now()-interval '1 second' where id=${id}`;
+    try {
+      await recoverWorkflowRuns(sql);
+      const [state] =
+        await sql`select status,cancellation_status,cancellation_attempts,claim_id,next_attempt_at>now() as deferred from workflow_runs where id=${id}`;
+      expect(state).toMatchObject({
+        status: 'canceled',
+        cancellation_status: ordinal < 4 ? 'pending' : 'failed',
+        cancellation_attempts: ordinal,
+        claim_id: null,
+      });
+      if (ordinal < 4) expect(state!.deferred).toBe(true);
+      const forbidden = vi.fn(async () => ({ kind: 'accepted' as const }));
+      await dispatchWorkflow(sql, id, forbidden);
+      expect(forbidden).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await sending;
+    }
+    expect(
+      (await sql`select cancellation_status from workflow_runs where id=${id}`)[0]!
+        .cancellation_status,
+    ).toBe(ordinal < 4 ? 'pending' : 'failed');
+    await sql`update workflow_runs set next_attempt_at=now() where id=${id}`;
+  }
+  await recoverWorkflowRuns(sql);
+  const sender = vi.fn(async () => ({ kind: 'accepted' as const }));
+  await dispatchWorkflow(sql, id, sender);
+  expect(sender).not.toHaveBeenCalled();
+  expect(
+    await sql`select ordinal from workflow_attempts where run_id=${id} and kind='cancel' and status='ambiguous' order by ordinal`,
+  ).toEqual([{ ordinal: 1 }, { ordinal: 2 }, { ordinal: 3 }, { ordinal: 4 }]);
+  const events =
+    await sql`select type,data from event_outbox where type='workflow.cancellation.failed' and data->>'id'=${id}`;
+  expect(events).toHaveLength(1);
+  expect(events[0]!.data.transactionId).toBe(id);
+  expect(events[0]!.data.error).toContain('unknown');
+});
+
+it('keeps expired in-flight trigger cancellation pending without replaying the trigger', async () => {
+  const id = await run();
+  await sql`update workflow_runs set status='dispatching',claim_id=${randomUUID()},lease_until=now()-interval '1 second',attempts=1 where id=${id}`;
+  await sql`insert into workflow_attempts(org_id,environment_id,run_id,kind,ordinal) values(${org},${env},${id},'trigger',1)`;
+  await cancelWorkflow(sql, principal, id);
+  await recoverWorkflowRuns(sql);
+  expect(
+    (
+      await sql`select status,cancellation_status,cancellation_attempts from workflow_runs where id=${id}`
+    )[0],
+  ).toMatchObject({ status: 'canceled', cancellation_status: 'pending', cancellation_attempts: 0 });
+  await sql`update workflow_runs set next_attempt_at=now() where id=${id}`;
+  await dispatchWorkflow(sql, id, async (_row, cancel) => {
+    expect(cancel).toBe(true);
+    return { kind: 'accepted' };
+  });
+  expect(
+    (
+      await sql`select cancellation_status,attempts,cancellation_attempts from workflow_runs where id=${id}`
+    )[0],
+  ).toMatchObject({ cancellation_status: 'confirmed', attempts: 1, cancellation_attempts: 1 });
+});
+it('does not advertise workflow redrive when cancellation compensation exists', async () => {
+  const id = await run();
+  await sql`update workflow_runs set status='failed',cancellation_status='failed' where id=${id}`;
+  expect((await listDeadLetters(sql, principal)).find((row) => row.id === id)).toMatchObject({
+    redrivable: false,
+  });
+  await expect(redriveDeadLetter(sql, principal, 'workflow', id)).rejects.toThrow(
+    'Failed inactive',
+  );
+  await sql`update workflow_runs set cancellation_status='none' where id=${id}`;
+  expect((await listDeadLetters(sql, principal)).find((row) => row.id === id)).toMatchObject({
+    redrivable: true,
+  });
+});

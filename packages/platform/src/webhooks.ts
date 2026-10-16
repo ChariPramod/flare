@@ -16,8 +16,10 @@ export async function fanOutEvents(sql: Sql) {
       await tx`select * from event_outbox where dispatched_at is null order by created_at for update skip locked limit 100`;
     let count = 0;
     for (const event of events) {
+      // Keep eligibility in PostgreSQL: converting the event time through Date
+      // drops microseconds and can exclude endpoints created just before it.
       const endpoints =
-        await tx`select id,events from webhook_endpoints where org_id=${event.org_id} and environment_id=${event.environment_id} and enabled=true and created_at<=${event.created_at}`;
+        await tx`select id,events from webhook_endpoints where org_id=${event.org_id} and environment_id=${event.environment_id} and enabled=true and created_at<=(select created_at from event_outbox where id=${event.id})`;
       const payload = JSON.stringify({
         id: event.id,
         type: event.type,

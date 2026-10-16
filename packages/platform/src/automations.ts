@@ -69,6 +69,7 @@ export async function fanOutAutomationEvents(sql: Sql) {
   await sql.begin(async (tx) => {
     const events =
       await tx`select * from event_outbox where automation_dispatched_at is null order by created_at,id limit 100 for update skip locked`;
+    // Keep timing decisions and copied event timestamps in SQL: JavaScript Date loses microseconds.
     for (const event of events) {
       let contactId: string | undefined;
       if (!event.target_endpoint_id && String(event.type).startsWith('contact.'))
@@ -79,7 +80,7 @@ export async function fanOutAutomationEvents(sql: Sql) {
         contactId = message?.contact_id;
       }
       if (contactId && /^[0-9a-f-]{36}$/i.test(contactId))
-        await tx`insert into automation_events(org_id,environment_id,contact_id,name,external_id,data,created_at) select ${event.org_id},${event.environment_id},id,${event.type},${`outbox:${event.id}`},${tx.json(event.data)},${event.created_at} from contacts where id=${contactId} and org_id=${event.org_id} and environment_id=${event.environment_id} on conflict(org_id,environment_id,external_id) do nothing`;
+        await tx`insert into automation_events(org_id,environment_id,contact_id,name,external_id,data,created_at) select c.org_id,c.environment_id,c.id,${event.type},${`outbox:${event.id}`},${tx.json(event.data)},e.created_at from contacts c join event_outbox e on e.id=${event.id} and e.org_id=c.org_id and e.environment_id=c.environment_id where c.id=${contactId} and c.org_id=${event.org_id} and c.environment_id=${event.environment_id} on conflict(org_id,environment_id,external_id) do nothing`;
       await tx`update event_outbox set automation_dispatched_at=now() where id=${event.id}`;
     }
   });
@@ -89,7 +90,7 @@ export async function fanOutAutomationEvents(sql: Sql) {
     let created = 0;
     for (const event of events) {
       const definitions =
-        await tx`select * from automations where enabled=true and org_id=${event.org_id} and environment_id=${event.environment_id} and definition->>'trigger'=${event.name} and created_at<=${event.created_at}`;
+        await tx`select * from automations where enabled=true and org_id=${event.org_id} and environment_id=${event.environment_id} and definition->>'trigger'=${event.name} and created_at<=(select created_at from automation_events where id=${event.id} and org_id=${event.org_id} and environment_id=${event.environment_id})`;
       for (const row of definitions) {
         const definition = automationSchema.parse(row.definition);
         const runs =
@@ -153,7 +154,7 @@ export async function advanceAutomation(options: PipelineOptions, id: string) {
     const [event] = await tx`select data from automation_events where id=${run.event_id}`;
     const data = { contact: { ...contact, properties: contact.properties }, event: event!.data };
     const [record] =
-      await tx`select * from automation_steps where run_id=${id} and step_id=${step.id}`;
+      await tx`select *,wake_at>clock_timestamp() as wake_pending from automation_steps where run_id=${id} and step_id=${step.id}`;
     let next: string | null =
       step.type === 'condition'
         ? conditionMatches(step.condition, data)
@@ -171,12 +172,12 @@ export async function advanceAutomation(options: PipelineOptions, id: string) {
       }
       if (step.type === 'wait_for_event') {
         const [match] =
-          await tx`select id from automation_events where contact_id=${contact.id} and name=${step.event} and created_at>=${record.started_at} and created_at<=${record.wake_at} and id!=${run.event_id} order by created_at,id limit 1`;
+          await tx`select e.id from automation_events e join automation_steps s on s.run_id=${id} and s.step_id=${step.id} and s.org_id=e.org_id and s.environment_id=e.environment_id where e.contact_id=${contact.id} and e.name=${step.event} and e.created_at>=s.started_at and e.created_at<=s.wake_at and e.id!=${run.event_id} order by e.created_at,e.id limit 1`;
         matchedEvent = match ? String(match.id) : null;
         if (!match) next = step.on_timeout;
       }
-      if (!matchedEvent && new Date(record.wake_at).getTime() > Date.now()) {
-        await tx`update automation_runs set next_step_at=${record.wake_at} where id=${id}`;
+      if (!matchedEvent && record.wake_pending) {
+        await tx`update automation_runs set next_step_at=(select wake_at from automation_steps where run_id=${id} and step_id=${step.id}) where id=${id}`;
         return { status: 'waiting' };
       }
     }

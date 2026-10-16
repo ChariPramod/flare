@@ -34,8 +34,25 @@ export async function recoverWorkflowRuns(sql: Sql) {
       await tx`select * from workflow_runs where claim_id is not null and lease_until<now() for update skip locked limit 100`;
     for (const row of rows) {
       const cancel = row.status === 'canceled';
+      // Lost cancellation responses consume the same finite budget as completed attempts.
+      // Replaying cancellation is safe, but repeated worker crashes must not retry forever.
+      const exhausted = cancel && Number(row.cancellation_attempts) >= 4;
+      const error = cancel
+        ? 'Worker interrupted; engine cancellation outcome is unknown'
+        : 'Worker interrupted; engine acceptance is unknown';
+      const retrySeconds =
+        cancel && !exhausted
+          ? Math.min(300, 2 ** Math.min(Number(row.cancellation_attempts), 8))
+          : 0;
       await tx`update workflow_attempts set status='ambiguous',error='Worker lease expired',finished_at=now() where run_id=${row.id} and status='started'`;
-      await tx`update workflow_runs set status=${cancel ? 'canceled' : 'ambiguous'},claim_id=null,lease_until=null,error='Worker interrupted; engine acceptance is unknown',next_attempt_at=now(),updated_at=now() where id=${row.id}`;
+      await tx`update workflow_runs set status=${cancel ? 'canceled' : 'ambiguous'},cancellation_status=${exhausted ? 'failed' : row.cancellation_status},claim_id=null,lease_until=null,error=${error},next_attempt_at=now()+${retrySeconds}*interval '1 second',updated_at=now() where id=${row.id}`;
+      if (exhausted)
+        await outbox(
+          tx,
+          { orgId: String(row.org_id), environmentId: String(row.environment_id) },
+          'workflow.cancellation.failed',
+          { id: row.id, workflowId: row.workflow_id, transactionId: row.transaction_id, error },
+        );
       if (!cancel)
         await outbox(
           tx,

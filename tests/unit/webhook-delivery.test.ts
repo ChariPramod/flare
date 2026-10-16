@@ -62,6 +62,18 @@ async function queued(type = 'email.sent') {
   return { event: event!, delivery };
 }
 describe('durable webhook delivery', () => {
+  it('preserves database timestamp precision when selecting eligible endpoints', async () => {
+    const later = randomUUID(),
+      event = randomUUID();
+    await sql`update webhook_endpoints set created_at='2026-01-01T00:00:00.123400Z' where id=${endpoint}`;
+    await sql`insert into webhook_endpoints(id,org_id,environment_id,name,url,events,secret_cipher,created_at) values(${later},${org},${env},'Later','https://hooks.example.com',${sql.json(['email.*'])},'unused','2026-01-01T00:00:00.123600Z')`;
+    await sql`insert into event_outbox(id,org_id,environment_id,type,data,created_at) values(${event},${org},${env},'email.sent','{}','2026-01-01T00:00:00.123500Z')`;
+    expect(await fanOutEvents(sql)).toBe(1);
+    expect(await sql`select endpoint_id from webhook_deliveries where event_id=${event}`).toEqual([
+      { endpoint_id: endpoint },
+    ]);
+    expect(await fanOutEvents(sql)).toBe(0);
+  });
   it('fans out once, filters events, and signs an immutable body', async () => {
     const { event, delivery } = await queued();
     expect(await fanOutEvents(sql)).toBe(0);

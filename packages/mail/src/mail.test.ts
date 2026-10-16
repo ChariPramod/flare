@@ -2,6 +2,7 @@ import { generateKeyPairSync, randomUUID, sign } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   emailSchema,
+  address,
   recipients,
   schedule,
   canTransition,
@@ -49,6 +50,23 @@ describe('email validation and scheduling', () => {
       recipients(emailSchema.parse({ ...body, bcc: ['READER@example.net', 'hidden@example.net'] })),
     ).toHaveLength(2);
   });
+  it('rejects mailbox lists, groups and unmatched brackets in every mailbox field', () => {
+    const invalid = [
+      'attacker@evil.example, Sender <sender@example.com>',
+      'Group: Sender <sender@example.com>',
+      'Group: Sender <sender@example.com>;',
+      'Sender <sender@example.com',
+      'sender@example.com>',
+    ];
+    for (const value of invalid) {
+      expect(() => address(value)).toThrow();
+      for (const field of ['from', 'to', 'cc', 'bcc', 'reply_to'])
+        expect(emailSchema.safeParse({ ...body, [field]: value }).success).toBe(false);
+    }
+    expect(address('"Doe, Jane" <SENDER@example.com>')).toBe('sender@example.com');
+    expect(address('Sender <sender@example.com>')).toBe('sender@example.com');
+    expect(address('sender@example.com')).toBe('sender@example.com');
+  });
   it('resolves relative schedules in UTC and rejects ambiguous ISO timezones', () => {
     const now = new Date('2026-10-12T10:00:00Z');
     expect(schedule('in 2 hours', now).toISOString()).toBe('2026-10-12T12:00:00.000Z');
@@ -66,6 +84,7 @@ describe('email validation and scheduling', () => {
   it('signs MIME once and omits Bcc without removing its envelope recipient', async () => {
     const input = emailSchema.parse({
       ...body,
+      from: '"Doe, Jane" <sender@example.com>',
       bcc: ['hidden@example.net'],
       attachments: [{ filename: 'hello.txt', content: Buffer.from('hello').toString('base64') }],
     });
@@ -83,6 +102,7 @@ describe('email validation and scheduling', () => {
       'test-key',
     );
     expect(result.raw.toString()).toMatch(/^DKIM-Signature: v=1; a=rsa-sha256;/m);
+    expect(result.raw.toString()).toMatch(/^From: "Doe, Jane" <sender@example.com>\r?$/m);
     expect(result.raw.toString()).not.toMatch(/^Bcc:/im);
     expect(result.raw.toString()).not.toContain('hidden@example.net');
     expect(recipients(input)).toContainEqual({ address: 'hidden@example.net', kind: 'bcc' });

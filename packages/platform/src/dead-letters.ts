@@ -20,7 +20,7 @@ export async function listDeadLetters(sql: Sql, p: Principal, limit = 25, offset
     p,
     (tx) => tx`
     select * from (
-      select 'workflow' as kind,id,status,error,attempts,created_at,status='failed' and claim_id is null as redrivable from workflow_runs where status in ('failed','ambiguous') or cancellation_status='failed'
+      select 'workflow' as kind,id,status,error,attempts,created_at,status='failed' and claim_id is null and cancellation_status='none' as redrivable from workflow_runs where status in ('failed','ambiguous') or cancellation_status='failed'
       union all select 'email',m.id,m.status,m.error,(select count(*)::int from transport_attempts a where a.message_id=m.id),m.created_at,claim_id is null and not exists(select 1 from transport_attempts a where a.message_id=m.id and a.status in ('started','ambiguous')) from messages m where status='failed'
       union all select 'webhook',id,status,error,attempts,created_at,true from webhook_deliveries where status='failed'
       union all select 'inbound',id,status,error,attempts,created_at,true from inbound_messages where status='failed'

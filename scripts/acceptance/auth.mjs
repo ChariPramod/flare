@@ -7,6 +7,21 @@ import { hashToken, totp } from '../../packages/shared/dist/index.js';
 // All enrollment, login and recovery mutations go through the real HTTP API.
 try {
   const { api, org, env } = await session();
+  // Express accepts route casing variants; the public authentication limiter
+  // must cover exactly those same routes before any credentials are processed.
+  const limits = [];
+  for (const path of ['/v1/auth/config', '/V1/AUTH/CONFIG']) {
+    const response = await fetch(`http://localhost:4000${path}`, {
+      redirect: 'error',
+      signal: globalThis.AbortSignal.timeout(30000),
+    });
+    assert.equal(response.status, 200, 'Authentication config route is reachable');
+    assert.ok(response.headers.has('ratelimit-limit'), 'Authentication rate limit is applied');
+    assert.ok(response.headers.has('ratelimit-remaining'), 'Authentication capacity is reported');
+    limits.push(response.headers.get('ratelimit-limit'));
+    await response.json();
+  }
+  assert.equal(limits[0], limits[1], 'Route casing must not change the authentication limit');
   const email = 'mfa-acceptance@example.test';
   const password = randomBytes(32).toString('base64url');
   const invite = await api('/team/invites', 'POST', { email, role: 'developer' });
