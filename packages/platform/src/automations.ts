@@ -98,7 +98,7 @@ export async function fanOutAutomationEvents(sql: Sql) {
         created += runs.length;
       }
       // Wake wait-for-event steps promptly; the step itself validates the time window and event name.
-      await tx`update automation_runs set next_step_at=now() where org_id=${event.org_id} and environment_id=${event.environment_id} and contact_id=${event.contact_id} and status='waiting'`;
+      await tx`update automation_runs set next_step_at=now() where org_id=${event.org_id} and environment_id=${event.environment_id} and contact_id=${event.contact_id} and status='waiting' and error is null`;
       await tx`update automation_events set dispatched_at=now() where id=${event.id}`;
     }
     return created;
@@ -132,151 +132,164 @@ export async function advanceAutomation(options: PipelineOptions, id: string) {
     await options.sql`select org_id,environment_id from automation_runs where id=${id}`;
   if (!lookup) return;
   const tenant = { orgId: String(lookup.org_id), environmentId: String(lookup.environment_id) };
-  return withTenant(options.sql, tenant, async (tx) => {
+  const outcome = await withTenant(options.sql, tenant, async (tx) => {
     // Acquire organization policy before run/contact rows and mail admission.
     await lockSendingPolicy(tx, tenant.orgId);
     const [run] =
       await tx`select * from automation_runs where id=${id} and status in ('queued','waiting') and next_step_at<=now() for update skip locked`;
     if (!run) return;
-    const [contact] = await tx`select * from contacts where id=${run.contact_id} for update`;
-    if (!contact || contact.deleted_at || contact.unsubscribed) {
-      await tx`update automation_runs set status='canceled',error='Contact deleted or unsubscribed',finished_at=now(),updated_at=now() where id=${id}`;
-      await tx`update automation_steps set status='canceled',finished_at=now() where run_id=${id} and status='waiting'`;
-      await cancelAutomationMessages(tx, tenant, id);
-      await outbox(tx, tenant, 'automation.canceled', {
-        id,
-        reason: 'Contact unavailable or unsubscribed',
-      });
-      return;
-    }
-    const definition = automationSchema.parse(run.definition),
-      step = definition.steps.find((s) => s.id === run.current_step)!;
-    const [event] = await tx`select data from automation_events where id=${run.event_id}`;
-    const data = { contact: { ...contact, properties: contact.properties }, event: event!.data };
-    const [record] =
-      await tx`select *,wake_at>clock_timestamp() as wake_pending from automation_steps where run_id=${id} and step_id=${step.id}`;
-    let next: string | null =
-      step.type === 'condition'
-        ? conditionMatches(step.condition, data)
-          ? step.then
-          : step.else
-        : step.next;
-    let messageId: string | null = null,
-      matchedEvent: string | null = null;
-    if (step.type === 'wait' || step.type === 'wait_for_event') {
-      if (!record || (record.status === 'failed' && !record.wake_at)) {
-        const seconds = step.type === 'wait' ? step.seconds : step.timeout_seconds;
-        await tx`insert into automation_steps(org_id,environment_id,run_id,step_id,type,status,wake_at) values(${tenant.orgId},${tenant.environmentId},${id},${step.id},${step.type},'waiting',now()+${seconds}*interval '1 second') on conflict(org_id,environment_id,run_id,step_id) do update set status='waiting',wake_at=excluded.wake_at,error=null,finished_at=null`;
-        await tx`update automation_runs set status='waiting',next_step_at=now()+${seconds}*interval '1 second',attempts=0,error=null,updated_at=now() where id=${id}`;
-        return { status: 'waiting' };
-      }
-      if (step.type === 'wait_for_event') {
-        const [match] =
-          await tx`select e.id from automation_events e join automation_steps s on s.run_id=${id} and s.step_id=${step.id} and s.org_id=e.org_id and s.environment_id=e.environment_id where e.contact_id=${contact.id} and e.name=${step.event} and e.created_at>=s.started_at and e.created_at<=s.wake_at and e.id!=${run.event_id} order by e.created_at,e.id limit 1`;
-        matchedEvent = match ? String(match.id) : null;
-        if (!match) next = step.on_timeout;
-      }
-      if (!matchedEvent && record.wake_pending) {
-        await tx`update automation_runs set next_step_at=(select wake_at from automation_steps where run_id=${id} and step_id=${step.id}) where id=${id}`;
-        return { status: 'waiting' };
-      }
-    }
-    if (step.type === 'send_email') {
-      const publicApi = process.env.PUBLIC_API_URL ?? 'http://localhost:4000',
-        web = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
-      if (
-        process.env.NODE_ENV === 'production' &&
-        (!publicApi.startsWith('https://') || !web.startsWith('https://'))
-      )
-        throw new MailError(503, 'Automation preference endpoints require HTTPS');
-      const token = preferenceToken(
-        {
-          ...tenant,
-          contactId: String(contact.id),
-          exp: Math.floor(Date.now() / 1000) + 365 * 86400,
-        },
-        options.trackingKey,
-      );
-      const fallbacks = await tx`select name,fallback from contact_properties`;
-      const values = {
-        ...Object.fromEntries(fallbacks.map((p) => [String(p.name), p.fallback])),
-        ...Object.fromEntries(Object.entries(contact.properties).filter(([, v]) => v !== null)),
-        email: contact.email,
-        first_name: contact.first_name,
-        last_name: contact.last_name,
-        ...data,
-        FLARE_UNSUBSCRIBE_URL: `${web.replace(/\/$/, '')}/preferences/${token}`,
-      };
-      const [template] =
-        await tx`select * from template_versions where template_id=${step.template_id} and version=${step.template_version}`;
-      if (!template) throw new MailError(422, 'Pinned template is missing');
-      const variables = { ...template.variables, ...values };
-      const result = await submitEmails(
-        options,
-        {
-          ...tenant,
-          actorId: 'automation-worker',
-          role: 'owner',
-          kind: 'session',
-          production: false,
-        },
-        [
-          {
-            from: step.from,
-            to: [String(contact.email)],
-            subject: renderText(String(template.subject), variables),
-            html: renderText(String(template.html), variables, true),
-            text: template.text_body
-              ? renderText(String(template.text_body), variables)
-              : undefined,
-            headers: {
-              'List-Unsubscribe': `<${publicApi.replace(/\/$/, '')}/v1/preferences/${token}/unsubscribe>`,
-              'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    try {
+      // Keep the run lock outside the savepoint. Roll back partial admission before recording
+      // the failure, while no competing advancement, cancellation, or redrive can change the run.
+      const value = await tx.savepoint(async (tx) => {
+        const [contact] = await tx`select * from contacts where id=${run.contact_id} for update`;
+        if (!contact || contact.deleted_at || contact.unsubscribed) {
+          await tx`update automation_runs set status='canceled',error='Contact deleted or unsubscribed',finished_at=now(),updated_at=now() where id=${id}`;
+          await tx`update automation_steps set status='canceled',finished_at=now() where run_id=${id} and status='waiting'`;
+          await cancelAutomationMessages(tx, tenant, id);
+          await outbox(tx, tenant, 'automation.canceled', {
+            id,
+            reason: 'Contact unavailable or unsubscribed',
+          });
+          return;
+        }
+        const definition = automationSchema.parse(run.definition),
+          step = definition.steps.find((s) => s.id === run.current_step);
+        if (!step) throw new MailError(422, 'Current automation step is missing');
+        const [event] = await tx`select data from automation_events where id=${run.event_id}`;
+        if (!event) throw new MailError(422, 'Automation trigger event is missing');
+        const data = {
+          contact: { ...contact, properties: contact.properties },
+          event: event.data,
+        };
+        const [record] =
+          await tx`select *,wake_at>clock_timestamp() as wake_pending from automation_steps where run_id=${id} and step_id=${step.id}`;
+        let next: string | null =
+          step.type === 'condition'
+            ? conditionMatches(step.condition, data)
+              ? step.then
+              : step.else
+            : step.next;
+        let messageId: string | null = null,
+          matchedEvent: string | null = null;
+        if (step.type === 'wait' || step.type === 'wait_for_event') {
+          if (!record || (record.status === 'failed' && !record.wake_at)) {
+            const seconds = step.type === 'wait' ? step.seconds : step.timeout_seconds;
+            await tx`insert into automation_steps(org_id,environment_id,run_id,step_id,type,status,wake_at) values(${tenant.orgId},${tenant.environmentId},${id},${step.id},${step.type},'waiting',now()+${seconds}*interval '1 second') on conflict(org_id,environment_id,run_id,step_id) do update set status='waiting',started_at=excluded.started_at,wake_at=excluded.wake_at,error=null,finished_at=null`;
+            await tx`update automation_runs set status='waiting',next_step_at=now()+${seconds}*interval '1 second',attempts=0,error=null,updated_at=now() where id=${id}`;
+            return { status: 'waiting' };
+          }
+          if (step.type === 'wait_for_event') {
+            const [match] =
+              await tx`select e.id from automation_events e join automation_steps s on s.run_id=${id} and s.step_id=${step.id} and s.org_id=e.org_id and s.environment_id=e.environment_id where e.contact_id=${contact.id} and e.name=${step.event} and e.created_at>=s.started_at and e.created_at<=s.wake_at and e.id!=${run.event_id} order by e.created_at,e.id limit 1`;
+            matchedEvent = match ? String(match.id) : null;
+            if (!match) next = step.on_timeout;
+          }
+          if (!matchedEvent && record.wake_pending) {
+            await tx`update automation_steps set status='waiting',error=null,finished_at=null where run_id=${id} and step_id=${step.id}`;
+            await tx`update automation_runs set status='waiting',next_step_at=(select wake_at from automation_steps where run_id=${id} and step_id=${step.id}),attempts=0,error=null,updated_at=now() where id=${id}`;
+            return { status: 'waiting' };
+          }
+        }
+        if (step.type === 'send_email') {
+          const publicApi = process.env.PUBLIC_API_URL ?? 'http://localhost:4000',
+            web = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
+          if (
+            process.env.NODE_ENV === 'production' &&
+            (!publicApi.startsWith('https://') || !web.startsWith('https://'))
+          )
+            throw new MailError(503, 'Automation preference endpoints require HTTPS');
+          const token = preferenceToken(
+            {
+              ...tenant,
+              contactId: String(contact.id),
+              exp: Math.floor(Date.now() / 1000) + 365 * 86400,
             },
-            tags: [{ name: 'automation', value: String(run.automation_id) }],
-          },
-        ],
-        {
-          transaction: tx,
-          campaign: { automationRunId: id, contactId: String(contact.id), topicId: null },
-        },
-      );
-      messageId = result.data[0]!.id;
+            options.trackingKey,
+          );
+          const fallbacks = await tx`select name,fallback from contact_properties`;
+          const values = {
+            ...Object.fromEntries(fallbacks.map((p) => [String(p.name), p.fallback])),
+            ...Object.fromEntries(Object.entries(contact.properties).filter(([, v]) => v !== null)),
+            email: contact.email,
+            first_name: contact.first_name,
+            last_name: contact.last_name,
+            ...data,
+            FLARE_UNSUBSCRIBE_URL: `${web.replace(/\/$/, '')}/preferences/${token}`,
+          };
+          const [template] =
+            await tx`select * from template_versions where template_id=${step.template_id} and version=${step.template_version}`;
+          if (!template) throw new MailError(422, 'Pinned template is missing');
+          const variables = { ...template.variables, ...values };
+          const result = await submitEmails(
+            options,
+            {
+              ...tenant,
+              actorId: 'automation-worker',
+              role: 'owner',
+              kind: 'session',
+              production: false,
+            },
+            [
+              {
+                from: step.from,
+                to: [String(contact.email)],
+                subject: renderText(String(template.subject), variables),
+                html: renderText(String(template.html), variables, true),
+                text: template.text_body
+                  ? renderText(String(template.text_body), variables)
+                  : undefined,
+                headers: {
+                  'List-Unsubscribe': `<${publicApi.replace(/\/$/, '')}/v1/preferences/${token}/unsubscribe>`,
+                  'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+                },
+                tags: [{ name: 'automation', value: String(run.automation_id) }],
+              },
+            ],
+            {
+              transaction: tx,
+              campaign: { automationRunId: id, contactId: String(contact.id), topicId: null },
+            },
+          );
+          messageId = result.data[0]!.id;
+        }
+        await tx`insert into automation_steps(org_id,environment_id,run_id,step_id,type,status,message_id,matched_event_id,finished_at) values(${tenant.orgId},${tenant.environmentId},${id},${step.id},${step.type},'completed',${messageId},${matchedEvent},now()) on conflict(org_id,environment_id,run_id,step_id) do update set status='completed',error=null,finished_at=now(),message_id=excluded.message_id,matched_event_id=excluded.matched_event_id`;
+        await tx`update automation_runs set current_step=${next},status=${next ? 'queued' : 'completed'},next_step_at=now(),attempts=0,error=null,updated_at=now(),finished_at=${next ? null : new Date()} where id=${id}`;
+        if (!next) await outbox(tx, tenant, 'automation.completed', { id });
+        return { status: next ? 'queued' : 'completed', messageId };
+      });
+      return { failed: false as const, value };
+    } catch (error) {
+      const message = (
+        error instanceof Error ? error.message : 'Automation processing failed'
+      ).slice(0, 500);
+      const pause = sendingPause(error);
+      if (pause) {
+        await tx`update automation_runs set error=${pause.reason},next_step_at=clock_timestamp()+${pause.seconds}*interval '1 second',updated_at=clock_timestamp() where id=${id}`;
+        return { failed: true as const, error };
+      }
+      const attempts = Number(run.attempts) + 1,
+        terminal = attempts >= 5 || (error instanceof MailError && error.status < 500);
+      await tx`update automation_runs set attempts=${attempts},status=${terminal ? 'failed' : run.status},error=${message},next_step_at=clock_timestamp()+${Math.min(300, 2 ** attempts)}*interval '1 second',finished_at=case when ${terminal} then clock_timestamp() else null end,updated_at=clock_timestamp() where id=${id}`;
+      if (terminal) {
+        const definition = automationSchema.safeParse(run.definition);
+        const step = definition.success
+          ? definition.data.steps.find((s) => s.id === run.current_step)
+          : undefined;
+        if (step)
+          await tx`insert into automation_steps(org_id,environment_id,run_id,step_id,type,status,error,finished_at) values(${run.org_id},${run.environment_id},${id},${step.id},${step.type},'failed',${message},clock_timestamp()) on conflict(org_id,environment_id,run_id,step_id) do update set status='failed',error=excluded.error,finished_at=clock_timestamp()`;
+        await outbox(
+          tx,
+          { orgId: String(run.org_id), environmentId: String(run.environment_id) },
+          'automation.failed',
+          { id, error: message },
+        );
+      }
+      return { failed: true as const, error };
     }
-    await tx`insert into automation_steps(org_id,environment_id,run_id,step_id,type,status,message_id,matched_event_id,finished_at) values(${tenant.orgId},${tenant.environmentId},${id},${step.id},${step.type},'completed',${messageId},${matchedEvent},now()) on conflict(org_id,environment_id,run_id,step_id) do update set status='completed',finished_at=now(),message_id=excluded.message_id,matched_event_id=excluded.matched_event_id`;
-    await tx`update automation_runs set current_step=${next},status=${next ? 'queued' : 'completed'},next_step_at=now(),attempts=0,error=null,updated_at=now(),finished_at=${next ? null : new Date()} where id=${id}`;
-    if (!next) await outbox(tx, tenant, 'automation.completed', { id });
-    return { status: next ? 'queued' : 'completed', messageId };
   });
-}
-export async function failAutomation(sql: Sql, id: string, error: unknown) {
-  const message = (error instanceof Error ? error.message : 'Automation processing failed').slice(
-    0,
-    500,
-  );
-  await sql.begin(async (tx) => {
-    const [run] =
-      await tx`select * from automation_runs where id=${id} and status in ('queued','waiting') for update`;
-    if (!run) return;
-    const pause = sendingPause(error);
-    if (pause) {
-      await tx`update automation_runs set error=${pause.reason},next_step_at=now()+${pause.seconds}*interval '1 second',updated_at=now() where id=${id}`;
-      return;
-    }
-    const attempts = Number(run.attempts) + 1,
-      terminal = attempts >= 5 || (error instanceof MailError && error.status < 500);
-    await tx`update automation_runs set attempts=${attempts},status=${terminal ? 'failed' : run.status},error=${message},next_step_at=now()+${Math.min(300, 2 ** attempts)}*interval '1 second',finished_at=${terminal ? new Date() : null},updated_at=now() where id=${id}`;
-    if (terminal) {
-      const step = automationSchema
-        .parse(run.definition)
-        .steps.find((s) => s.id === run.current_step)!;
-      await tx`insert into automation_steps(org_id,environment_id,run_id,step_id,type,status,error,finished_at) values(${run.org_id},${run.environment_id},${id},${step.id},${step.type},'failed',${message},now()) on conflict(org_id,environment_id,run_id,step_id) do update set status='failed',error=excluded.error,finished_at=now()`;
-      await outbox(
-        tx,
-        { orgId: String(run.org_id), environmentId: String(run.environment_id) },
-        'automation.failed',
-        { id, error: message },
-      );
-    }
-  });
+  // Acknowledge the error only after its durable outcome commits. Transaction/connection failures
+  // bypass this recorder; recovery consults committed database state, including an uncertain COMMIT.
+  if (outcome?.failed) throw outcome.error;
+  return outcome?.value;
 }

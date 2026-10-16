@@ -109,7 +109,6 @@ import {
   advanceAutomation,
   cancelAutomation,
   validateAutomation,
-  failAutomation,
 } from '../../packages/platform/src/automations.js';
 async function setup() {
   const contact = await withTenant(sql, principal, (tx) =>
@@ -271,7 +270,19 @@ it('records terminal step errors, rejects cross-tenant events and scoped sender 
       validateAutomation(tx, { ...principal, domainId: randomUUID() }, definition),
     ),
   ).rejects.toThrow('scope');
-  for (let i = 0; i < 5; i++) await failAutomation(sql, run, new Error('Temporary failure'));
+  const failingOptions = {
+    ...options,
+    store: {
+      ...options.store,
+      put: async () => {
+        throw new Error('Temporary failure');
+      },
+    },
+  };
+  for (let i = 0; i < 5; i++) {
+    await sql`update automation_runs set next_step_at=now() where id=${run}`;
+    await expect(advanceAutomation(failingOptions, run)).rejects.toThrow('Temporary failure');
+  }
   expect((await sql`select status,attempts from automation_runs`)[0]).toMatchObject({
     status: 'failed',
     attempts: 5,
@@ -433,7 +444,6 @@ it('pauses the same automation step for exhausted quota and resumes it exactly o
     failure = error;
   }
   expect(failure).toMatchObject({ status: 429, code: 'recipient_quota_exhausted' });
-  await failAutomation(sql, run, failure);
   expect(
     (
       await sql`select status,current_step,attempts,error,next_step_at>now() as deferred from automation_runs where id=${run}`
@@ -469,11 +479,9 @@ it('does not consume automation failure retries while operator approval remains 
   await fixture.change({ state: 'suspended' });
   for (let attempt = 0; attempt < 6; attempt++) {
     await sql`update automation_runs set next_step_at=now() where id=${run}`;
-    try {
-      await advanceAutomation(options, run);
-    } catch (error) {
-      await failAutomation(sql, run, error);
-    }
+    await expect(advanceAutomation(options, run)).rejects.toMatchObject({
+      code: 'sending_not_approved',
+    });
   }
   expect(
     (await sql`select status,current_step,attempts,error from automation_runs where id=${run}`)[0],
@@ -518,13 +526,7 @@ it.each(['domain drift', 'TLS outage', 'route TLS outage'] as const)(
         },
       ];
     }
-    let failure: unknown;
-    try {
-      await advanceAutomation(options, run);
-    } catch (error) {
-      failure = error;
-    }
-    await failAutomation(sql, run, failure);
+    await expect(advanceAutomation(options, run)).rejects.toMatchObject({ status: 403 });
     const code = block === 'domain drift' ? 'domain_unverified' : 'required_tls_unavailable';
     expect(
       (
@@ -637,4 +639,181 @@ it('preserves a waiting step deadline when an unrelated event wakes the run', as
       await sql`select r.next_step_at=s.wake_at as exact from automation_runs r join automation_steps s on s.run_id=r.id and s.step_id='conversion' where r.id=${run}`
     )[0]!.exact,
   ).toBe(true);
+});
+
+it('persists failure before returning it and clears failed step history on an explicit redrive', async () => {
+  const { run, template } = await setup();
+  await sql`update template_versions set version=2 where template_id=${template}`;
+  await expect(advanceAutomation(options, run)).rejects.toMatchObject({ status: 422 });
+  expect(
+    (await sql`select current_step,status,attempts from automation_runs where id=${run}`)[0],
+  ).toMatchObject({ current_step: 'welcome', status: 'failed', attempts: 1 });
+  await sql`update template_versions set version=1 where template_id=${template}`;
+  // Duplicate jobs cannot bypass a terminal failure even after its cause is repaired.
+  await advanceAutomation(options, run);
+  expect(await sql`select id from messages`).toHaveLength(0);
+  const { redriveDeadLetter } = await import('../../packages/platform/src/dead-letters.js');
+  await redriveDeadLetter(sql, principal, 'automation', run);
+  await advanceAutomation(options, run);
+  expect(
+    (await sql`select current_step,status,error from automation_runs where id=${run}`)[0],
+  ).toMatchObject({ current_step: 'pause', status: 'queued', error: null });
+  expect(
+    (
+      await sql`select status,error from automation_steps where run_id=${run} and step_id='welcome'`
+    )[0],
+  ).toMatchObject({ status: 'completed', error: null });
+  expect(await sql`select id from messages`).toHaveLength(1);
+  expect(await sql`select id from event_outbox where type='automation.failed'`).toHaveLength(1);
+});
+
+it('rolls back admitted mail and records a retry when the step completion SQL fails', async () => {
+  await configureMarketingFixture(options, principal);
+  const { run } = await setup();
+  await sql`create function reject_completed_automation_step() returns trigger language plpgsql as $$ begin if new.status='completed' then if not exists(select 1 from sending_quota where state='reserved') then raise exception 'Expected admission reservation'; end if; raise exception 'Injected step persistence failure'; end if; return new; end $$`;
+  await sql`create trigger reject_completed_automation_step before insert or update on automation_steps for each row execute function reject_completed_automation_step()`;
+  try {
+    await expect(advanceAutomation(options, run)).rejects.toThrow(
+      'Injected step persistence failure',
+    );
+    expect(
+      (
+        await sql`select status,current_step,attempts,next_step_at>clock_timestamp() as deferred from automation_runs where id=${run}`
+      )[0],
+    ).toMatchObject({ status: 'queued', current_step: 'welcome', attempts: 1, deferred: true });
+    expect(await sql`select id from messages`).toHaveLength(0);
+    expect(await sql`select * from sending_quota`).toHaveLength(0);
+    expect(await sql`select step_id from automation_steps`).toHaveLength(0);
+    expect(await sql`select id from event_outbox where type like 'email.%'`).toHaveLength(0);
+  } finally {
+    await sql`drop trigger reject_completed_automation_step on automation_steps`;
+    await sql`drop function reject_completed_automation_step()`;
+  }
+  await sql`update automation_runs set next_step_at=now() where id=${run}`;
+  await advanceAutomation(options, run);
+  expect(await sql`select id from messages`).toHaveLength(1);
+});
+
+it('records an invalid current step without letting failure handling poison recovery', async () => {
+  const { run } = await setup();
+  await sql`update automation_runs set current_step='missing' where id=${run}`;
+  await expect(advanceAutomation(options, run)).rejects.toThrow(
+    'Current automation step is missing',
+  );
+  expect((await sql`select status,attempts from automation_runs where id=${run}`)[0]).toMatchObject(
+    { status: 'failed', attempts: 1 },
+  );
+  await advanceAutomation(options, run);
+  expect(await sql`select id from event_outbox where type='automation.failed'`).toHaveLength(1);
+  expect(await sql`select step_id from automation_steps`).toHaveLength(0);
+});
+
+it('does not let unrelated event fan-out erase a waiting step retry deadline', async () => {
+  const { run, contact } = await setup();
+  await sql`update automation_runs set current_step='conversion' where id=${run}`;
+  await advanceAutomation(options, run);
+  // Force a transient SQL error on a normal re-deferral, after the waiting step exists.
+  await sql`create function reject_wait_deferral() returns trigger language plpgsql as $$ begin if new.error is null and new.status='waiting' then raise exception 'Injected wait persistence failure'; end if; return new; end $$`;
+  await sql`create trigger reject_wait_deferral before update on automation_runs for each row execute function reject_wait_deferral()`;
+  try {
+    // The event dispatcher has already woken this run for inspection.
+    await sql`alter table automation_runs disable trigger reject_wait_deferral`;
+    await sql`update automation_runs set next_step_at=now() where id=${run}`;
+    await sql`alter table automation_runs enable trigger reject_wait_deferral`;
+    await expect(advanceAutomation(options, run)).rejects.toThrow(
+      'Injected wait persistence failure',
+    );
+  } finally {
+    await sql`drop trigger reject_wait_deferral on automation_runs`;
+    await sql`drop function reject_wait_deferral()`;
+  }
+  const [failed] =
+    await sql`select next_step_at::text,attempts from automation_runs where id=${run}`;
+  await createAutomationEvent(sql, principal, {
+    contact_id: contact.id,
+    name: 'unrelated',
+    external_id: 'retry-unrelated',
+  });
+  await fanOutAutomationEvents(sql);
+  expect(
+    (await sql`select next_step_at::text,attempts from automation_runs where id=${run}`)[0],
+  ).toEqual(failed);
+  expect(await advanceAutomation(options, run)).toBeUndefined();
+  await sql`update automation_runs set next_step_at=now() where id=${run}`;
+  expect(await advanceAutomation(options, run)).toEqual({ status: 'waiting' });
+  expect((await sql`select attempts,error from automation_runs where id=${run}`)[0]).toMatchObject({
+    attempts: 0,
+    error: null,
+  });
+  await createAutomationEvent(sql, principal, {
+    contact_id: contact.id,
+    name: 'purchased',
+    external_id: 'retry-purchased',
+  });
+  await fanOutAutomationEvents(sql);
+  await advanceAutomation(options, run);
+  expect(
+    (await sql`select current_step,status from automation_runs where id=${run}`)[0],
+  ).toMatchObject({ current_step: 'branch', status: 'queued' });
+});
+
+it('restores a redriven event wait without resetting its deadline and wakes on a new event', async () => {
+  const { run, contact } = await setup();
+  await sql`update automation_runs set current_step='conversion' where id=${run}`;
+  await advanceAutomation(options, run);
+  const [window] =
+    await sql`select started_at::text,wake_at::text from automation_steps where run_id=${run}`;
+  await sql`update automation_runs set status='failed',attempts=5,error='Failed wait',finished_at=now() where id=${run}`;
+  await sql`update automation_steps set status='failed',error='Failed wait',finished_at=now() where run_id=${run}`;
+  const { redriveDeadLetter } = await import('../../packages/platform/src/dead-letters.js');
+  await redriveDeadLetter(sql, principal, 'automation', run);
+  expect(await advanceAutomation(options, run)).toEqual({ status: 'waiting' });
+  expect(
+    (await sql`select started_at::text,wake_at::text from automation_steps where run_id=${run}`)[0],
+  ).toEqual(window);
+  expect(
+    (await sql`select status,error,finished_at from automation_steps where run_id=${run}`)[0],
+  ).toMatchObject({ status: 'waiting', error: null, finished_at: null });
+  await createAutomationEvent(sql, principal, {
+    contact_id: contact.id,
+    name: 'purchased',
+    external_id: 'after-wait-redrive',
+  });
+  await fanOutAutomationEvents(sql);
+  await advanceAutomation(options, run);
+  expect(
+    (await sql`select current_step,status from automation_runs where id=${run}`)[0],
+  ).toMatchObject({ current_step: 'branch', status: 'queued' });
+});
+
+it('starts a fresh event window when redriving a wait that never initialized', async () => {
+  const { run, contact } = await setup();
+  await sql`update automation_runs set current_step='conversion',status='failed',error='Failed before initialization' where id=${run}`;
+  await sql`insert into automation_steps(org_id,environment_id,run_id,step_id,type,status,error,started_at) values(${org},${env},${run},'conversion','wait_for_event','failed','Failed before initialization',now()-interval '1 hour')`;
+  const old = await createAutomationEvent(sql, principal, {
+    contact_id: contact.id,
+    name: 'purchased',
+    external_id: 'before-wait-start',
+  });
+  const { redriveDeadLetter } = await import('../../packages/platform/src/dead-letters.js');
+  await redriveDeadLetter(sql, principal, 'automation', run);
+  await advanceAutomation(options, run);
+  await fanOutAutomationEvents(sql);
+  expect(await advanceAutomation(options, run)).toEqual({ status: 'waiting' });
+  expect(
+    (
+      await sql`select s.started_at>e.created_at as fresh from automation_steps s join automation_events e on e.id=${old.id} where s.run_id=${run}`
+    )[0]?.fresh,
+  ).toBe(true);
+  const matched = await createAutomationEvent(sql, principal, {
+    contact_id: contact.id,
+    name: 'purchased',
+    external_id: 'after-wait-start',
+  });
+  await fanOutAutomationEvents(sql);
+  await advanceAutomation(options, run);
+  expect(
+    (await sql`select matched_event_id from automation_steps where run_id=${run}`)[0]
+      ?.matched_event_id,
+  ).toBe(matched.id);
 });

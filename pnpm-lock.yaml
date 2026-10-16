@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  postgres@3.4.9:
+    hash: dd8d879f04ce65e73930a947aa42c3dcaf69d46000a2e88e5087b714d237c1ac
+    path: patches/postgres@3.4.9.patch
+
 importers:
 
   .:
@@ -283,10 +288,10 @@ importers:
         version: link:../shared
       drizzle-orm:
         specifier: ^0.44.7
-        version: 0.44.7(@electric-sql/pglite@0.3.16)(@opentelemetry/api@1.9.1)(@types/pg@8.15.6)(postgres@3.4.9)
+        version: 0.44.7(@electric-sql/pglite@0.3.16)(@opentelemetry/api@1.9.1)(@types/pg@8.15.6)(postgres@3.4.9(patch_hash=dd8d879f04ce65e73930a947aa42c3dcaf69d46000a2e88e5087b714d237c1ac))
       postgres:
-        specifier: ^3.4.7
-        version: 3.4.9
+        specifier: 3.4.9
+        version: 3.4.9(patch_hash=dd8d879f04ce65e73930a947aa42c3dcaf69d46000a2e88e5087b714d237c1ac)
 
   packages/mail:
     dependencies:
@@ -6908,12 +6913,12 @@ snapshots:
       domelementtype: 2.3.0
       domhandler: 5.0.3
 
-  drizzle-orm@0.44.7(@electric-sql/pglite@0.3.16)(@opentelemetry/api@1.9.1)(@types/pg@8.15.6)(postgres@3.4.9):
+  drizzle-orm@0.44.7(@electric-sql/pglite@0.3.16)(@opentelemetry/api@1.9.1)(@types/pg@8.15.6)(postgres@3.4.9(patch_hash=dd8d879f04ce65e73930a947aa42c3dcaf69d46000a2e88e5087b714d237c1ac)):
     optionalDependencies:
       '@electric-sql/pglite': 0.3.16
       '@opentelemetry/api': 1.9.1
       '@types/pg': 8.15.6
-      postgres: 3.4.9
+      postgres: 3.4.9(patch_hash=dd8d879f04ce65e73930a947aa42c3dcaf69d46000a2e88e5087b714d237c1ac)
 
   dunder-proto@1.0.1:
     dependencies:
@@ -7853,7 +7858,7 @@ snapshots:
       xtend: 4.0.2
     optional: true
 
-  postgres@3.4.9: {}
+  postgres@3.4.9(patch_hash=dd8d879f04ce65e73930a947aa42c3dcaf69d46000a2e88e5087b714d237c1ac): {}
 
   prelude-ls@1.2.1: {}
 

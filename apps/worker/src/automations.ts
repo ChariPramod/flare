@@ -3,7 +3,7 @@ import { Queue, Worker } from 'bullmq';
 import type { Redis } from 'ioredis';
 import type { Sql } from '@flare/db';
 import { configuredTransports, objectStore } from '@flare/mail';
-import { advanceAutomation, failAutomation, fanOutAutomationEvents } from '@flare/platform';
+import { advanceAutomation, fanOutAutomationEvents } from '@flare/platform';
 export function startAutomationWorker(
   sql: Sql,
   connection: Redis,
@@ -15,21 +15,16 @@ export function startAutomationWorker(
     'automation-steps',
     async (job) =>
       withJob('automations', job.data.id, undefined, undefined, async () => {
-        try {
-          await advanceAutomation(
-            {
-              sql,
-              store: objectStore(),
-              transports: configuredTransports(),
-              encryptionKey,
-              trackingKey,
-            },
-            job.data.id,
-          );
-        } catch (error) {
-          await failAutomation(sql, job.data.id, error);
-          throw error;
-        }
+        await advanceAutomation(
+          {
+            sql,
+            store: objectStore(),
+            transports: configuredTransports(),
+            encryptionKey,
+            trackingKey,
+          },
+          job.data.id,
+        );
       }),
     { connection, concurrency: 8 },
   );
