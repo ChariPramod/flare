@@ -55,6 +55,8 @@ jobs:
           node-version: 22
       - name: Validate disposable staging Compose and Caddy configuration
         run: bash scripts/staging/check-config.sh
+      - name: Validate private alert routing and firing/recovery rules
+        run: bash scripts/staging/check-alerts.sh
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 20

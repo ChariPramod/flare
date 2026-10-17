@@ -1,0 +1,11 @@
+# This receiver intentionally sends nothing. Replace it privately before the pilot.
+# Keep Alertmanager off the public Internet. Silence planned maintenance manually
+# with an owner, a bounded end time and a ticket; never auto-dismiss backup alerts.
+route:
+  receiver: owner-not-configured
+  group_by: ['alertname', 'job', 'instance', 'kind', 'dependency']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+receivers:
+  - name: owner-not-configured

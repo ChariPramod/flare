@@ -6,6 +6,8 @@ The owner resumed staging preparation on 2026-10-14; hosting budget, region, dom
 
 The current ordered engineering and deployment work is in the [staging execution plan](staging-execution-plan.md). Completed local hardening is separate from the public/provider/recovery gates required to open the pilot.
 
+Use the [encrypted backup and isolated recovery runbook](backup-recovery.md) and [tested alerting configuration](alerting.md) when arranging staging operations. Actual off-host restoration, key retrieval, notification receipt and host disk monitoring require the owner's infrastructure and remain release gates.
+
 Start with the [owner setup checklist](staging-owner-checklist.md) if you do not yet have hosting, a domain or DNS access. It includes a provider-support question and a handoff form without secrets.
 
 ## Provisioning checklist

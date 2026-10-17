@@ -6,12 +6,13 @@ import {
   writeFileSync,
   existsSync,
   lstatSync,
+  realpathSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-const directory = mkdtempSync(join(tmpdir(), 'flare-acceptance-'));
+const directory = realpathSync(mkdtempSync(join(tmpdir(), 'flare-acceptance-')));
 // Respect Git's source boundary, including uncommitted source, while excluding ignored caches/secrets.
 const sourceFiles = execFileSync(
   'git',

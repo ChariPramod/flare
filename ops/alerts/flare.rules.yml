@@ -1,0 +1,84 @@
+groups:
+  - name: flare-staging
+    interval: 30s
+    rules:
+      - alert: FlareTargetDown
+        expr: up{job="flare"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Flare metrics target is unreachable
+          action: Check the private scrape token, service health and host. Do not expose metrics publicly.
+      - alert: FlareTargetMissing
+        expr: absent(up{job="flare",instance="flare-api:4000"}) or absent(up{job="flare",instance="flare-worker:4001"}) or absent(up{job="flare",instance="flare-smtp-relay:4002"})
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: An expected Flare target is missing
+          action: Restore the reviewed scrape configuration. Adapt expected instances when changing service discovery.
+      - alert: FlareOperationalMetricsStale
+        expr: (flare_operational_collection_success{job="flare",service="flare-worker"} == 0) or (time() - flare_operational_collection_timestamp_seconds{job="flare",service="flare-worker"} > 60) or (up{job="flare",instance="flare-worker:4001"} == 1 unless on(job,instance) flare_operational_collection_timestamp_seconds{job="flare",service="flare-worker"})
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Durable operational metrics are missing or stale
+          action: Inspect worker database access and collector timeout errors. Old counts are not current evidence.
+      - alert: FlareDependencyUnavailable
+        expr: flare_dependency_ready{job="flare"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: A worker dependency probe failed
+          action: Inspect database, Redis or object storage readiness and restore access before resuming the pilot.
+      - alert: FlareDurableBacklogOld
+        expr: (flare_oldest_due_operation_seconds{job="flare"} > 300) and on(job,instance) (flare_operational_collection_success{job="flare",service="flare-worker"} == 1) and on(job,instance) (time() - flare_operational_collection_timestamp_seconds{job="flare",service="flare-worker"} < 60)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Eligible durable work has been waiting more than five minutes
+          action: Inspect the affected queue and worker logs. Check policy holds and provider state before retrying.
+      - alert: FlareDeadLettersPresent
+        expr: (flare_dead_letters{job="flare"} > 0) and on(job,instance) (flare_operational_collection_success{job="flare",service="flare-worker"} == 1) and on(job,instance) (time() - flare_operational_collection_timestamp_seconds{job="flare",service="flare-worker"} < 60)
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Persisted failed operations need review
+          action: Inspect tenant dead letters and retry history. Redrive only eligible work; known permanent or uncertain acceptance is not safe to retry.
+      - alert: FlareAmbiguousAcceptance
+        expr: (flare_sending_safety_issues{job="flare",kind=~"ambiguous_email|ambiguous_workflow"} > 0) and on(job,instance) (flare_operational_collection_success{job="flare",service="flare-worker"} == 1) and on(job,instance) (time() - flare_operational_collection_timestamp_seconds{job="flare",service="flare-worker"} < 60)
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Provider acceptance needs manual reconciliation
+          action: Preserve operation identity and provider evidence. Never automatically redrive or fail over ambiguous work.
+      - alert: FlareSendingHeld
+        expr: (flare_sending_safety_issues{job="flare",kind="held_email"} > 0) and on(job,instance) (flare_operational_collection_success{job="flare",service="flare-worker"} == 1) and on(job,instance) (time() - flare_operational_collection_timestamp_seconds{job="flare",service="flare-worker"} < 60)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Accepted mail remains held by sending policy
+          action: Inspect hold reasons, quotas and approved routes. Do not bypass sender approval or readiness.
+      - alert: FlareSenderSuspended
+        expr: (flare_sending_safety_issues{job="flare",kind="suspended_organizations"} > 0) and on(job,instance) (flare_operational_collection_success{job="flare",service="flare-worker"} == 1) and on(job,instance) (time() - flare_operational_collection_timestamp_seconds{job="flare",service="flare-worker"} < 60)
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: An organization is suspended from sending
+          action: Review authenticated feedback and the policy audit with a recently MFA-verified operator. Continue ingesting feedback.
+      - alert: FlareSenderEvidenceStale
+        expr: (flare_sending_safety_issues{job="flare",kind=~"stale_dns|stale_transport"} > 0) and on(job,instance) (flare_operational_collection_success{job="flare",service="flare-worker"} == 1) and on(job,instance) (time() - flare_operational_collection_timestamp_seconds{job="flare",service="flare-worker"} < 60)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Existing Production sender evidence is stale
+          action: Refresh public DNS or genuine receiver evidence. This metric does not certify missing or revoked configurations as ready.

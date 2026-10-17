@@ -7,8 +7,8 @@ import {
   shutdownDeadline,
   registry,
   metricsAuthorized,
-  backlog,
 } from '@flare/shared';
+import { collectOperationalMetrics } from './operational-metrics.js';
 import { startPublicationWorker } from './publication.js';
 import { startInboundWorker } from './inbound.js';
 import { startAutomationWorker } from './automations.js';
@@ -119,12 +119,13 @@ const dispatch = periodicTask(
 );
 const backlogPoll = periodicTask(
   15000,
-  async () => {
-    const rows =
-      await client`select 'workflow' as kind,count(*)::int as n from (select id from workflow_runs where status in ('queued','dispatching') limit 10001) w union all select 'email',count(*)::int from (select id from messages where delivery_finished_at is null and status in ('queued','scheduled') limit 10001) m union all select 'webhook',count(*)::int from (select id from webhook_deliveries where status in ('pending','delivering') limit 10001) h`;
-    for (const row of rows) backlog.set({ kind: String(row.kind) }, Number(row.n));
-  },
-  (err) => logger.error({ err }, 'Backlog metrics failed'),
+  () =>
+    collectOperationalMetrics(client, {
+      redis: () =>
+        redis.status === 'ready' ? redis.ping() : Promise.reject(new Error('Redis is not ready')),
+      objects: () => readinessStore.ready(),
+    }),
+  (err) => logger.error({ err }, 'Operational metrics collection failed'),
 );
 const server = createServer((req, res) => {
   if (req.url === '/internal/metrics') {

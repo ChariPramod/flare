@@ -26,6 +26,108 @@ export const backlog = new Gauge({
   labelNames: ['kind'],
   registers: [registry],
 });
+export const operationKinds = [
+  'workflow',
+  'email',
+  'webhook',
+  'inbound',
+  'forward',
+  'automation',
+  'publication',
+  'broadcast',
+  'outbox',
+] as const;
+export const failureKinds = [
+  'workflow',
+  'email',
+  'webhook',
+  'inbound',
+  'forward',
+  'automation',
+  'publication',
+] as const;
+export const safetyKinds = [
+  'ambiguous_email',
+  'ambiguous_workflow',
+  'held_email',
+  'suspended_organizations',
+  'stale_dns',
+  'stale_transport',
+] as const;
+export type OperationalSnapshot = {
+  due: Record<(typeof operationKinds)[number], { count: number; age: number }>;
+  failed: Record<(typeof failureKinds)[number], number>;
+  safety: Record<(typeof safetyKinds)[number], number>;
+  pending: Record<'workflow' | 'email' | 'webhook', number>;
+};
+const dueOperations = new Gauge({
+  name: 'flare_due_operations',
+  help: 'Due durable operations, capped at 10001 per kind; future schedules are excluded',
+  labelNames: ['kind'],
+  registers: [registry],
+});
+const dueAge = new Gauge({
+  name: 'flare_oldest_due_operation_seconds',
+  help: 'Seconds since the oldest currently due operation became eligible, zero when empty',
+  labelNames: ['kind'],
+  registers: [registry],
+});
+const deadLetters = new Gauge({
+  name: 'flare_dead_letters',
+  help: 'Persisted terminal failures matching the dead-letter view, capped at 10001 per kind; does not imply redrive is safe',
+  labelNames: ['kind'],
+  registers: [registry],
+});
+const safetyIssues = new Gauge({
+  name: 'flare_sending_safety_issues',
+  help: 'Sending safety records requiring inspection, capped at 10001 per kind; not a readiness certificate',
+  labelNames: ['kind'],
+  registers: [registry],
+});
+export const operationalCollectionSuccess = new Gauge({
+  name: 'flare_operational_collection_success',
+  help: 'Whether the last durable operational snapshot succeeded',
+  registers: [registry],
+});
+const operationalCollectionTime = new Gauge({
+  name: 'flare_operational_collection_timestamp_seconds',
+  help: 'Unix timestamp of the last complete durable operational snapshot; zero until collected',
+  registers: [registry],
+});
+export const dependencyReadiness = new Gauge({
+  name: 'flare_dependency_ready',
+  help: 'Last worker probe of a shared dependency succeeded; not an API or Novu readiness certificate',
+  labelNames: ['dependency'],
+  registers: [registry],
+});
+/** Validate every value before publishing any part of a fixed-cardinality snapshot. */
+export function recordOperationalSnapshot(snapshot: OperationalSnapshot, at = Date.now() / 1000) {
+  const counts = [
+    ...operationKinds.map((kind) => snapshot.due[kind].count),
+    ...failureKinds.map((kind) => snapshot.failed[kind]),
+    ...safetyKinds.map((kind) => snapshot.safety[kind]),
+    ...(['workflow', 'email', 'webhook'] as const).map((kind) => snapshot.pending[kind]),
+  ];
+  if (
+    counts.some((n) => !Number.isInteger(n) || n < 0 || n > 10001) ||
+    operationKinds.some(
+      (kind) => !Number.isFinite(snapshot.due[kind].age) || snapshot.due[kind].age < 0,
+    ) ||
+    !Number.isFinite(at) ||
+    at < 0
+  )
+    throw new Error('Invalid operational metric snapshot');
+  for (const kind of operationKinds) {
+    dueOperations.set({ kind }, snapshot.due[kind].count);
+    dueAge.set({ kind }, snapshot.due[kind].age);
+  }
+  for (const kind of failureKinds) deadLetters.set({ kind }, snapshot.failed[kind]);
+  for (const kind of safetyKinds) safetyIssues.set({ kind }, snapshot.safety[kind]);
+  for (const kind of ['workflow', 'email', 'webhook'] as const)
+    backlog.set({ kind }, snapshot.pending[kind]);
+  operationalCollectionTime.set(at);
+  operationalCollectionSuccess.set(1);
+}
 export const providerAttempts = new Counter({
   name: 'flare_provider_attempts_total',
   help: 'Email transport attempts',

@@ -63,6 +63,7 @@ check_independent sustained-mixed-load bash scripts/acceptance/sustained-load.sh
 check_independent native-queue-loss bash scripts/acceptance/crash-recovery.sh "$acceptance_dir" "$project"
 check_independent dispatcher-crash bash scripts/acceptance/dispatch-crash.sh "$acceptance_dir" "$project"
 check_independent restore bash scripts/acceptance/restore.sh "$acceptance_dir" "$project"
+check_independent encrypted-operations-restore node scripts/acceptance/operations-backup.mjs "$acceptance_dir" "$project"
 if [[ ${#failed_checks[@]} -gt 0 ]]; then
   printf 'Acceptance checks failed: %s\n' "${failed_checks[*]}" >&2
   exit 1

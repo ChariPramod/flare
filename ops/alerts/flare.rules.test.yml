@@ -1,0 +1,411 @@
+rule_files:
+  - flare.rules.yml
+evaluation_interval: 30s
+tests:
+  - name: FlareDurableBacklogOld fires and resolves
+    interval: 30s
+    input_series:
+      - series: up{job="flare",instance="flare-api:4000"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-worker:4001"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-smtp-relay:4002"}
+        values: 1x50
+      - series: flare_operational_collection_success{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 1x50
+      - series: flare_operational_collection_timestamp_seconds{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 0+30x50
+      - series: flare_oldest_due_operation_seconds{job="flare",instance="flare-worker:4001",service="flare-worker",kind="email"}
+        values: 600x40 0x10
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: FlareDurableBacklogOld
+        exp_alerts: []
+      - eval_time: 19m
+        alertname: FlareDurableBacklogOld
+        exp_alerts:
+          - exp_labels:
+              job: flare
+              instance: flare-worker:4001
+              service: flare-worker
+              kind: email
+              severity: warning
+            exp_annotations:
+              summary: Eligible durable work has been waiting more than five minutes
+              action: Inspect the affected queue and worker logs. Check policy holds and
+                provider state before retrying.
+      - eval_time: 21m
+        alertname: FlareDurableBacklogOld
+        exp_alerts: []
+  - name: FlareDeadLettersPresent fires and resolves
+    interval: 30s
+    input_series:
+      - series: up{job="flare",instance="flare-api:4000"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-worker:4001"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-smtp-relay:4002"}
+        values: 1x50
+      - series: flare_operational_collection_success{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 1x50
+      - series: flare_operational_collection_timestamp_seconds{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 0+30x50
+      - series: flare_dead_letters{job="flare",instance="flare-worker:4001",service="flare-worker",kind="workflow"}
+        values: 1x40 0x10
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: FlareDeadLettersPresent
+        exp_alerts: []
+      - eval_time: 19m
+        alertname: FlareDeadLettersPresent
+        exp_alerts:
+          - exp_labels:
+              job: flare
+              instance: flare-worker:4001
+              service: flare-worker
+              kind: workflow
+              severity: warning
+            exp_annotations:
+              summary: Persisted failed operations need review
+              action: Inspect tenant dead letters and retry history. Redrive only eligible
+                work; known permanent or uncertain acceptance is not safe to
+                retry.
+      - eval_time: 21m
+        alertname: FlareDeadLettersPresent
+        exp_alerts: []
+  - name: FlareAmbiguousAcceptance fires and resolves
+    interval: 30s
+    input_series:
+      - series: up{job="flare",instance="flare-api:4000"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-worker:4001"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-smtp-relay:4002"}
+        values: 1x50
+      - series: flare_operational_collection_success{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 1x50
+      - series: flare_operational_collection_timestamp_seconds{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 0+30x50
+      - series: flare_sending_safety_issues{job="flare",instance="flare-worker:4001",service="flare-worker",kind="ambiguous_email"}
+        values: 1x40 0x10
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: FlareAmbiguousAcceptance
+        exp_alerts: []
+      - eval_time: 19m
+        alertname: FlareAmbiguousAcceptance
+        exp_alerts:
+          - exp_labels:
+              job: flare
+              instance: flare-worker:4001
+              service: flare-worker
+              kind: ambiguous_email
+              severity: critical
+            exp_annotations:
+              summary: Provider acceptance needs manual reconciliation
+              action: Preserve operation identity and provider evidence. Never automatically
+                redrive or fail over ambiguous work.
+      - eval_time: 21m
+        alertname: FlareAmbiguousAcceptance
+        exp_alerts: []
+  - name: FlareSendingHeld fires and resolves
+    interval: 30s
+    input_series:
+      - series: up{job="flare",instance="flare-api:4000"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-worker:4001"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-smtp-relay:4002"}
+        values: 1x50
+      - series: flare_operational_collection_success{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 1x50
+      - series: flare_operational_collection_timestamp_seconds{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 0+30x50
+      - series: flare_sending_safety_issues{job="flare",instance="flare-worker:4001",service="flare-worker",kind="held_email"}
+        values: 1x40 0x10
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: FlareSendingHeld
+        exp_alerts: []
+      - eval_time: 19m
+        alertname: FlareSendingHeld
+        exp_alerts:
+          - exp_labels:
+              job: flare
+              instance: flare-worker:4001
+              service: flare-worker
+              kind: held_email
+              severity: warning
+            exp_annotations:
+              summary: Accepted mail remains held by sending policy
+              action: Inspect hold reasons, quotas and approved routes. Do not bypass sender
+                approval or readiness.
+      - eval_time: 21m
+        alertname: FlareSendingHeld
+        exp_alerts: []
+  - name: FlareSenderSuspended fires and resolves
+    interval: 30s
+    input_series:
+      - series: up{job="flare",instance="flare-api:4000"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-worker:4001"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-smtp-relay:4002"}
+        values: 1x50
+      - series: flare_operational_collection_success{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 1x50
+      - series: flare_operational_collection_timestamp_seconds{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 0+30x50
+      - series: flare_sending_safety_issues{job="flare",instance="flare-worker:4001",service="flare-worker",kind="suspended_organizations"}
+        values: 1x40 0x10
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: FlareSenderSuspended
+        exp_alerts: []
+      - eval_time: 19m
+        alertname: FlareSenderSuspended
+        exp_alerts:
+          - exp_labels:
+              job: flare
+              instance: flare-worker:4001
+              service: flare-worker
+              kind: suspended_organizations
+              severity: critical
+            exp_annotations:
+              summary: An organization is suspended from sending
+              action: Review authenticated feedback and the policy audit with a recently
+                MFA-verified operator. Continue ingesting feedback.
+      - eval_time: 21m
+        alertname: FlareSenderSuspended
+        exp_alerts: []
+  - name: FlareSenderEvidenceStale fires and resolves
+    interval: 30s
+    input_series:
+      - series: up{job="flare",instance="flare-api:4000"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-worker:4001"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-smtp-relay:4002"}
+        values: 1x50
+      - series: flare_operational_collection_success{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 1x50
+      - series: flare_operational_collection_timestamp_seconds{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 0+30x50
+      - series: flare_sending_safety_issues{job="flare",instance="flare-worker:4001",service="flare-worker",kind="stale_transport"}
+        values: 1x40 0x10
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: FlareSenderEvidenceStale
+        exp_alerts: []
+      - eval_time: 19m
+        alertname: FlareSenderEvidenceStale
+        exp_alerts:
+          - exp_labels:
+              job: flare
+              instance: flare-worker:4001
+              service: flare-worker
+              kind: stale_transport
+              severity: warning
+            exp_annotations:
+              summary: Existing Production sender evidence is stale
+              action: Refresh public DNS or genuine receiver evidence. This metric does not
+                certify missing or revoked configurations as ready.
+      - eval_time: 21m
+        alertname: FlareSenderEvidenceStale
+        exp_alerts: []
+  - name: FlareDependencyUnavailable fires and resolves
+    interval: 30s
+    input_series:
+      - series: up{job="flare",instance="flare-api:4000"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-worker:4001"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-smtp-relay:4002"}
+        values: 1x50
+      - series: flare_operational_collection_success{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 1x50
+      - series: flare_operational_collection_timestamp_seconds{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 0+30x50
+      - series: flare_dependency_ready{job="flare",instance="flare-worker:4001",service="flare-worker",dependency="objects"}
+        values: 0x40 1x10
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: FlareDependencyUnavailable
+        exp_alerts: []
+      - eval_time: 19m
+        alertname: FlareDependencyUnavailable
+        exp_alerts:
+          - exp_labels:
+              job: flare
+              instance: flare-worker:4001
+              service: flare-worker
+              dependency: objects
+              severity: critical
+            exp_annotations:
+              summary: A worker dependency probe failed
+              action: Inspect database, Redis or object storage readiness and restore access
+                before resuming the pilot.
+      - eval_time: 21m
+        alertname: FlareDependencyUnavailable
+        exp_alerts: []
+  - name: Target outage and recovery
+    interval: 30s
+    input_series:
+      - series: up{job="flare",instance="flare-worker:4001"}
+        values: 0x40 1x10
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: FlareTargetDown
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: FlareTargetDown
+        exp_alerts:
+          - exp_labels:
+              job: flare
+              instance: flare-worker:4001
+              severity: critical
+            exp_annotations:
+              summary: Flare metrics target is unreachable
+              action: Check the private scrape token, service health and host. Do not expose
+                metrics publicly.
+      - eval_time: 21m
+        alertname: FlareTargetDown
+        exp_alerts: []
+  - name: Missing scrape target is not healthy
+    interval: 30s
+    input_series:
+      - series: up{job="flare",instance="flare-api:4000"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-smtp-relay:4002"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-worker:4001"}
+        values: _x40 1x10
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: FlareTargetMissing
+        exp_alerts:
+          - exp_labels:
+              job: flare
+              instance: flare-worker:4001
+              severity: critical
+            exp_annotations:
+              summary: An expected Flare target is missing
+              action: Restore the reviewed scrape configuration. Adapt expected instances when
+                changing service discovery.
+      - eval_time: 21m
+        alertname: FlareTargetMissing
+        exp_alerts: []
+  - name: Collector failed
+    interval: 30s
+    input_series:
+      - series: up{job="flare",instance="flare-api:4000"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-worker:4001"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-smtp-relay:4002"}
+        values: 1x50
+      - series: flare_operational_collection_success{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 0x40 1x10
+      - series: flare_operational_collection_timestamp_seconds{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 0+30x50
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: FlareOperationalMetricsStale
+        exp_alerts:
+          - exp_labels:
+              job: flare
+              instance: flare-worker:4001
+              service: flare-worker
+              severity: critical
+            exp_annotations:
+              summary: Durable operational metrics are missing or stale
+              action: Inspect worker database access and collector timeout errors. Old counts
+                are not current evidence.
+      - eval_time: 21m
+        alertname: FlareOperationalMetricsStale
+        exp_alerts: []
+  - name: Collector stopped refreshing
+    interval: 30s
+    input_series:
+      - series: up{job="flare",instance="flare-api:4000"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-worker:4001"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-smtp-relay:4002"}
+        values: 1x50
+      - series: flare_operational_collection_success{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 1x50
+      - series: flare_operational_collection_timestamp_seconds{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 0x40 1230+30x10
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: FlareOperationalMetricsStale
+        exp_alerts:
+          - exp_labels:
+              job: flare
+              instance: flare-worker:4001
+              service: flare-worker
+              severity: critical
+            exp_annotations:
+              summary: Durable operational metrics are missing or stale
+              action: Inspect worker database access and collector timeout errors. Old counts
+                are not current evidence.
+      - eval_time: 21m
+        alertname: FlareOperationalMetricsStale
+        exp_alerts: []
+  - name: Collector metric missing
+    interval: 30s
+    input_series:
+      - series: up{job="flare",instance="flare-worker:4001"}
+        values: 1x50
+      - series: flare_operational_collection_timestamp_seconds{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: _x40 1230+30x10
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: FlareOperationalMetricsStale
+        exp_alerts:
+          - exp_labels:
+              job: flare
+              instance: flare-worker:4001
+              severity: critical
+            exp_annotations:
+              summary: Durable operational metrics are missing or stale
+              action: Inspect worker database access and collector timeout errors. Old counts
+                are not current evidence.
+      - eval_time: 21m
+        alertname: FlareOperationalMetricsStale
+        exp_alerts: []
+  - name: Do not alert from stale terminal counts
+    interval: 30s
+    input_series:
+      - series: up{job="flare",instance="flare-api:4000"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-worker:4001"}
+        values: 1x50
+      - series: up{job="flare",instance="flare-smtp-relay:4002"}
+        values: 1x50
+      - series: flare_operational_collection_success{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 1x50
+      - series: flare_operational_collection_timestamp_seconds{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: '0x50'
+      - series: flare_dead_letters{job="flare",instance="flare-worker:4001",service="flare-worker",kind="email"}
+        values: 1x50
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: FlareDeadLettersPresent
+        exp_alerts: []
+  - name: API and relay do not own the worker collector
+    interval: 30s
+    input_series:
+      - series: up{job="flare",instance="flare-worker:4001"}
+        values: 1x50
+      - series: flare_operational_collection_timestamp_seconds{job="flare",instance="flare-worker:4001",service="flare-worker"}
+        values: 0+30x50
+      - series: flare_operational_collection_timestamp_seconds{job="flare",instance="flare-api:4000",service="flare-api"}
+        values: '0x50'
+      - series: flare_operational_collection_success{job="flare",instance="flare-api:4000",service="flare-api"}
+        values: '0x50'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: FlareOperationalMetricsStale
+        exp_alerts: []
