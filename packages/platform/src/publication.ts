@@ -254,8 +254,8 @@ export async function advancePublication(sql: Sql, id: string, publish: PublishE
       await tx`select id from publication_operations where id=${id} and status='pending' for update skip locked`;
     if (!operation) return;
     const [row] =
-      await tx`select * from publication_items where operation_id=${id} and status<>'completed' order by ordinal limit 1 for update`;
-    if (!row || new Date(String(row.next_attempt_at)) > new Date()) return;
+      await tx`select *,next_attempt_at<=clock_timestamp() as due from publication_items where operation_id=${id} and status<>'completed' order by ordinal limit 1 for update`;
+    if (!row?.due) return;
     if (row.kind === 'workflow') {
       await tx`select set_config('flare.environment_id',${target.environmentId},true)`;
       await tx`update workflows set publication_blocked=true where identifier=${row.identifier}`;
@@ -264,64 +264,62 @@ export async function advancePublication(sql: Sql, id: string, publish: PublishE
   });
   if (!item) return;
 
-  try {
-    await withTenant(sql, tenant, async (tx) => {
-      const [operation] =
-        await tx`select * from publication_operations where id=${id} and status='pending' for update skip locked`;
-      if (!operation) return;
-      const [current] =
-        await tx`select * from publication_items where operation_id=${id} and status<>'completed' order by ordinal limit 1 for update`;
-      if (
-        !current ||
-        current.id !== item.id ||
-        new Date(String(current.next_attempt_at)) > new Date()
-      )
-        return;
-      await tx`select set_config('flare.environment_id',${target.environmentId},true)`;
-      if (current.kind === 'automation')
-        await putAutomation(tx, target, current.snapshot as AutomationContent);
-      else if (current.kind === 'layout') await putLayout(tx, target, current.snapshot as Layout);
-      else if (current.kind === 'translation')
-        await putDictionaries(tx, target, current.snapshot as Dictionary[]);
-      else {
-        const snapshot = current.snapshot as WorkflowItem,
-          deps = snapshot.content_dependencies ?? emptyDependencies();
-        for (const layout of deps.layouts) await putLayout(tx, target, layout);
-        const source = structuredClone(snapshot.source_definition);
-        for (const template of deps.templates) {
-          const templateId = await putPublicationTemplate(tx, target, template);
-          for (const step of source.steps)
-            if (step.controlValues.templateIdentifier === template.identifier) {
-              step.controlValues.templateId = templateId;
-              delete step.controlValues.templateIdentifier;
-            }
+  const outcome = await withTenant(sql, tenant, async (tx) => {
+    const [operation] =
+      await tx`select * from publication_operations where id=${id} and status='pending' for update skip locked`;
+    if (!operation) return;
+    const [current] =
+      await tx`select *,next_attempt_at<=clock_timestamp() as due from publication_items where operation_id=${id} and status<>'completed' order by ordinal limit 1 for update`;
+    if (!current?.due || current.id !== item.id) return;
+    try {
+      // Keep the operation and item locks until failure/backoff is durable. The savepoint
+      // rolls back local content edits; an accepted Novu update is reconciled on retry.
+      await tx.savepoint(async (tx) => {
+        await tx`select set_config('flare.environment_id',${target.environmentId},true)`;
+        if (current.kind === 'automation')
+          await putAutomation(tx, target, current.snapshot as AutomationContent);
+        else if (current.kind === 'layout') await putLayout(tx, target, current.snapshot as Layout);
+        else if (current.kind === 'translation')
+          await putDictionaries(tx, target, current.snapshot as Dictionary[]);
+        else {
+          const snapshot = current.snapshot as WorkflowItem,
+            deps = snapshot.content_dependencies ?? emptyDependencies();
+          for (const layout of deps.layouts) await putLayout(tx, target, layout);
+          const source = structuredClone(snapshot.source_definition);
+          for (const template of deps.templates) {
+            const templateId = await putPublicationTemplate(tx, target, template);
+            for (const step of source.steps)
+              if (step.controlValues.templateIdentifier === template.identifier) {
+                step.controlValues.templateId = templateId;
+                delete step.controlValues.templateIdentifier;
+              }
+          }
+          await tx`insert into workflows(org_id,environment_id,identifier,definition,source_definition,content_dependencies,publication_blocked) values(${target.orgId},${target.environmentId},${snapshot.identifier},${tx.json(toJson(snapshot.definition))},${tx.json(toJson(source))},${tx.json(toJson(deps))},true) on conflict(org_id,environment_id,identifier) do update set definition=excluded.definition,source_definition=excluded.source_definition,content_dependencies=excluded.content_dependencies,revision=workflows.revision+1,publication_blocked=true,updated_at=now()`;
+          await putDictionaries(tx, target, snapshot.dictionaries);
+          await publish(target, snapshot.definition, deps);
+          await tx`update workflows set publication_blocked=false where identifier=${snapshot.identifier}`;
         }
-        await tx`insert into workflows(org_id,environment_id,identifier,definition,source_definition,content_dependencies,publication_blocked) values(${target.orgId},${target.environmentId},${snapshot.identifier},${tx.json(toJson(snapshot.definition))},${tx.json(toJson(source))},${tx.json(toJson(deps))},true) on conflict(org_id,environment_id,identifier) do update set definition=excluded.definition,source_definition=excluded.source_definition,content_dependencies=excluded.content_dependencies,revision=workflows.revision+1,publication_blocked=true,updated_at=now()`;
-        await putDictionaries(tx, target, snapshot.dictionaries);
-        await publish(target, snapshot.definition, deps);
-        await tx`update workflows set publication_blocked=false where identifier=${snapshot.identifier}`;
-      }
-      await tx`insert into audit_logs(org_id,environment_id,actor_id,action,resource_id) values(${target.orgId},${target.environmentId},${operation.actor_id},'publication.item_completed',${current.identifier})`;
-      await tx`select set_config('flare.environment_id',${tenant.environmentId},true)`;
-      await tx`update publication_items set status='completed',attempts=attempts+1,error=null,completed_at=now() where id=${current.id}`;
-      await tx`update publication_operations set status='completed',completed_at=now(),error=null where id=${id} and not exists(select 1 from publication_items where operation_id=${id} and status<>'completed')`;
-    });
-  } catch (error) {
-    await withTenant(sql, tenant, async (tx) => {
-      await tx`select id from publication_operations where id=${id} for update`;
-      const [current] =
-        await tx`select * from publication_items where id=${item.id} and status='pending' for update`;
-      if (!current) return;
+        await tx`insert into audit_logs(org_id,environment_id,actor_id,action,resource_id) values(${target.orgId},${target.environmentId},${operation.actor_id},'publication.item_completed',${current.identifier})`;
+        await tx`select set_config('flare.environment_id',${tenant.environmentId},true)`;
+        await tx`update publication_items set status='completed',attempts=attempts+1,error=null,completed_at=now() where id=${current.id}`;
+        await tx`update publication_operations set status='completed',completed_at=now(),error=null where id=${id} and not exists(select 1 from publication_items where operation_id=${id} and status<>'completed')`;
+      });
+      return { failed: false as const };
+    } catch (error) {
       const failed =
         (error instanceof MailError && error.status < 500) || Number(current.failures) >= 4;
       const message =
         error instanceof MailError ? error.message : 'Publication engine or database update failed';
-      await tx`update publication_items set status=${failed ? 'failed' : 'pending'},attempts=attempts+1,failures=failures+1,error=${message},next_attempt_at=now()+${5 * 2 ** Number(current.failures)}*interval '1 second' where id=${item.id}`;
+      await tx`update publication_items set status=${failed ? 'failed' : 'pending'},attempts=attempts+1,failures=failures+1,error=${message},next_attempt_at=clock_timestamp()+${5 * 2 ** Number(current.failures)}*interval '1 second' where id=${item.id}`;
       await tx`update publication_operations set status=${failed ? 'failed' : 'pending'},error=${message} where id=${id} and status='pending'`;
-    });
-    throw error;
-  }
+      return { failed: true as const, error };
+    }
+  });
+  // Connection/COMMIT failures leave recovery to committed state. Never record a late
+  // failure in a fresh transaction after another worker has acquired this operation.
+  if (outcome?.failed) throw outcome.error;
 }
+
 export function publicationEngineBody(workflow: Workflow, deps: ContentDependencies) {
   return {
     workflowId: workflow.workflowId,

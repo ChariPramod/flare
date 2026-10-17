@@ -201,6 +201,7 @@ export async function updateDomainReadiness(
     });
     await tx`update sending_policies set revision=revision+1,updated_at=now() where org_id=${orgId}`;
     await tx`update messages set next_attempt_at=now() where org_id=${orgId} and domain_id=${domainId} and status='held' and claim_id is null`;
+    await actor.authorize(tx);
   });
   return listDomainReadiness(sql, orgId, domainId, transports);
 }
@@ -244,6 +245,7 @@ export async function revokeDomainReadiness(
     });
     await tx`update sending_policies set revision=revision+1,updated_at=now() where org_id=${orgId}`;
     await tx`update messages set next_attempt_at=now() where org_id=${orgId} and domain_id=${domainId} and status='held' and claim_id is null`;
+    await actor.authorize(tx);
   });
   return listDomainReadiness(sql, orgId, domainId, transports);
 }

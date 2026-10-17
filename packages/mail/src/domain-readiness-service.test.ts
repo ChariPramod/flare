@@ -156,6 +156,42 @@ it('probes SES with the named account and region, persists fingerprint, audits a
       ?.future,
   ).toBe(true);
 });
+
+it.each(['record', 'revoke'] as const)(
+  'rolls back readiness %s, revision and audit when final authorization expires',
+  async (operation) => {
+    vi.spyOn(SESv2Client.prototype, 'send').mockResolvedValue(identity() as never);
+    if (operation === 'revoke')
+      await updateDomainReadiness(sql, actor, orgId, domainId, input(), [transport]);
+    const before = await sql`select * from domain_transport_readiness`;
+    const audits = await sql`select * from audit_logs`;
+    const policies = await sql`select org_id,revision from sending_policies order by org_id`;
+    const authorize = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValue(new Error('MFA expired'));
+    const expiring = { ...actor, authorize };
+    await expect(
+      operation === 'record'
+        ? updateDomainReadiness(sql, expiring, orgId, domainId, input(), [transport])
+        : revokeDomainReadiness(
+            sql,
+            expiring,
+            orgId,
+            domainId,
+            config.id,
+            { expected_revision: 1, reason },
+            [transport],
+          ),
+    ).rejects.toThrow('MFA expired');
+    expect(authorize).toHaveBeenCalledTimes(2);
+    expect(await sql`select * from domain_transport_readiness`).toEqual(before);
+    expect(await sql`select * from audit_logs`).toEqual(audits);
+    expect(await sql`select org_id,revision from sending_policies order by org_id`).toEqual(
+      policies,
+    );
+  },
+);
 it('rejects submitted SES claims, wrong header domain, stale attestations and stale policy revisions before probing', async () => {
   const send = vi.spyOn(SESv2Client.prototype, 'send').mockResolvedValue(identity() as never);
   await expect(

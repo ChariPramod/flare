@@ -142,6 +142,46 @@ it('counts network retry pacing on every attempt while logical recipients and co
   expect((await sql`select sum(recipients)::int as n from sending_dispatches`)[0]?.n).toBe(4);
   expect(await sql`select * from sending_dispatches`).toHaveLength(2);
 });
+it('timestamps recipient consumption and dispatch capacity when work is admitted, not when its transaction began', async () => {
+  const item = await message();
+  await withTenant(sql, tenant, async (tx) => {
+    // A transaction may have spent time waiting on policy, suppression or
+    // credential locks before it can admit a transport attempt.
+    const [boundary] = await tx`select clock_timestamp()::text as admitted_after`;
+    expect(
+      (await prepareDispatchPolicy(tx, tenant, item.data, item.recipients)).recipients,
+    ).toEqual(item.recipients);
+    expect(
+      await tx`select created_at>=${boundary!.admitted_after}::timestamptz as current from sending_dispatches where message_id=${item.data.id}`,
+    ).toEqual([{ current: true }]);
+    expect(
+      await tx`select consumed_at>=${boundary!.admitted_after}::timestamptz as current from sending_quota where message_id=${item.data.id}`,
+    ).toEqual([{ current: true }]);
+  });
+});
+it.each(['minute', 'daily'] as const)(
+  'releases expired %s usage using the current admission time inside an older transaction',
+  async (window) => {
+    const previous = await message();
+    await dispatch(previous);
+    await sql`update sending_policies set daily_limit=1,per_minute_limit=1 where org_id=${org}`;
+    const next = await message();
+    await withTenant(sql, tenant, async (tx) => {
+      // Put the historical boundary strictly after transaction start and before
+      // admission. now() would still count that expired usage in this transaction.
+      if (window === 'minute') {
+        await tx`update sending_dispatches set created_at=clock_timestamp()-interval '60 seconds' where message_id=${previous.data.id}`;
+        await tx`update sending_quota set consumed_at=clock_timestamp()-interval '25 hours' where message_id=${previous.data.id}`;
+      } else {
+        await tx`update sending_dispatches set created_at=clock_timestamp()-interval '61 seconds' where message_id=${previous.data.id}`;
+        await tx`update sending_quota set consumed_at=clock_timestamp()-interval '24 hours' where message_id=${previous.data.id}`;
+      }
+      expect(
+        (await prepareDispatchPolicy(tx, tenant, next.data, next.recipients)).recipients,
+      ).toEqual(next.recipients);
+    });
+  },
+);
 it('preserves quota and pacing across a fresh database connection', async () => {
   const item = await message(10);
   await dispatch(item);

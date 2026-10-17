@@ -127,6 +127,48 @@ const approve = (extra: Record<string, unknown> = {}) =>
     ...extra,
   });
 
+it.each(['policy', 'credential', 'suppression'] as const)(
+  'rolls back %s changes and audit when final operator authorization expires',
+  async (operation) => {
+    await sql`insert into suppressions(org_id,address,reason,protected) values(${org},'reader@example.net','complaint',true)`;
+    const authorize = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValue(new Error('MFA expired'));
+    const expiring = { ...actor, authorize };
+    const change =
+      operation === 'policy'
+        ? updateSendingPolicy(sql, expiring, org, {
+            expected_revision: 0,
+            reason,
+            state: 'approved',
+          })
+        : operation === 'credential'
+          ? updateSendingCredential(sql, expiring, org, credential, {
+              expected_revision: 0,
+              reason,
+              traffic_class: 'transactional',
+              critical_sending: false,
+            })
+          : restoreProtectedSuppression(sql, expiring, org, {
+              expected_revision: 0,
+              reason,
+              email: 'reader@example.net',
+            });
+    await expect(change).rejects.toThrow('MFA expired');
+    expect(authorize).toHaveBeenCalledTimes(2);
+    expect((await sql`select state,revision from sending_policies where org_id=${org}`)[0]).toEqual(
+      { state: 'pending_review', revision: 0 },
+    );
+    expect(
+      (await sql`select mail_traffic_class from api_keys where id=${credential}`)[0]
+        ?.mail_traffic_class,
+    ).toBeNull();
+    expect(await sql`select address from suppressions where org_id=${org}`).toHaveLength(1);
+    expect(await sql`select id from audit_logs where org_id=${org}`).toHaveLength(0);
+  },
+);
+
 it('creates conservative organization defaults and exposes only the tenant policy read view', async () => {
   const newOrg = randomUUID();
   await sql`insert into organizations(id,name,slug) values(${newOrg},'Fresh tenant',${newOrg})`;

@@ -163,6 +163,8 @@ export async function updateSendingPolicy(
       after: { ...after, revision: Number(before.revision) + 1 },
     });
     await tx`update messages set next_attempt_at=now() where org_id=${orgId} and status='held' and claim_id is null`;
+    // The policy/credential/message locks may outlive the original MFA window.
+    await actor.authorize(tx);
   });
   return getSendingPolicy(sql, orgId);
 }
@@ -199,6 +201,7 @@ export async function updateSendingCredential(
       session_id: actor.sessionId,
       before,
     });
+    await actor.authorize(tx);
   });
   return getSendingPolicy(sql, orgId);
 }
@@ -228,6 +231,7 @@ export async function restoreProtectedSuppression(
       session_id: actor.sessionId,
       previous: suppression,
     });
+    await actor.authorize(tx);
   });
   return { email: input.email, restored: true };
 }
@@ -319,7 +323,7 @@ export async function reserveSendingQuota(
 ) {
   await lockSendingPolicy(tx, tenant.orgId);
   const [usage] =
-    await tx`select count(*)::int as n from sending_quota where org_id=${tenant.orgId} and (state='reserved' or (state='consumed' and consumed_at>now()-interval '24 hours'))`;
+    await tx`select count(*)::int as n from sending_quota where org_id=${tenant.orgId} and (state='reserved' or (state='consumed' and consumed_at>statement_timestamp()-interval '24 hours'))`;
   const existing =
     await tx`select recipient from sending_quota where org_id=${tenant.orgId} and message_id=${id} and state<>'released'`;
   const seen = new Set(existing.map((row) => String(row.recipient)));

@@ -207,6 +207,130 @@ it('recovers a remote-success/local-failure window and clears the production tri
       .publication_blocked,
   ).toBe(false);
 });
+it.each(['preparation', 'attempt'] as const)(
+  'honors fractional retry deadlines during %s without advancing a later item',
+  async (phase) => {
+    await setup();
+    const operation = await createPublication(sql, principal, {
+      workflows: ['welcome'],
+      layouts: ['brand'],
+    });
+    const [first] =
+      await sql`select id from publication_items where operation_id=${operation.id} order by ordinal limit 1`;
+    const [clock] =
+      await sql`select date_trunc('second',clock_timestamp())+interval '30.750 seconds' as deadline`;
+    const deadline = clock!.deadline as Date;
+    const defer = async () => {
+      await sql`update publication_items set next_attempt_at=${deadline} where id=${first!.id}`;
+    };
+    if (phase === 'preparation') await defer();
+    let transactions = 0;
+    const scheduled = new Proxy(sql, {
+      get(target, property, receiver) {
+        if (property !== 'begin') return Reflect.get(target, property, receiver);
+        return async (...args: unknown[]) => {
+          const transaction = ++transactions;
+          const value = await Reflect.apply(target.begin, target, args);
+          if (phase === 'attempt' && transaction === 1) await defer();
+          return value;
+        };
+      },
+    });
+    const publish = vi.fn(async () => undefined);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(deadline.getTime() - 500);
+    try {
+      // The application clock is .250; the first item's deadline is .750.
+      // String(Date) would truncate it to .000 and incorrectly consider it due.
+      await advancePublication(scheduled, operation.id, publish);
+      expect(publish).not.toHaveBeenCalled();
+      expect(
+        await sql`select status,attempts from publication_items where operation_id=${operation.id} order by ordinal`,
+      ).toEqual([
+        { status: 'pending', attempts: 0 },
+        { status: 'pending', attempts: 0 },
+      ]);
+      expect(await sql`select id from layouts where environment_id=${otherEnv}`).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
+it('persists publication failure and backoff before a competing worker can retry the same item', async () => {
+  await setup();
+  const operation = await createPublication(sql, principal, { workflows: ['welcome'] });
+  const competingPublish = vi.fn(async () => undefined);
+  let transactions = 0;
+  // Run the competitor at the first instant the attempt transaction releases its locks.
+  // This deterministically exposes a recorder that starts a separate transaction after rollback.
+  const scheduled = new Proxy(sql, {
+    get(target, property, receiver) {
+      if (property !== 'begin') return Reflect.get(target, property, receiver);
+      return async (...args: unknown[]) => {
+        const transaction = ++transactions;
+        try {
+          return await Reflect.apply(target.begin, target, args);
+        } finally {
+          if (transaction === 2) await advancePublication(sql, operation.id, competingPublish);
+        }
+      };
+    },
+  });
+  await expect(
+    advancePublication(scheduled, operation.id, async () => {
+      throw new Error('temporary engine failure');
+    }),
+  ).rejects.toThrow('temporary engine failure');
+  expect(competingPublish).not.toHaveBeenCalled();
+  expect(
+    (
+      await sql`select status,attempts,failures,next_attempt_at>clock_timestamp() as deferred from publication_items where operation_id=${operation.id}`
+    )[0],
+  ).toMatchObject({ status: 'pending', attempts: 1, failures: 1, deferred: true });
+  expect(await sql`select * from workflows where environment_id=${otherEnv}`).toHaveLength(0);
+  await sql`update publication_items set next_attempt_at=now() where operation_id=${operation.id}`;
+  await advancePublication(sql, operation.id, competingPublish);
+  expect(competingPublish).toHaveBeenCalledTimes(1);
+  expect(
+    (
+      await sql`select status,attempts,failures,error from publication_items where operation_id=${operation.id}`
+    )[0],
+  ).toMatchObject({ status: 'completed', attempts: 2, failures: 1, error: null });
+});
+it('rolls back partial content and records a database statement failure without losing the production guard', async () => {
+  const { compiled } = await setup();
+  await sql`insert into workflows(org_id,environment_id,identifier,definition,source_definition) values(${org},${otherEnv},'welcome',${sql.json({ ...compiled.definition, name: 'Old' })},${sql.json({ ...compiled.source, name: 'Old' })})`;
+  const operation = await createPublication(sql, principal, { workflows: ['welcome'] });
+  const publish = vi.fn(async () => undefined);
+  await sql`create function reject_publication_workflow() returns trigger language plpgsql as $$ begin raise exception 'controlled content write failure'; end $$`;
+  await sql`create trigger reject_publication_workflow before insert on workflows for each row execute function reject_publication_workflow()`;
+  try {
+    await expect(advancePublication(sql, operation.id, publish)).rejects.toThrow(
+      'controlled content write failure',
+    );
+    expect(publish).not.toHaveBeenCalled();
+    expect(
+      (
+        await sql`select status,attempts,failures from publication_items where operation_id=${operation.id}`
+      )[0],
+    ).toMatchObject({ status: 'pending', attempts: 1, failures: 1 });
+    expect(
+      (
+        await sql`select definition,publication_blocked from workflows where environment_id=${otherEnv}`
+      )[0],
+    ).toMatchObject({ definition: { name: 'Old' }, publication_blocked: true });
+    expect(await sql`select id from layouts where environment_id=${otherEnv}`).toHaveLength(0);
+    expect(await sql`select id from email_templates where environment_id=${otherEnv}`).toHaveLength(
+      0,
+    );
+  } finally {
+    await sql`drop trigger reject_publication_workflow on workflows`;
+    await sql`drop function reject_publication_workflow()`;
+  }
+  await sql`update publication_items set next_attempt_at=now() where operation_id=${operation.id}`;
+  await advancePublication(sql, operation.id, publish);
+  expect(publish).toHaveBeenCalledTimes(1);
+});
 it('records permanent publication failures and prevents silent immutable-version replacement', async () => {
   await setup();
   const [layout] =

@@ -142,3 +142,48 @@ it('rechecks elevated authorization in the policy mutation transaction', async (
     sql.begin((tx) => authorizeOperatorMutation(tx, identity, settings.userIds)),
   ).rejects.toMatchObject({ status: 403 });
 });
+
+it.each(['session', 'MFA'] as const)(
+  'rejects an operator mutation when its %s window expires after the transaction starts',
+  async (window) => {
+    await expect(
+      sql.begin(async (tx) => {
+        if (window === 'session')
+          await tx`update sessions set operator_mfa_at=now(),expires_at=now()+interval '20 milliseconds' where id=${sessionId}`;
+        else
+          await tx`update sessions set operator_mfa_at=now()-interval '15 minutes'+interval '20 milliseconds' where id=${sessionId}`;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        const [elapsed] =
+          await tx`select clock_timestamp()>now()+interval '20 milliseconds' as expired`;
+        expect(elapsed?.expired).toBe(true);
+        await authorizeOperatorMutation(tx, identity, settings.userIds);
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+  },
+);
+
+it('does not consume MFA proof or elevate a session that expires while step-up waits', async () => {
+  const delayed = new Proxy(sql, {
+    get(target, property, receiver) {
+      if (property !== 'begin') return Reflect.get(target, property, receiver);
+      return (action: Parameters<Sql['begin']>[0]) =>
+        sql.begin(async (tx) => {
+          await tx`update sessions set expires_at=now()+interval '20 milliseconds' where id=${sessionId}`;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          const [elapsed] =
+            await tx`select clock_timestamp()>expires_at as expired from sessions where id=${sessionId}`;
+          expect(elapsed?.expired).toBe(true);
+          return action(tx);
+        });
+    },
+  });
+  await expect(
+    grantOperatorMfa(delayed, identity, 'single-use-recovery', encryptionKey),
+  ).rejects.toMatchObject({ status: 401 });
+  expect(
+    (await sql`select recovery_hashes from users where id=${operatorId}`)[0]?.recovery_hashes,
+  ).toEqual([hashToken('single-use-recovery')]);
+  expect(
+    (await sql`select operator_mfa_at from sessions where id=${sessionId}`)[0]?.operator_mfa_at,
+  ).toBeNull();
+});

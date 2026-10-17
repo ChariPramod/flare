@@ -117,6 +117,34 @@ function policy(row: Record<string, unknown>) {
   };
 }
 
+it.each(['create', 'disable'] as const)(
+  'rolls back route %s and audit when final operator authorization expires',
+  async (operation) => {
+    const registered = operation === 'disable' ? await route() : undefined;
+    const before = await sql`select * from mail_routes`;
+    const audits = await sql`select * from mail_route_audit`;
+    const authorize = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValue(new Error('MFA expired'));
+    const expiring = { ...actor, authorize };
+    await expect(
+      operation === 'create'
+        ? createMailRoute(sql, expiring, input(), [primary, fallback])
+        : disableMailRoute(
+            sql,
+            expiring,
+            String(registered!.id),
+            Number(registered!.revision),
+            'Disable reviewed mail route',
+          ),
+    ).rejects.toThrow('MFA expired');
+    expect(authorize).toHaveBeenCalledTimes(2);
+    expect(await sql`select * from mail_routes`).toEqual(before);
+    expect(await sql`select * from mail_route_audit`).toEqual(audits);
+  },
+);
+
 it('keeps an immutable ordered route through rebinding and rechecks explicit revocation', async () => {
   const registered = await route();
   const snapshot = await resolveMailRoute(sql, policy(registered), 'transactional', false, [

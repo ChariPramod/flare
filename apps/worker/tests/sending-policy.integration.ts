@@ -23,6 +23,8 @@ import {
   restoreProtectedSuppression,
   updateDomainReadiness,
   protectSuppression,
+  lockSendingPolicy,
+  prepareDispatchPolicy,
 } from '@flare/mail';
 import type { NamedTransportConfig, PipelineOptions, TransportAdapter } from '@flare/mail';
 import { startRelayFixture } from '../../smtp-relay/tests/relay-fixture.js';
@@ -486,6 +488,75 @@ it('rejects a foreign credential and isolates quota visibility across real tenan
   ).toHaveLength(1);
   await cancelUnstarted(first);
   await cancelUnstarted(second);
+});
+
+it('dates dispatch and first consumption after an observed policy-lock wait', async () => {
+  const tenant = await fixture(1, 1);
+  const id = (await submitEmails(options, tenant.first.principal, [input()])).data[0]!.id;
+  const [message] = await sql`select * from messages where id=${id}`;
+  const contender = connectDatabase(url, { max: 1 }).client;
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let locked: () => void = () => undefined;
+  const entered = new Promise<void>((resolve) => {
+    locked = resolve;
+  });
+  let blockedWork: Promise<unknown> | undefined;
+  const blocker = apiSql.begin(async (tx) => {
+    await lockSendingPolicy(tx, tenant.orgId);
+    locked();
+    await gate;
+  });
+  void blocker.catch(() => undefined);
+  try {
+    await entered;
+    const [backend] = await contender`select pg_backend_pid() as pid`;
+    blockedWork = withTenant(contender, tenant.first.principal, (tx) =>
+      prepareDispatchPolicy(
+        tx,
+        tenant.first.principal,
+        {
+          id,
+          sandbox: false,
+          traffic_class: message!.traffic_class,
+          submitting_key_id: message!.submitting_key_id,
+          route_snapshot: message!.route_snapshot,
+        },
+        ['reader@example.net'],
+      ),
+    );
+    void blockedWork.catch(() => undefined);
+    await expect
+      .poll(
+        async () =>
+          Boolean(
+            (
+              await sql`select exists(select 1 from pg_stat_activity where pid=${backend!.pid} and wait_event_type='Lock' and wait_event='advisory') as blocked`
+            )[0]!.blocked,
+          ),
+        { timeout: 5000 },
+      )
+      .toBe(true);
+    const [boundary] = await sql`select clock_timestamp()::text as released_after`;
+    release();
+    await blocker;
+    expect(await blockedWork).toEqual({ recipients: ['reader@example.net'] });
+    expect(
+      await sql`
+      select d.created_at>=${boundary!.released_after}::timestamptz as dispatch_after_wait,
+        q.consumed_at>=${boundary!.released_after}::timestamptz as consumption_after_wait,
+        q.consumed_at=d.created_at as same_boundary
+      from sending_dispatches d join sending_quota q on q.message_id=d.message_id
+      where d.message_id=${id}`,
+    ).toEqual([{ dispatch_after_wait: true, consumption_after_wait: true, same_boundary: true }]);
+  } finally {
+    release();
+    await Promise.allSettled([blocker, blockedWork]);
+    await contender.end({ timeout: 5 });
+    await cancelUnstarted(tenant);
+  }
 });
 
 it('charges pacing per real SMTP retry while consuming logical recipient quota only once', async () => {

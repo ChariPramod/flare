@@ -291,6 +291,7 @@ export async function createMailRoute(
       reason: input.reason,
       route,
     });
+    await actor.authorize(tx);
     return route!;
   });
 }
@@ -312,6 +313,7 @@ export async function disableMailRoute(
     if (!route)
       throw new SendingPolicyError(404, 'route_not_found', 'Mail route revision not found');
     await routeAudit(tx, actor, id, revision, 'operator.mail_route.disabled', { reason });
+    await actor.authorize(tx);
     return route;
   });
 }

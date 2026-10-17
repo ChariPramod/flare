@@ -83,11 +83,11 @@ export async function prepareDispatchPolicy(
   )
     return hold('critical_grant_required');
   const [pace] =
-    await tx`select coalesce(sum(recipients),0)::int as used,coalesce(greatest(1,ceil(extract(epoch from min(created_at)+interval '60 seconds'-now()))),60)::int as retry_after from sending_dispatches where org_id=${tenant.orgId} and created_at>now()-interval '60 seconds'`;
+    await tx`select coalesce(sum(recipients),0)::int as used,coalesce(greatest(1,ceil(extract(epoch from min(created_at)+interval '60 seconds'-statement_timestamp()))),60)::int as retry_after from sending_dispatches where org_id=${tenant.orgId} and created_at>statement_timestamp()-interval '60 seconds'`;
   const remaining = Math.max(0, Number(policy.per_minute_limit) - Number(pace!.used));
   if (!remaining) return hold('sending_rate_limited', Number(pace!.retry_after));
   const [usage] =
-    await tx`select count(*)::int as n from sending_quota where org_id=${tenant.orgId} and (state='reserved' or (state='consumed' and consumed_at>now()-interval '24 hours'))`;
+    await tx`select count(*)::int as n from sending_quota where org_id=${tenant.orgId} and (state='reserved' or (state='consumed' and consumed_at>statement_timestamp()-interval '24 hours'))`;
   let dailyRemaining = Number(policy.daily_limit) - Number(usage!.n);
   if (dailyRemaining < 0) return hold('recipient_quota_exhausted');
   const reserved =
@@ -104,7 +104,18 @@ export async function prepareDispatchPolicy(
   }
   if (!recipients.length) return hold('recipient_quota_exhausted');
   await reserveSendingQuota(tx, tenant, message.id, recipients, Number(policy.daily_limit));
-  await tx`insert into sending_dispatches(org_id,environment_id,message_id,recipients) values(${tenant.orgId},${tenant.environmentId},${message.id},${recipients.length})`;
-  await tx`update sending_quota set state='consumed',consumed_at=coalesce(consumed_at,now()) where org_id=${tenant.orgId} and environment_id=${tenant.environmentId} and message_id=${message.id} and recipient in ${tx(recipients)} and state='reserved'`;
+  // Lock contention must not backdate dispatches or shorten their rolling
+  // allowance windows. Keep the exact database timestamp for first consumption;
+  // network retries receive a fresh dispatch timestamp but retain logical usage.
+  await tx`
+    with dispatch as (
+      insert into sending_dispatches(org_id,environment_id,message_id,recipients,created_at)
+      values(${tenant.orgId},${tenant.environmentId},${message.id},${recipients.length},clock_timestamp())
+      returning created_at
+    )
+    update sending_quota set state='consumed',consumed_at=coalesce(consumed_at,dispatch.created_at)
+    from dispatch
+    where org_id=${tenant.orgId} and environment_id=${tenant.environmentId}
+      and message_id=${message.id} and recipient in ${tx(recipients)} and state='reserved'`;
   return { recipients };
 }

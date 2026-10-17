@@ -89,8 +89,7 @@ export async function grantOperatorMfa(
     // Use the same user-first lock order as ordinary MFA replay protection.
     const [user] =
       await tx`select mfa_secret,mfa_last_counter,recovery_hashes from users where id=${identity.actorId} for update`;
-    const [session] =
-      await tx`select id from sessions where id=${identity.sessionId} and user_id=${identity.actorId} and revoked_at is null and expires_at>now() for update`;
+    const session = await lockLiveOperatorSession(tx, identity);
     if (!user?.mfa_secret || !session)
       throw new UnauthorizedException('An active MFA-enabled operator session is required');
     const counter = verifyTotp(
@@ -109,9 +108,24 @@ export async function grantOperatorMfa(
       await tx`update users set recovery_hashes=${tx.json(recovery)} where id=${identity.actorId}`;
     }
     const [updated] =
-      await tx`update sessions set operator_mfa_at=now() where id=${identity.sessionId} returning operator_mfa_at+interval '15 minutes' as verified_until`;
+      await tx`update sessions set operator_mfa_at=clock_timestamp() where id=${identity.sessionId} returning operator_mfa_at+interval '15 minutes' as verified_until`;
     return { verified_until: new Date(updated!.verified_until).toISOString() };
   });
+}
+
+async function lockLiveOperatorSession(
+  tx: Transaction,
+  identity: Pick<OperatorIdentity, 'actorId' | 'sessionId'>,
+  requireStepUp = false,
+) {
+  await tx`select id from sessions where id=${identity.sessionId} and user_id=${identity.actorId} for update`;
+  // Deadline predicates in a locking SELECT can run before its row-lock wait.
+  // Recheck after both locks are held, using current time rather than BEGIN time.
+  const [session] = await tx`select id from sessions where id=${identity.sessionId}
+    and user_id=${identity.actorId} and revoked_at is null and expires_at>clock_timestamp()
+    and (not ${requireStepUp} or (operator_mfa_at>=clock_timestamp()-interval '15 minutes'
+      and operator_mfa_at<=clock_timestamp()))`;
+  return session;
 }
 
 export async function authorizeOperatorMutation(
@@ -123,8 +137,7 @@ export async function authorizeOperatorMutation(
     throw new ForbiddenException('Platform operator access is required');
   const [user] =
     await tx`select id from users where id=${identity.actorId} and mfa_secret is not null for update`;
-  const [session] =
-    await tx`select id from sessions where id=${identity.sessionId} and user_id=${identity.actorId} and revoked_at is null and expires_at>now() and operator_mfa_at>=now()-interval '15 minutes' and operator_mfa_at<=now() for update`;
+  const session = await lockLiveOperatorSession(tx, identity, true);
   if (!user || !session)
     throw new ForbiddenException('Recent operator MFA verification is required');
 }
