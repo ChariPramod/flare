@@ -70,3 +70,5 @@ Operational rate limits, recovery, tracing and dashboards: [reliability guide](d
 Developer packages and the generated API contract: [SDK, CLI and MCP guide](docs/developer-tools.md).
 
 Full-stack verification and release operations: [acceptance evidence](docs/acceptance.md) and [deployment, backup/restore, upgrades and troubleshooting](docs/deployment.md). Run `bash scripts/acceptance.sh` on a Docker host; it creates and destroys only its own disposable project.
+
+Staging and the first controlled Email + Inbox pilot: [ordered execution plan](docs/staging-execution-plan.md), [owner handoff](docs/staging-owner-checklist.md), and [bootstrap/public verification runbook](docs/staging.md). Hosting and real-provider evidence remain separate from local Docker acceptance.

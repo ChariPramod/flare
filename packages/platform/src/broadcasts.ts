@@ -85,123 +85,143 @@ export async function dispatchBroadcast(
   id: string,
   preferenceBase: string,
 ) {
-  checkOrigins();
   const [lookup] = await options.sql`select org_id,environment_id from broadcasts where id=${id}`;
   if (!lookup) return;
   const tenant = { orgId: String(lookup.org_id), environmentId: String(lookup.environment_id) };
-  return withTenant(options.sql, tenant, async (tx) => {
+  const outcome = await withTenant(options.sql, tenant, async (tx) => {
     // Delivery locks the organization before message and campaign rows.
     await lockSendingPolicy(tx, tenant.orgId);
     const [broadcast] =
-      await tx`select * from broadcasts where id=${id} and status in ('scheduled','sending') and next_dispatch_at<=now() for update skip locked`;
+      await tx`select * from broadcasts where id=${id} and status in ('scheduled','sending') and next_dispatch_at<=clock_timestamp() for update skip locked`;
     if (!broadcast) return;
-    const [version] =
-      await tx`select * from template_versions where template_id=${broadcast.template_id} and version=${broadcast.template_version}`;
-    if (!version) throw new MailError(422, 'Pinned template missing');
-    const template = validateTemplate(
-      templateSchema.parse({
-        subject: version.subject,
-        html: version.html,
-        text: version.text_body ?? undefined,
-        variables: version.variables,
-      }),
-    );
-    if (broadcast.status === 'scheduled') await outbox(tx, tenant, 'broadcast.started', { id });
-    await tx`update broadcasts set status='sending',started_at=coalesce(started_at,now()),error=null where id=${id}`;
-    const definitions = await tx`select name,fallback from contact_properties`;
-    const fallback = Object.fromEntries(definitions.map((p) => [String(p.name), p.fallback]));
-    const recipients =
-      await tx`select r.contact_id,c.* from broadcast_recipients r join contacts c on c.id=r.contact_id and c.org_id=r.org_id and c.environment_id=r.environment_id where r.broadcast_id=${id} and r.status='pending' order by r.contact_id limit ${Number(broadcast.rate_per_second)} for update of r,c`;
-    const principal: Principal = {
-      ...tenant,
-      actorId: 'broadcast-worker',
-      kind: 'session',
-      role: 'owner',
-      production: false,
-    };
-    for (const [index, contact] of recipients.entries()) {
-      const [topic] = broadcast.topic_id
-        ? await tx`select coalesce(p.enabled,t.default_opt_in) as enabled from audience_topics t left join contact_topic_preferences p on p.topic_id=t.id and p.org_id=t.org_id and p.environment_id=t.environment_id and p.contact_id=${contact.id} where t.id=${broadcast.topic_id}`
-        : [];
-      const suppressed = await tx`select address from suppressions where address=${contact.email}`;
-      if (
-        contact.unsubscribed ||
-        contact.deleted_at ||
-        (broadcast.topic_id && !topic?.enabled) ||
-        suppressed.length
-      ) {
-        await tx`update broadcast_recipients set status='skipped',error='Unsubscribed, topic opt-out, deleted or suppressed' where broadcast_id=${id} and contact_id=${contact.id}`;
-        continue;
-      }
-      try {
-        await tx.savepoint(async (sp) => {
-          const token = preferenceToken(
-            {
-              ...tenant,
-              contactId: String(contact.id),
-              exp: Math.floor(Date.now() / 1000) + 365 * 86400,
-            },
-            options.trackingKey,
-          );
-          const preferenceUrl = `${preferenceBase.replace(/\/$/, '')}/preferences/${token}`;
-          const oneClick = `${(process.env.PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/$/, '')}/v1/preferences/${token}/unsubscribe`;
-          const values = {
-            ...template.variables,
-            ...fallback,
-            ...Object.fromEntries(
-              Object.entries(contact.properties).filter(([, value]) => value !== null),
-            ),
-            email: contact.email,
-            first_name: contact.first_name,
-            last_name: contact.last_name,
-            FLARE_UNSUBSCRIBE_URL: preferenceUrl,
-          };
-          const email = {
-            from: String(broadcast.sender),
-            to: [String(contact.email)],
-            subject: renderText(template.subject, values),
-            html: renderText(template.html, values, true),
-            text: template.text ? renderText(template.text, values) : undefined,
-            tags: [{ name: 'broadcast', value: id }],
-            headers: {
-              'List-Unsubscribe': `<${oneClick}>`,
-              'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-            },
-          };
-          const result = await submitEmails(options, principal, [email], {
-            transaction: sp,
-            campaign: {
-              broadcastId: id,
-              contactId: String(contact.id),
-              topicId: broadcast.topic_id ? String(broadcast.topic_id) : null,
-            },
-          });
-          await sp`update broadcast_recipients set status='queued',message_id=${result.data[0]!.id},error=null where broadcast_id=${id} and contact_id=${contact.id}`;
-        });
-      } catch (error) {
-        const pause = sendingPause(error);
-        if (pause) {
-          // The savepoint rolled back this recipient's mail and quota. Preserve
-          // earlier accepted recipients and retry this same pending recipient.
-          await tx`update broadcast_recipients set error=${pause.reason} where broadcast_id=${id} and contact_id=${contact.id} and status='pending'`;
-          await tx`update broadcasts set error=${pause.reason},next_dispatch_at=now()+${pause.seconds}*interval '1 second',updated_at=now() where id=${id}`;
-          return { processed: index, finished: false, paused: true, retry_after: pause.seconds };
+    try {
+      // The batch may roll back, but these original policy and broadcast locks
+      // must survive until its failure and retry deadline are committed.
+      const value = await tx.savepoint(async (tx) => {
+        checkOrigins();
+        const [version] =
+          await tx`select * from template_versions where template_id=${broadcast.template_id} and version=${broadcast.template_version}`;
+        if (!version) throw new MailError(422, 'Pinned template missing');
+        const template = validateTemplate(
+          templateSchema.parse({
+            subject: version.subject,
+            html: version.html,
+            text: version.text_body ?? undefined,
+            variables: version.variables,
+          }),
+        );
+        if (broadcast.status === 'scheduled') await outbox(tx, tenant, 'broadcast.started', { id });
+        await tx`update broadcasts set status='sending',started_at=coalesce(started_at,clock_timestamp()),error=null where id=${id}`;
+        const definitions = await tx`select name,fallback from contact_properties`;
+        const fallback = Object.fromEntries(definitions.map((p) => [String(p.name), p.fallback]));
+        const recipients =
+          await tx`select r.contact_id,c.* from broadcast_recipients r join contacts c on c.id=r.contact_id and c.org_id=r.org_id and c.environment_id=r.environment_id where r.broadcast_id=${id} and r.status='pending' order by r.contact_id limit ${Number(broadcast.rate_per_second)} for update of r,c`;
+        const principal: Principal = {
+          ...tenant,
+          actorId: 'broadcast-worker',
+          kind: 'session',
+          role: 'owner',
+          production: false,
+        };
+        for (const [index, contact] of recipients.entries()) {
+          const [topic] = broadcast.topic_id
+            ? await tx`select coalesce(p.enabled,t.default_opt_in) as enabled from audience_topics t left join contact_topic_preferences p on p.topic_id=t.id and p.org_id=t.org_id and p.environment_id=t.environment_id and p.contact_id=${contact.id} where t.id=${broadcast.topic_id}`
+            : [];
+          const suppressed =
+            await tx`select address from suppressions where address=${contact.email}`;
+          if (
+            contact.unsubscribed ||
+            contact.deleted_at ||
+            (broadcast.topic_id && !topic?.enabled) ||
+            suppressed.length
+          ) {
+            await tx`update broadcast_recipients set status='skipped',error='Unsubscribed, topic opt-out, deleted or suppressed' where broadcast_id=${id} and contact_id=${contact.id}`;
+            continue;
+          }
+          try {
+            await tx.savepoint(async (sp) => {
+              const token = preferenceToken(
+                {
+                  ...tenant,
+                  contactId: String(contact.id),
+                  exp: Math.floor(Date.now() / 1000) + 365 * 86400,
+                },
+                options.trackingKey,
+              );
+              const preferenceUrl = `${preferenceBase.replace(/\/$/, '')}/preferences/${token}`;
+              const oneClick = `${(process.env.PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/$/, '')}/v1/preferences/${token}/unsubscribe`;
+              const values = {
+                ...template.variables,
+                ...fallback,
+                ...Object.fromEntries(
+                  Object.entries(contact.properties).filter(([, value]) => value !== null),
+                ),
+                email: contact.email,
+                first_name: contact.first_name,
+                last_name: contact.last_name,
+                FLARE_UNSUBSCRIBE_URL: preferenceUrl,
+              };
+              const email = {
+                from: String(broadcast.sender),
+                to: [String(contact.email)],
+                subject: renderText(template.subject, values),
+                html: renderText(template.html, values, true),
+                text: template.text ? renderText(template.text, values) : undefined,
+                tags: [{ name: 'broadcast', value: id }],
+                headers: {
+                  'List-Unsubscribe': `<${oneClick}>`,
+                  'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+                },
+              };
+              const result = await submitEmails(options, principal, [email], {
+                transaction: sp,
+                campaign: {
+                  broadcastId: id,
+                  contactId: String(contact.id),
+                  topicId: broadcast.topic_id ? String(broadcast.topic_id) : null,
+                },
+              });
+              await sp`update broadcast_recipients set status='queued',message_id=${result.data[0]!.id},error=null where broadcast_id=${id} and contact_id=${contact.id}`;
+            });
+          } catch (error) {
+            const pause = sendingPause(error);
+            if (pause) {
+              // The savepoint rolled back this recipient's mail and quota. Preserve
+              // earlier accepted recipients and retry this same pending recipient.
+              await tx`update broadcast_recipients set error=${pause.reason} where broadcast_id=${id} and contact_id=${contact.id} and status='pending'`;
+              await tx`update broadcasts set error=${pause.reason},next_dispatch_at=clock_timestamp()+${pause.seconds}*interval '1 second',updated_at=clock_timestamp() where id=${id}`;
+              return {
+                processed: index,
+                finished: false,
+                paused: true,
+                retry_after: pause.seconds,
+              };
+            }
+            if (!(error instanceof MailError)) throw error;
+            await tx`update broadcast_recipients set status='failed',error=${error.message.slice(0, 500)} where broadcast_id=${id} and contact_id=${contact.id}`;
+          }
         }
-        if (!(error instanceof MailError)) throw error;
-        await tx`update broadcast_recipients set status='failed',error=${error.message.slice(0, 500)} where broadcast_id=${id} and contact_id=${contact.id}`;
-      }
-    }
-    const [pending] =
-      await tx`select count(*)::int as n from broadcast_recipients where broadcast_id=${id} and status='pending'`;
-    const finished = Number(pending!.n) === 0;
-    await tx`update broadcasts set status=${finished ? 'sent' : 'sending'},next_dispatch_at=now()+interval '1 second',finished_at=${finished ? new Date() : null},updated_at=now() where id=${id}`;
-    if (finished)
-      await outbox(tx, tenant, 'broadcast.sent', {
-        id,
-        meaning: 'Audience submission completed; inspect message outcomes for delivery',
+        const [pending] =
+          await tx`select count(*)::int as n from broadcast_recipients where broadcast_id=${id} and status='pending'`;
+        const finished = Number(pending!.n) === 0;
+        await tx`update broadcasts set status=${finished ? 'sent' : 'sending'},next_dispatch_at=clock_timestamp()+interval '1 second',finished_at=case when ${finished} then clock_timestamp() else null end,updated_at=clock_timestamp() where id=${id}`;
+        if (finished)
+          await outbox(tx, tenant, 'broadcast.sent', {
+            id,
+            meaning: 'Audience submission completed; inspect message outcomes for delivery',
+          });
+        return { processed: recipients.length, finished };
       });
-    return { processed: recipients.length, finished };
+      return { failed: false as const, value };
+    } catch (error) {
+      await tx`update broadcasts set error=${(error instanceof Error ? error.message : 'Dispatch failed').slice(0, 500)},next_dispatch_at=clock_timestamp()+interval '1 minute',updated_at=clock_timestamp() where id=${id}`;
+      return { failed: true as const, error };
+    }
   });
+  // A connection/commit failure propagates directly. Never start a fresh failure
+  // transaction after releasing the locks: recovery may already have advanced.
+  if (outcome?.failed) throw outcome.error;
+  return outcome?.value;
 }
 export async function broadcastStats(sql: Sql, tenant: Tenant, id: string) {
   return withTenant(sql, tenant, async (tx) => ({

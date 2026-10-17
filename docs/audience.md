@@ -33,3 +33,9 @@ Broadcast/contact lifecycle events use the transactional outbox and existing web
 ## Verification
 
 Local database tests cover atomic CSV import, opt-out preservation, numeric/fallback segments, template immutability, original-request idempotency, frozen audiences, DKIM unsubscribe headers, preference rechecks, throttling/cancellation and tenant/domain scope. Browser coverage uses the real dashboard with an explicit test API fixture. Real PostgreSQL/Redis/MinIO recovery and live SMTP/provider checks are configured separately and remain pending without Docker.
+
+## Broadcast recovery boundary
+
+The dispatcher holds the original organization-policy and broadcast locks through batch rollback and durable failure/backoff recording. An unexpected batch failure rolls back its message, recipient and outbox changes before recording a retry deadline. Another worker cannot advance between that rollback and backoff. Recipient-level policy pauses preserve earlier accepted recipients and leave the blocked recipient pending. Pacing and retry deadlines use current database time after processing, so lock waits and slow work do not shorten them.
+
+A lost connection or failed commit is recovered from committed state; the worker never opens a separate delayed failure transaction that can overwrite a newer batch or cancellation. Cancellation retains the same policy-before-broadcast lock order. Existing provider acceptance and ambiguous-message safeguards remain in the shared mail pipeline; a broadcast marked submitted is not evidence of final recipient delivery.

@@ -5,7 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
 import { beforeAll, beforeEach, afterAll, it, expect } from 'vitest';
 import { connectDatabase, withTenant } from '../../packages/db/src/index.js';
-import type { Sql } from '../../packages/db/src/index.js';
+import type { Sql, Transaction } from '../../packages/db/src/index.js';
 import type { Principal } from '../../packages/shared/src/index.js';
 import {
   submitEmails,
@@ -512,3 +512,60 @@ it.each(['domain drift', 'TLS outage', 'route TLS outage'] as const)(
     ]);
   },
 );
+
+it('commits unexpected broadcast failure backoff before another dispatcher can advance the batch', async () => {
+  await contact('first-recovery@example.net');
+  await contact('second-recovery@example.net');
+  const id = await broadcast(null, 1);
+  await scheduleBroadcast(sql, principal, id);
+  let competingResult: Awaited<ReturnType<typeof dispatchBroadcast>>;
+  let completedTransactions = 0;
+  const observed = new Proxy(sql, {
+    get(target, property, receiver) {
+      if (property !== 'begin') return Reflect.get(target, property, receiver);
+      return async (action: (tx: Transaction) => Promise<unknown>) => {
+        try {
+          return await sql.begin(action);
+        } finally {
+          // This is the first instant the original policy and broadcast locks are
+          // released. The old worker recorded failure in an unfenced later query.
+          completedTransactions++;
+          competingResult = await dispatchBroadcast(options, id, 'https://flare.example.test');
+        }
+      };
+    },
+  });
+  const failed = {
+    ...options,
+    sql: observed,
+    store: {
+      ...options.store,
+      put: async () => {
+        throw new Error('controlled storage outage');
+      },
+    },
+  };
+  await expect(dispatchBroadcast(failed, id, 'https://flare.example.test')).rejects.toThrow(
+    'controlled storage outage',
+  );
+  expect(completedTransactions).toBe(1);
+  expect(competingResult).toBeUndefined();
+  expect(
+    (
+      await sql`select status,error,next_dispatch_at>clock_timestamp() as deferred from broadcasts where id=${id}`
+    )[0],
+  ).toEqual({
+    status: 'scheduled',
+    error: 'controlled storage outage',
+    deferred: true,
+  });
+  expect(await sql`select * from messages where broadcast_id=${id}`).toHaveLength(0);
+  expect(await sql`select * from event_outbox where type='broadcast.started'`).toHaveLength(0);
+  await sql`update broadcasts set next_dispatch_at=clock_timestamp() where id=${id}`;
+  expect(await dispatchBroadcast(options, id, 'https://flare.example.test')).toEqual({
+    processed: 1,
+    finished: false,
+  });
+  expect((await sql`select error from broadcasts where id=${id}`)[0]?.error).toBeNull();
+  expect(await sql`select * from messages where broadcast_id=${id}`).toHaveLength(1);
+});

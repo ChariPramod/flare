@@ -4,6 +4,8 @@ No staging host, domain or DNS zone has been provisioned. These files prepare a 
 
 The owner resumed staging preparation on 2026-10-14; hosting budget, region, domain and access details are still pending. The earlier infrastructure baseline, `82ec8c9`, passed all five jobs in [CI 38613630116](https://github.com/ChariPramod/flare/actions/runs/38613630116), including isolated Caddy routing/header checks. Resume provisioning only after those infrastructure decisions and access are available.
 
+The current ordered engineering and deployment work is in the [staging execution plan](staging-execution-plan.md). Completed local hardening is separate from the public/provider/recovery gates required to open the pilot.
+
 Start with the [owner setup checklist](staging-owner-checklist.md) if you do not yet have hosting, a domain or DNS access. It includes a provider-support question and a handoff form without secrets.
 
 ## Provisioning checklist
@@ -100,6 +102,24 @@ docker compose -f docker-compose.yml -f docker-compose.staging.yml -f ops/stagin
 That file publishes native Postal SMTP on TCP 25. It does not publish Flare SMTP AUTH on 2525. Configure host/provider firewalls independently. Keep the chosen Compose file set in the deployment runbook; using a different set later changes the desired services and port bindings.
 
 ## Pilot acceptance and recovery
+
+### Public DNS and HTTPS verification
+
+After publishing the actual records and starting ingress, copy `ops/staging/public-manifest.example.json` to a private file outside the checkout. Replace its documentation-only IP and `.invalid` names with the intended static public IPv4 and the five actual hostnames. The unchanged example deliberately fails validation. The manifest has exactly `version: 1`, `ipv4`, and `hosts` containing `dashboard`, `api`, `ws`, `tracking` and `mail`; it accepts no URLs, credentials or arbitrary probe paths.
+
+Run from a machine outside the staging server:
+
+```sh
+node scripts/staging/verify-public.mjs --manifest /absolute/private/path/public-manifest.json
+```
+
+This unauthenticated, read-only command checks all five A records against the intended IPv4, rejects unplanned AAAA records for this IPv4-only profile, verifies the tracking CNAME points to the API hostname and checks that the IPv4 PTR matches the mail hostname. It then pins HTTPS connections to that validated IPv4, retaining hostname/SNI and ordinary certificate trust checks. A certificate needs at least seven days of remaining validity. Requests have an absolute five-second timeout, bounded headers/body and no redirects; response content and remote errors are never printed.
+
+The HTTPS probes expect dashboard `/login` to return HTML with status 200, API and tracking `/v1/domains` to return unauthenticated JSON with status 401, and websocket-host `/` to return 404. All four HTTPS hosts must deny `/health`, `/ready`, `/internal/metrics`, `/v1/internal` and `/api/internal` with 404. The tracking probe checks its API ingress mapping, not tracking-event delivery. The websocket probe checks the root boundary, not an authenticated Inbox connection. The mail hostname receives DNS/PTR checks only; Postal SMTP is not an HTTPS service.
+
+Output contains only fixed service/check/result codes and an explicit `unverified` list. Exit 0 means these public checks passed; exit 1 means invalid input or a failed check. Any DNS failure prevents HTTPS probes. Save the report privately with the deployment commit, time and probe source network. It does not certify SMTP ingress/egress, SPF/DKIM/DMARC, physical pools, callbacks, password/MFA, Inbox sessions, backups, alerts or reboot recovery. HTTP-to-HTTPS redirects remain a separate check. Supporting IPv6 later requires explicit expected addresses and actual IPv6 connection checks; do not suppress the AAAA failure to claim that coverage.
+
+### Real pilot and recovery gates
 
 Confirm public DNS and certificates from outside the host, HTTP-to-HTTPS redirects, authenticated password/MFA login, browser Inbox delivery/read state, and 404 responses for public internal/native administration routes. Verify the client-IP limiter with distinct clients and spoofed forwarding headers. Then create/verify the real domain, submit to controlled recipients, inspect delivered MIME/DKIM and provider delivery callbacks, test suppression/preferences, and receive a signed Postal RawMessage. Confirm that provider acceptance and final delivery remain distinct. Record DNS/provider evidence separately from local/CI simulations.
 

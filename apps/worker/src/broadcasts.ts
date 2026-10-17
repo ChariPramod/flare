@@ -15,22 +15,17 @@ export function startBroadcastWorker(
     'broadcast-dispatch',
     async (job) =>
       withJob('broadcasts', job.data.id, undefined, undefined, async () => {
-        try {
-          await dispatchBroadcast(
-            {
-              sql,
-              store: objectStore(),
-              transports: configuredTransports(),
-              encryptionKey,
-              trackingKey,
-            },
-            job.data.id,
-            process.env.WEB_ORIGIN ?? 'http://localhost:3000',
-          );
-        } catch (error) {
-          await sql`update broadcasts set error=${(error instanceof Error ? error.message : 'Dispatch failed').slice(0, 500)},next_dispatch_at=now()+interval '1 minute' where id=${job.data.id} and status in ('scheduled','sending')`;
-          throw error;
-        }
+        await dispatchBroadcast(
+          {
+            sql,
+            store: objectStore(),
+            transports: configuredTransports(),
+            encryptionKey,
+            trackingKey,
+          },
+          job.data.id,
+          process.env.WEB_ORIGIN ?? 'http://localhost:3000',
+        );
       }),
     { connection, concurrency: 4 },
   );
