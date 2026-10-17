@@ -364,7 +364,8 @@ describe('deployment backup encryption and archive boundaries', () => {
       (await readFile(join(dir, 'two'))).subarray(8, 20),
     );
     await decryptFile(join(dir, 'one'), join(dir, 'plain'), key, 'one');
-    expect(await readFile(join(dir, 'plain'))).toEqual(await readFile(input));
+    // Native byte equality avoids enumerating a million Buffer entries in the matcher.
+    expect((await readFile(join(dir, 'plain'))).equals(await readFile(input))).toBe(true);
     expect((await lstat(join(dir, 'plain'))).mode & 0o777).toBe(0o600);
   });
   it.each(['wrong-key', 'tamper', 'wrong-artifact'])(

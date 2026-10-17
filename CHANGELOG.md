@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Compare the encrypted backup roundtrip's full 1 MiB result using native exact byte equality, avoiding a costly per-property assertion that exceeded the CI deadline. Preserve the fixture and cryptographic checks; no production behavior changes.
+
 - Add maintenance-only encrypted cold deployment backups and fresh, isolated store recovery with exact image identities, runtime/configuration drift checks, authenticated manifests, strict archive validation and owner-held keys. Preserve source volumes and keep delivery stopped for review. Add a real disposable encrypted recovery rehearsal, bounded worker operational metrics, ten alert rules with firing/recovery fixtures, and recovery/alert runbooks. Keep off-host custody, real notifications and provider reconciliation as explicit staging gates; verification details are recorded in `PROGRESS.md`.
 
 - Keep broadcast batch rollback and failure/backoff under the original policy/broadcast locks; remove the worker's delayed failure writer and use completion-time pacing. Add PostgreSQL contention/cancellation/disconnect regressions. Add an explicit read-only staging public DNS/PTR/HTTPS verifier with bounded requests, pinned addresses and certificate checks, plus the staged deployment/operations/pilot plan. Keep real provider, backup and pilot gates separate from local evidence. Local verification passed 479 unit/database tests, 25 evals, 63 integration tests, 23 browser contracts, nine live flows, Caddy boundary checks and full Compose/load/upgrade/restore.
