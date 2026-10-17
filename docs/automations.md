@@ -11,7 +11,7 @@ The dashboard provides a sequence canvas, step configuration, activation, test e
 A definition has `trigger`, `entry` and at most 50 uniquely identified, reachable steps. Cycles are rejected. A null successor finishes the run.
 
 - `send_email`: verified `from`, `template_id`, `template_version`, `next`. Template HTML must include `{{{FLARE_UNSUBSCRIBE_URL}}}`. Variables include property fallbacks, contact names/email, `contact` and triggering `event` data. Both unsubscribe headers are DKIM-signed. Production preference origins must use HTTPS.
-- `wait`: `seconds` (1 to 31,536,000), `next`. The persisted deadline starts when this step is first entered.
+- `wait`: `seconds` (1 to 31,536,000), `next`. The persisted deadline starts when this step is first entered, after the worker acquires policy/run/contact locks. Time blocked before entry does not shorten the delay. Entry and deadline use one database wall-clock instant; retries preserve an already initialized window.
 - `wait_for_event`: `event`, `timeout_seconds`, `next`, `on_timeout`. Matches events for the same contact/environment created after entry and at or before the deadline. Older events cannot satisfy the wait. An event received during a worker outage can still satisfy it if its persisted timestamp falls within that window.
 - `condition`: bounded JSON Logic over `contact` and `event`; successors `then` and `else`. Only scalar comparisons, Boolean operators, `in` and `var` are permitted. No custom operations or loops.
 
@@ -29,4 +29,4 @@ Contact deletion or opt-out cancels future steps; the mail pipeline rechecks pre
 
 ## Verification limits
 
-Local PostgreSQL-protocol tests cover event deduplication/conflicts, immutable run snapshots, waits, event timing, timeout branches, recipient opt-out, failure history, forbidden sender scope, and cross-tenant access. A Chrome test covers editing a sequence, triggering a fixture event and canceling its run. Real multi-connection PostgreSQL/Redis/MinIO recovery coverage is added to the container harness but remains unrun until Docker is available.
+Local PostgreSQL-protocol tests cover event deduplication/conflicts, immutable run snapshots, waits, event timing, timeout branches, recipient opt-out, failure history, forbidden sender scope, and cross-tenant access. A Chrome test covers editing a sequence, triggering a fixture event and canceling its run. The disposable container harness exercises multi-connection PostgreSQL lock races and database connection loss alongside Redis/MinIO recovery. See [the acceptance ledger](acceptance.md) and [progress](../PROGRESS.md) for completed runs and external-provider boundaries.

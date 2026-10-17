@@ -175,8 +175,13 @@ export async function advanceAutomation(options: PipelineOptions, id: string) {
         if (step.type === 'wait' || step.type === 'wait_for_event') {
           if (!record || (record.status === 'failed' && !record.wake_at)) {
             const seconds = step.type === 'wait' ? step.seconds : step.timeout_seconds;
-            await tx`insert into automation_steps(org_id,environment_id,run_id,step_id,type,status,wake_at) values(${tenant.orgId},${tenant.environmentId},${id},${step.id},${step.type},'waiting',now()+${seconds}*interval '1 second') on conflict(org_id,environment_id,run_id,step_id) do update set status='waiting',started_at=excluded.started_at,wake_at=excluded.wake_at,error=null,finished_at=null`;
-            await tx`update automation_runs set status='waiting',next_step_at=now()+${seconds}*interval '1 second',attempts=0,error=null,updated_at=now() where id=${id}`;
+            // Lock contention is not time spent in the wait. Capture one database wall-clock
+            // instant after the locks, preserving its precision for both ends of the window.
+            await tx`with entered as materialized (select clock_timestamp() as at)
+              insert into automation_steps(org_id,environment_id,run_id,step_id,type,status,started_at,wake_at)
+              select ${tenant.orgId},${tenant.environmentId},${id},${step.id},${step.type},'waiting',at,at+${seconds}*interval '1 second' from entered
+              on conflict(org_id,environment_id,run_id,step_id) do update set status='waiting',started_at=excluded.started_at,wake_at=excluded.wake_at,error=null,finished_at=null`;
+            await tx`update automation_runs set status='waiting',next_step_at=(select wake_at from automation_steps where run_id=${id} and step_id=${step.id}),attempts=0,error=null,updated_at=clock_timestamp() where id=${id}`;
             return { status: 'waiting' };
           }
           if (step.type === 'wait_for_event') {

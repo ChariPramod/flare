@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 import { connectDatabase, toJson } from '@flare/db';
 import type { Sql } from '@flare/db';
-import { generateDomain } from '@flare/mail';
+import { generateDomain, lockSendingPolicy } from '@flare/mail';
 import type { PipelineOptions } from '@flare/mail';
 import { automationSchema } from '@flare/shared';
 import type { Principal } from '@flare/shared';
@@ -160,6 +160,87 @@ async function setup() {
   const [run] = await observer`select id from automation_runs where event_id=${event.id}`;
   return { id: String(run!.id), template };
 }
+it.each([
+  ['wait', 'policy'],
+  ['wait', 'contact'],
+  ['wait_for_event', 'policy'],
+  ['wait_for_event', 'contact'],
+] as const)('starts %s after acquiring the %s lock', async (type, lock) => {
+  const { id } = await setup();
+  const [run] = await observer`select contact_id from automation_runs where id=${id}`;
+  const definition = automationSchema.parse({
+    trigger: 'signed_up',
+    entry: 'pause',
+    steps: [
+      type === 'wait'
+        ? { id: 'pause', name: 'Pause', type, seconds: 3600, next: null }
+        : {
+            id: 'pause',
+            name: 'Pause',
+            type,
+            event: 'purchased',
+            timeout_seconds: 3600,
+            next: null,
+            on_timeout: null,
+          },
+    ],
+  });
+  await observer`update automation_runs set definition=${observer.json(toJson(definition))},current_step='pause' where id=${id}`;
+  const held = gate(),
+    release = gate();
+  const holder = outcome(
+    first.begin(async (tx) => {
+      if (lock === 'policy') await lockSendingPolicy(tx, org);
+      else await tx`select id from contacts where id=${run!.contact_id} for update`;
+      held.release();
+      await release.promise;
+    }),
+  );
+  let worker: ReturnType<typeof outcome> | undefined;
+  let boundary: string | undefined;
+  try {
+    await entered(held, holder);
+    worker = outcome(advanceAutomation(options(second), id));
+    await blocked();
+    // Persist an event while the worker is blocked, before the wait actually starts.
+    // The contact-lock fixture skips this because event insertion needs its FK lock.
+    if (type === 'wait_for_event' && lock === 'policy')
+      await createAutomationEvent(observer, principal, {
+        contact_id: String(run!.contact_id),
+        name: 'purchased',
+        external_id: 'before-entry',
+      });
+    const [clock] = await observer`select clock_timestamp()::text as boundary`;
+    boundary = String(clock!.boundary);
+  } finally {
+    release.release();
+    await holder;
+    if (worker) await worker;
+  }
+  expect((await holder).error).toBeUndefined();
+  expect(worker && (await worker).error).toBeUndefined();
+  const [window] = await observer`
+    select s.started_at>=${boundary!}::timestamptz as entered_after_lock,
+      s.wake_at-s.started_at=interval '3600 seconds' as full_duration,
+      r.next_step_at=s.wake_at as same_deadline
+    from automation_steps s join automation_runs r on r.id=s.run_id where r.id=${id}`;
+  expect(window).toEqual({ entered_after_lock: true, full_duration: true, same_deadline: true });
+  if (type === 'wait_for_event' && lock === 'policy') {
+    await fanOutAutomationEvents(observer);
+    expect(await advanceAutomation(options(second), id)).toEqual({ status: 'waiting' });
+    const event = await createAutomationEvent(observer, principal, {
+      contact_id: String(run!.contact_id),
+      name: 'purchased',
+      external_id: 'after-entry',
+    });
+    await fanOutAutomationEvents(observer);
+    await advanceAutomation(options(second), id);
+    expect(
+      (await observer`select matched_event_id from automation_steps where run_id=${id}`)[0]
+        ?.matched_event_id,
+    ).toBe(event.id);
+  }
+});
 it('persists one transient failure before a blocked competing worker can retry the step', async () => {
   const { id } = await setup();
   const started = gate(),

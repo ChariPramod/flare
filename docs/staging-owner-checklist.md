@@ -2,6 +2,8 @@
 
 No hosting account, server, domain or DNS zone is set up yet. This checklist gets the first **self-hosted Postal + Email + Inbox + password/MFA** pilot ready. Completing it does not purchase or deploy anything automatically. Start with steps 1–3; the technical work follows once the decisions and access are available.
 
+The [staging shopping list](staging-shopping-list.md) records the proposed setup, dated USD prices, purchase links and the provider support message. The owner is handling accounts; the proposal is not a purchase or deployment approval.
+
 ## 1. Choose the budget, location and pilot scope
 
 - [ ] Set a monthly spending ceiling covering the server, static IPv4, storage, backups and traffic, plus a separate domain-registration allowance. Obtain current quotes before committing; this guide makes no price estimate.
