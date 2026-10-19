@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./dashboard-forwarding": {
+      "types": "./dist/dashboard-forwarding.d.ts",
+      "default": "./dist/dashboard-forwarding.js"
     }
   },
   "scripts": {

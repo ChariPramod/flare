@@ -35,6 +35,7 @@ import type { Action, Role } from '@flare/shared';
 import { config, parse, redis, sql } from './context.js';
 import type { AuthRequest } from './context.js';
 import { withMfaProof } from './mfa-proof.js';
+import { verifiedDashboardClientAddress } from './dashboard-forwarding.js';
 
 export const Public = () => SetMetadata('public', true);
 export const Access = (action: Action | 'send') => SetMetadata('access', action);
@@ -83,7 +84,7 @@ export class AuthGuard implements CanActivate {
       if (req.path.toLowerCase().startsWith('/v1/auth/'))
         await enforceLimit(
           res,
-          `auth:${hashToken(req.ip ?? 'unknown')}`,
+          `auth:${hashToken(verifiedDashboardClientAddress(req) ?? req.ip ?? 'unknown')}`,
           Number(process.env.AUTH_RATE_LIMIT ?? 0.166667),
           Number(process.env.AUTH_RATE_BURST ?? 10),
         );

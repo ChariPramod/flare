@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add the signed-forwarding foundation for a Vercel dashboard: explicit HTTPS origins, disabled previews by default, validated platform client IPs, exact request signatures and atomic Redis replay protection. Preserve session/tenant/operator authorization and valid sessions across forwarding outages. Bound Vercel proxy payloads to 4 MiB and keep native Inbox explicitly unavailable there until its private gateway exists. Add real HTTP/Redis and actual Nest acceptance coverage; direct transfers and the complete split-host deployment remain pending.
+
+- Give integration MinIO builds separate image names so they cannot replace the deployment/acceptance images during backup validation. Preserve strict backup image-drift checks and add precise, credential-safe encrypted-rehearsal failure phases.
+
+- Redact reusable Inbox subscriber credentials from request logs and sanitize historical log bodies on reads. Keep Inbox-token and log API payloads metadata-only, including nested serialized copies, while preserving tenant filtering, correlation, timestamps and normal Inbox authentication. Add reproducing HTTP/controller regressions and full-stack checks for persisted and historical records; existing stored bytes and backups are not rewritten.
+
 - Add a live API-backed Overview landing page, responsive keyboard-accessible navigation and mobile publication access. Separate received email from the in-app Inbox, fix independent Inbound/forwarding pagination and shrinking table pages, and preserve drafts and idempotency after send failures. Expose authenticated runtime email limits for bounded attachment prechecks; keep approval/limits unavailable after refresh failures and uncertain acceptance visible after partial recipient feedback. Save the Vercel implementation plan while retaining PostgreSQL and the existing deployment. Verification is recorded in `PROGRESS.md`; split-host Vercel support is a subsequent checkpoint.
 
 - Pin disposable acceptance browsers and their generated dashboard/Inbox origins to IPv4 loopback, matching Compose port bindings. Reject conflicting browser targets and incomplete fixtures before launching, so a separate IPv6 localhost app cannot receive test credentials. Preserve explicit external targets for ordinary live-deployment tests.

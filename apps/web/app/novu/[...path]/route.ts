@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { dashboardBackend, DashboardProxyError } from '../../../lib/dashboard-backend';
+export const runtime = 'nodejs';
 // Only the public subscriber Inbox surface is proxied. Novu administration stays internal.
 async function handler(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
@@ -10,10 +12,25 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
     path.some((part) => !part || /[\\/?.#]/.test(part))
   )
     return NextResponse.json({ message: 'Inbox route not found' }, { status: 404 });
-  if (
-    !['GET', 'HEAD'].includes(req.method) &&
-    req.headers.get('origin') !== (process.env.WEB_ORIGIN ?? req.nextUrl.origin)
-  )
+  let backend: ReturnType<typeof dashboardBackend>;
+  try {
+    backend = dashboardBackend(req);
+    if (backend.mode === 'vercel')
+      throw new DashboardProxyError(
+        'Dashboard configuration required: the Vercel Inbox gateway is not available yet.',
+      );
+  } catch (error) {
+    return NextResponse.json(
+      {
+        message:
+          error instanceof DashboardProxyError
+            ? error.message
+            : 'Dashboard configuration required.',
+      },
+      { status: error instanceof DashboardProxyError ? error.status : 503 },
+    );
+  }
+  if (!['GET', 'HEAD'].includes(req.method) && req.headers.get('origin') !== backend.expectedOrigin)
     return NextResponse.json({ message: 'Invalid origin' }, { status: 403 });
   const authorization = req.headers.get('authorization');
   const body = ['GET', 'HEAD'].includes(req.method) ? undefined : await req.text();
@@ -33,17 +50,15 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
           { message: 'Authenticated subscriber hash required' },
           { status: 401 },
         );
-      const access = await fetch(
-        `${process.env.FLARE_API_URL ?? 'http://localhost:4000'}/v1/subscribers/${encodeURIComponent(subscriberId)}/inbox-token`,
+      const access = await backend.fetch(
+        `/v1/subscribers/${encodeURIComponent(subscriberId)}/inbox-token`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
             'x-org-id': req.cookies.get('flare_org')?.value ?? '',
             'x-environment-id': req.cookies.get('flare_environment')?.value ?? '',
           },
-          cache: 'no-store',
           signal: AbortSignal.timeout(15000),
-          redirect: 'error',
         },
       );
       if (!access.ok)

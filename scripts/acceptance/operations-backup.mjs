@@ -19,6 +19,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { safeRestoreFailure } from './restore-diagnostics.mjs';
 
 const [root, project] = process.argv.slice(2);
 assert.match(root ?? '', /^\/.+\/flare-acceptance-[^/]+$/);
@@ -238,9 +239,10 @@ try {
   const apiImage = apiInfo.Image;
   // The preceding logical drill leaves fixture DNS/Mailpit running; stop the entire
   // guarded project before bringing back only stores for the independent capture.
+  phase = 'source-stop';
   docker(...source, 'stop', '--timeout', '120');
   stopped();
-  phase = 'source-evidence';
+  phase = 'source-stores-start';
   docker(
     ...source,
     'up',
@@ -257,6 +259,7 @@ try {
     'novu-mongodb',
     'postal-mariadb',
   );
+  phase = 'source-mongo';
   mongo(source, 'capture');
   const verify = (network, env, mode) =>
     docker(
@@ -278,7 +281,9 @@ try {
       'scripts/acceptance/restore-manifest.mjs',
       mode,
     );
+  phase = 'source-manifest';
   verify(`${project}_default`, join(root, '.env'), 'capture');
+  phase = 'source-postal';
   const postal = createHash('sha256').update(postalDump(source)).digest('hex');
   const configFingerprint = (name) =>
     docker(
@@ -295,6 +300,7 @@ try {
       '-ec',
       'cd /snapshot; find . -type f -exec sha256sum {} \\; | sort',
     );
+  phase = 'source-postal-config';
   const postalConfig = configFingerprint(project);
   phase = 'encrypted-backup';
   assert.equal(operation('plan', ...sourceOptions).status, 'plan');
@@ -415,6 +421,8 @@ try {
   console.error(
     `Encrypted cold restore rehearsal failed during ${phase}; private evidence will be removed. No source delivery processes were restarted.`,
   );
+  const diagnostic = safeRestoreFailure(join(diagnostics, 'failure.json'));
+  if (diagnostic) console.error(diagnostic);
   process.exitCode = 1;
 } finally {
   try {

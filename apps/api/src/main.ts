@@ -36,6 +36,7 @@ import { requestLogs, flushRequestLogs } from './request-logs.js';
 import { OperatorController } from './operator.js';
 import { OperatorGuard } from './operator-auth.js';
 import { OperatorReadinessController } from './operator-readiness.js';
+import { createDashboardForwardingMiddleware } from './dashboard-forwarding.js';
 
 startTelemetry();
 const readinessStore = objectStore();
@@ -99,6 +100,12 @@ app.useBodyParser('json', {
   limit: process.env.API_BODY_LIMIT ?? '40mb',
   type: ['application/json', 'text/plain'],
 });
+app.use(
+  createDashboardForwardingMiddleware({
+    secret: process.env.FLARE_DASHBOARD_PROXY_SECRET || undefined,
+    redis,
+  }),
+);
 app.use(helmet());
 app.enableCors({ origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000', credentials: true });
 const document = JSON.parse(

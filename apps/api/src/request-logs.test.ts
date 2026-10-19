@@ -213,3 +213,114 @@ it('omits rendered publication diffs from successful GET response logs', async (
     await once(server, 'close');
   }
 });
+
+it.each([
+  { path: '/v1/subscribers/customer-17/inbox-token', serialized: false },
+  { path: '/V1/SUBSCRIBERS/customer-17/INBOX-TOKEN/', serialized: true },
+])(
+  'omits reusable Inbox credentials from persisted logs for $path',
+  async ({ path, serialized }) => {
+    const hash = 'a7'.repeat(32);
+    const app = express();
+    app.use(requestLogs);
+    app.use((req, _res, next) => {
+      (req as AuthRequest).principal = {
+        orgId: 'org',
+        environmentId: 'env',
+        actorId: 'key',
+        kind: 'api_key',
+        role: 'developer',
+        permission: 'full_access',
+        production: false,
+      };
+      next();
+    });
+
+    app.get('/v1/subscribers/:id/inbox-token', (_req, res) => {
+      const value = { subscriberId: 'customer-17', subscriberHash: hash, proof: hash };
+      if (serialized) res.type('json').send(JSON.stringify(value));
+      else res.json(value);
+    });
+    app.get('/v1/subscribers/:id', (_req, res) =>
+      res.json({ subscriberId: 'customer-17', status: 'active', subscriber_hash: hash }),
+    );
+    const server = app.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    try {
+      const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+      const response = await fetch(`${origin}${path}?proof=${hash}`);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ subscriberHash: hash });
+      await fetch(`${origin}/v1/subscribers/customer-17`).then((r) => r.text());
+      await flushRequestLogs();
+      expect(records).toHaveLength(2);
+      expect(records[0]!.slice(1, 8)).toEqual([
+        'org',
+        'env',
+        'key',
+        'key',
+        'GET',
+        '/v1/subscribers/:id/inbox-token',
+        200,
+      ]);
+      expect(records[0]![8]).toEqual(expect.any(Number));
+      expect(records[0]![9]).toMatch(/^[a-f0-9]{32}$/);
+      expect(response.headers.get('x-request-id')).toBe(records[0]![0]);
+      expect(JSON.stringify({ records, structured: logger.info.mock.calls })).not.toContain(hash);
+      expect(records[0]![10]).toEqual({
+        body: '[INBOX CREDENTIAL REDACTED]',
+        query: '[INBOX CREDENTIAL REDACTED]',
+      });
+      expect(records[0]![11]).toBe('[INBOX CREDENTIAL REDACTED]');
+      expect(records[1]![11]).toEqual({
+        subscriberId: 'customer-17',
+        status: 'active',
+        subscriber_hash: '[REDACTED]',
+      });
+    } finally {
+      server.close();
+      await once(server, 'close');
+    }
+  },
+);
+
+it.each(['/v1/logs', '/V1/LOGS/previous-request/'])(
+  'keeps log API payloads out of new records for %s without changing the response',
+  async (path) => {
+    const hash = 'b8'.repeat(32);
+    const responseBody = {
+      data: [
+        {
+          path: '/v1/subscribers/:id/inbox-token',
+          response_body: JSON.stringify({ subscriberHash: hash }),
+        },
+      ],
+    };
+    const app = express();
+    app.use(requestLogs);
+    app.get(['/v1/logs', '/v1/logs/:id'], (_req, res) => res.json(responseBody));
+    const server = app.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${(server.address() as AddressInfo).port}${path}?diagnostic=${hash}`,
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual(responseBody);
+      await flushRequestLogs();
+      expect(records).toHaveLength(1);
+      expect(records[0]![5]).toBe('GET');
+      expect(records[0]![7]).toBe(200);
+      expect(response.headers.get('x-request-id')).toBe(records[0]![0]);
+      expect(records[0]![10]).toEqual({
+        body: '[LOG CONTENT REDACTED]',
+        query: '[LOG CONTENT REDACTED]',
+      });
+      expect(records[0]![11]).toBe('[LOG CONTENT REDACTED]');
+      expect(JSON.stringify({ records, structured: logger.info.mock.calls })).not.toContain(hash);
+    } finally {
+      server.close();
+      await once(server, 'close');
+    }
+  },
+);

@@ -17,7 +17,14 @@ import type { RawBodyRequest } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { withTenant, toJson } from '@flare/db';
-import { decrypt, encrypt, webhookSecret, verifyWebhook, csvCell } from '@flare/shared';
+import {
+  decrypt,
+  encrypt,
+  webhookSecret,
+  verifyWebhook,
+  csvCell,
+  redactRequestLogBodies,
+} from '@flare/shared';
 import { mirrorEngineEvent, replayWebhook, webhookUrl } from '@flare/platform';
 import { Access, Public } from './auth.js';
 import { config, parse, sql } from './context.js';
@@ -62,6 +69,13 @@ const logQuery = pages.extend({
   to: z.string().datetime({ offset: true }).optional(),
 });
 const endpointFields = 'id, name, url, events, enabled, disabled_reason, created_at, updated_at';
+function redactLog(row: Record<string, unknown>): Record<string, unknown> {
+  // Keep metadata (including database Dates) intact; only payloads are bounded/redacted.
+  return {
+    ...row,
+    ...redactRequestLogBodies(String(row.path), row.request_body, row.response_body),
+  };
+}
 @Controller('v1')
 export class OperationsController {
   @Get('webhooks') async endpoints(@Req() req: AuthRequest) {
@@ -222,16 +236,15 @@ export class OperationsController {
     return withTenant(sql, req.principal, async (tx) => {
       const [row] = await tx`select * from request_logs where id=${parse(uuid, id)}`;
       if (!row) throw new NotFoundException();
-      return row;
+      return redactLog(row);
     });
   }
   private logRows(req: AuthRequest, q: z.infer<typeof logQuery>, limit: number) {
-    return withTenant(
-      sql,
-      req.principal,
-      (tx) =>
-        tx`select * from request_logs where (id::text ilike ${`%${q.q}%`} or path ilike ${`%${q.q}%`}) and (${q.status ?? null}::int is null or status=${q.status ?? null}) and (${q.status_class ?? null}::int is null or status/100=${q.status_class ?? null}) and (${q.method ?? null}::text is null or method=${q.method ?? null}) and (${q.from ?? null}::timestamptz is null or created_at>=${q.from ?? null}::timestamptz) and (${q.to ?? null}::timestamptz is null or created_at<=${q.to ?? null}::timestamptz) order by created_at desc limit ${limit} offset ${(q.page - 1) * q.limit}`,
-    );
+    return withTenant(sql, req.principal, async (tx) => {
+      const rows =
+        await tx`select * from request_logs where (id::text ilike ${`%${q.q}%`} or path ilike ${`%${q.q}%`}) and (${q.status ?? null}::int is null or status=${q.status ?? null}) and (${q.status_class ?? null}::int is null or status/100=${q.status_class ?? null}) and (${q.method ?? null}::text is null or method=${q.method ?? null}) and (${q.from ?? null}::timestamptz is null or created_at>=${q.from ?? null}::timestamptz) and (${q.to ?? null}::timestamptz is null or created_at<=${q.to ?? null}::timestamptz) order by created_at desc limit ${limit} offset ${(q.page - 1) * q.limit}`;
+      return rows.map(redactLog);
+    });
   }
   @Public() @Post('events/novu/:environment') async engineEvent(
     @Req() req: RawBodyRequest<Request>,

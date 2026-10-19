@@ -31,6 +31,8 @@ Use shared components for these improvements so other modules benefit without re
 
 ## Checkpoint 2 — Make split hosting safe
 
+Execute this checkpoint in reviewable parts: **2a**, signed forwarding and deployment configuration validation; **2b**, direct browser transfers and the private Inbox gateway; **2c**, split-host ingress/recovery configuration and deployment acceptance. Part 2a alone does not establish complete Vercel support. Current settings and explicit remaining gates are recorded in [the Vercel guide](vercel.md).
+
 ### Vercel configuration and authentication
 
 Configure the existing `apps/web` workspace as the Vercel project, using the pinned Node/pnpm versions, root lockfile and current Monaco preparation/build script. Vercel supports deploying individual applications from a monorepo. [Vercel monorepo guidance](https://vercel.com/docs/monorepos)

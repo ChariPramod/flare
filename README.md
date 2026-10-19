@@ -53,6 +53,8 @@ See [email pipeline operations and API behavior](docs/email-pipeline.md) for tra
 
 See [dashboard setup and browser tests](docs/dashboard.md) for authentication, Inbox endpoints, the workflow canvas and live acceptance configuration. Local browser contract tests run with `pnpm test:e2e`; `pnpm test:e2e:live` requires the real stack and a verified sender.
 
+The [dashboard/Vercel plan](docs/dashboard-vercel-plan.md) preserves the monorepo, PostgreSQL and password/MFA authentication. [Vercel configuration](docs/vercel.md) documents the signed-proxy foundation and the remaining direct-transfer, private Inbox gateway and split-host deployment gates. Complete Vercel hosting is not yet verified.
+
 See [webhooks, logs and metrics operations](docs/operations.md) for receiver signatures, retries and replay, internal destination policy, request-log retention and metric definitions.
 
 See [audience, templates and broadcasts](docs/audience.md) for CSV mapping, preferences, immutable template versions, throttling and cancellation semantics.

@@ -9,6 +9,7 @@
     "dev": "node scripts/prepare-monaco.mjs && next dev -H 0.0.0.0"
   },
   "dependencies": {
+    "@flare/shared": "workspace:*",
     "@hookform/resolvers": "^5.9.1",
     "@monaco-editor/react": "^4.7.0",
     "@novu/react": "3.19.0",

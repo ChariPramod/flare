@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
-import { clientAddressHeaders } from '../../../lib/client-address';
-const api = () => process.env.FLARE_API_URL ?? 'http://localhost:4000';
+import { dashboardBackend, DashboardProxyError } from '../../../lib/dashboard-backend';
+export const runtime = 'nodejs';
 const names = { token: 'flare_session', org: 'flare_org', env: 'flare_environment' };
 type SessionResponse = {
   token: string;
@@ -10,7 +10,6 @@ type SessionResponse = {
 };
 const options = {
   httpOnly: true,
-  secure: (process.env.WEB_ORIGIN ?? '').startsWith('https:'),
   sameSite: 'lax' as const,
   path: '/',
   maxAge: 43200,
@@ -19,9 +18,24 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
   const { path } = await context.params;
   if (path.some((p) => !p || p === '.' || p === '..' || p.includes('/') || p.includes('\\')))
     return NextResponse.json({ message: 'Invalid API path' }, { status: 400 });
+  let backend: ReturnType<typeof dashboardBackend>;
+  try {
+    backend = dashboardBackend(req);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        message:
+          error instanceof DashboardProxyError
+            ? error.message
+            : 'Dashboard configuration required.',
+      },
+      { status: error instanceof DashboardProxyError ? error.status : 503 },
+    );
+  }
+  const cookieOptions = { ...options, secure: backend.secureCookies };
   if (!['GET', 'HEAD'].includes(req.method)) {
     const origin = req.headers.get('origin');
-    const expected = process.env.WEB_ORIGIN ?? req.nextUrl.origin;
+    const expected = backend.expectedOrigin;
     if (origin !== expected)
       return NextResponse.json(
         { message: 'Request origin does not match this dashboard' },
@@ -31,7 +45,6 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
   const jar = await cookies();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...clientAddressHeaders(req.headers, process.env.FLARE_FORWARD_CLIENT_IP === 'true'),
   };
   const token = jar.get(names.token)?.value;
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -48,8 +61,11 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
   let body: string | undefined;
   if (!['GET', 'HEAD'].includes(req.method)) {
     body = await req.text();
-    if (body.length > 40 * 1024 * 1024)
-      return NextResponse.json({ message: 'Request too large' }, { status: 413 });
+    if (Buffer.byteLength(body) > backend.maxRequestBytes)
+      return NextResponse.json(
+        { message: 'This request exceeds the dashboard transfer limit.' },
+        { status: 413 },
+      );
   }
   try {
     if (joined === 'session/switch') {
@@ -62,34 +78,36 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
           { message: 'Select an organization and environment' },
           { status: 400 },
         );
-      const response = await fetch(`${api()}/v1/auth/me`, {
+      const response = await backend.fetch('/v1/auth/me', {
         headers: {
           ...headers,
           'x-org-id': selection.orgId!,
           'x-environment-id': selection.environmentId!,
         },
-        cache: 'no-store',
         signal: AbortSignal.timeout(15000),
       });
       if (!response.ok)
         return new NextResponse(await response.text(), {
           status: response.status,
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(response.headers.has('retry-after')
+              ? { 'Retry-After': response.headers.get('retry-after')! }
+              : {}),
+          },
         });
-      jar.set(names.org, selection.orgId!, options);
-      jar.set(names.env, selection.environmentId!, options);
+      jar.set(names.org, selection.orgId!, cookieOptions);
+      jar.set(names.env, selection.environmentId!, cookieOptions);
       return NextResponse.json(await response.json());
     }
-    const endpoint = joined === 'session' ? 'auth/me' : joined;
+    const endpoint = joined === 'session' ? 'auth/me' : path.map(encodeURIComponent).join('/');
     if (req.headers.get('idempotency-key'))
       headers['Idempotency-Key'] = req.headers.get('idempotency-key')!;
     if (req.headers.get('traceparent')) headers.traceparent = req.headers.get('traceparent')!;
-    const response = await fetch(`${api()}/v1/${endpoint}${req.nextUrl.search}`, {
+    const response = await backend.fetch(`/v1/${endpoint}${req.nextUrl.search}`, {
       method: req.method,
       headers,
       body,
-      cache: 'no-store',
-      redirect: 'error',
       signal: AbortSignal.timeout(120000),
     });
     const text = await response.text();
@@ -98,25 +116,31 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
       const organization = data.organizations[0];
       const environment = organization?.environments[0];
       if (!organization || !environment) {
-        const operator = await fetch(`${api()}/v1/operator/session`, {
+        const operator = await backend.fetch('/v1/operator/session', {
           headers: { Authorization: `Bearer ${data.token}` },
-          cache: 'no-store',
-          redirect: 'error',
           signal: AbortSignal.timeout(15000),
         });
+        if (operator.status === 503 && operator.headers.has('x-flare-proxy-error'))
+          return new NextResponse(await operator.text(), {
+            status: 503,
+            headers: {
+              'Content-Type': 'application/json',
+              'Retry-After': operator.headers.get('retry-after') ?? '1',
+            },
+          });
         if (!operator.ok)
           return NextResponse.json(
             { message: 'This account has no organization access' },
             { status: 403 },
           );
-        jar.set(names.token, data.token, options);
+        jar.set(names.token, data.token, cookieOptions);
         jar.delete(names.org);
         jar.delete(names.env);
         return NextResponse.json({ organizations: [], operator_only: true });
       }
-      jar.set(names.token, data.token, options);
-      jar.set(names.org, organization.id, options);
-      jar.set(names.env, environment.id, options);
+      jar.set(names.token, data.token, cookieOptions);
+      jar.set(names.org, organization.id, cookieOptions);
+      jar.set(names.env, environment.id, cookieOptions);
       const { token: _token, ...safe } = data;
       return NextResponse.json(safe);
     }
@@ -150,10 +174,15 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
           : {}),
       },
     });
-  } catch {
+  } catch (error) {
     return NextResponse.json(
-      { message: 'Flare API is unavailable. Check the API service and retry.' },
-      { status: 503 },
+      {
+        message:
+          error instanceof DashboardProxyError
+            ? error.message
+            : 'Flare API is unavailable. Check the API service and retry.',
+      },
+      { status: error instanceof DashboardProxyError ? error.status : 503 },
     );
   }
 }

@@ -39,6 +39,7 @@ bash scripts/acceptance/upgrade-rehearsal.sh "$acceptance_dir" "$project"
 "${compose[@]}" exec -T flare-api pnpm seed
 "${compose[@]}" exec -T flare-api node scripts/acceptance/auth.mjs
 check_independent local-oidc "${compose[@]}" exec -T flare-api node scripts/acceptance/oidc.mjs
+check_independent dashboard-forwarding "${compose[@]}" exec -T flare-api node scripts/acceptance/dashboard-forwarding.mjs
 "${compose[@]}" exec -T flare-api node scripts/acceptance/scenarios.mjs
 "${compose[@]}" exec -T flare-api node scripts/acceptance/postal-native.mjs prepare
 check_independent postal-native-runtime "${compose[@]}" exec -T -u root -e FLARE_ACCEPTANCE=true postal bundle exec rails runner /acceptance-postal-native.rb

@@ -1,5 +1,5 @@
 const sensitive =
-  /^(authorization|cookie|set-cookie|password|pass|token|secret|credentials|code|mfa_code|.*api[_-]?key.*|.*cipher.*|.*secret.*|.*password.*|.*token.*|recovery[_-]?codes|private[_-]?key|dkim[_-]?private.*|uri|source|content)$/i;
+  /^(authorization|cookie|set-cookie|password|pass|token|secret|credentials|code|mfa_code|subscriber[_-]?hash|.*api[_-]?key.*|.*cipher.*|.*secret.*|.*password.*|.*token.*|recovery[_-]?codes|private[_-]?key|dkim[_-]?private.*|uri|source|content)$/i;
 export function redactText(value: string) {
   return value
     .replace(/(\/preferences\/)[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '$1[REDACTED]')
@@ -53,6 +53,32 @@ export function redact(value: unknown, budget = 32768): unknown {
   const result = visit(value, 0);
   return JSON.stringify(result).length > budget ? '[TRUNCATED]' : result;
 }
+
+// Use the same payload policy when persisting and reading historical request logs.
+// Express routes are case insensitive; arbitrary MIME, templates and credentials
+// need full suppression even when a response was captured as serialized JSON.
+const inboundContent = /^\/v1\/inbound(?:\/|$)/i;
+const outgoingContent =
+  /^\/v1\/(?:emails|events\/(?:postal|sns|novu|trigger)|workflows|activity|templates|template-preview|layouts|translations|content|publish|publications|automations|automation-events|automation-runs)(?:\/|$)/i;
+const inboxCredential = /^\/v1\/subscribers\/[^/]+\/inbox-token\/?$/i;
+const logContent = /^\/v1\/logs(?:\/|$)/i;
+export function redactRequestLogBodies(path: string, requestBody: unknown, responseBody: unknown) {
+  // Log responses can contain older serialized credentials and recursive log copies.
+  const marker = logContent.test(path)
+    ? '[LOG CONTENT REDACTED]'
+    : inboxCredential.test(path)
+      ? '[INBOX CREDENTIAL REDACTED]'
+      : inboundContent.test(path)
+        ? '[INBOUND CONTENT REDACTED]'
+        : outgoingContent.test(path)
+          ? '[EMAIL CONTENT REDACTED]'
+          : undefined;
+  return {
+    request_body: marker ? { body: marker, query: marker } : redact(requestBody),
+    response_body: marker ?? redact(responseBody),
+  };
+}
+
 export function csvCell(value: unknown) {
   let text = typeof value === 'object' ? JSON.stringify(value) : String(value ?? '');
   if (/^[\s]*[=+@-]/.test(text)) text = `'${text}`;

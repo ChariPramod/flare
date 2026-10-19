@@ -18,6 +18,8 @@ Automation failure, savepoint rollback, quota release and wait/redrive regressio
 
 The existing test patterns are executable examples. For an email bug, put the regression beside the relevant mail module; for “canceling while a worker claims the message never sends it,” use a database/concurrency test plus the real-service suite. For “the operator can find an inbound attachment,” use a browser flow. Fixture-backed browser tests establish the UI contract; real-stack browser tests establish that the API and UI work together.
 
+Dashboard forwarding signatures and strict parsing are tested in `packages/shared/src/dashboard-forwarding.test.ts`; middleware and live-auth-boundary regressions are in `apps/api/src/dashboard-forwarding.test.ts`. `apps/web/lib/dashboard-backend.test.ts` and `dashboard-routes.test.ts` cover deployment configuration, final upstream requests, proxy limits and cookie preservation. Add real HTTP/Redis replay races to `apps/api/tests/dashboard-forwarding.integration.ts`; raw Node header arrays must include an explicit `Host` to reach the server handler. `scripts/acceptance/dashboard-forwarding.mjs` runs a separately configured real Nest API against the disposable stores. These tests do not establish actual Vercel connectivity or its platform header behavior. Credential redaction has shared, middleware and historical controller regressions, plus real Inbox/log checks in `scripts/acceptance/inbox.mjs`.
+
 For sender-safety requirements, extend `tests/unit/sending-pipeline.test.ts` for durable holds, reservations and the final attempt boundary, or `packages/mail/src/feedback-receipts.test.ts` for feedback replay and audited suppression restoration. The multi-connection quota/SMTP/feedback cases belong in `apps/worker/tests/sending-policy.integration.ts`; a PGlite test with one connection does not establish concurrency safety. Operator UI contracts live in `tests/e2e/operator.spec.ts`, and real session/MFA flows in `tests/live/operator.spec.ts`. Keep public DNS, physical pool and receiver evidence out of simulated success claims.
 
 `apps/worker/tests/email-crash.integration.ts` kills a child delivery process after actual Mailpit acceptance and waits for the unchanged two-minute lease. It checks quarantine, retained quota, rejected redrive and stale Redis jobs across two worker restarts. This deliberately adds about two minutes to integration runtime; do not shorten it by editing the lease or substituting a mocked clock. The child fixture rejects targets outside the disposable database, Redis namespace, MinIO bucket and loopback Mailpit listener.
@@ -58,6 +60,8 @@ pnpm test:e2e
 ```
 
 The checkpoint runs lint, typecheck, OpenAPI drift, unit/database tests, product evals, build and gitleaks. Browser contracts require a Playwright browser (`pnpm exec playwright install chromium`); this Mac can use installed Chrome with `E2E_BROWSER_CHANNEL=chrome pnpm test:e2e`. Do not run two Next.js builds against the same checkout concurrently.
+
+Run integration and full acceptance sequentially on the shared development Mac. Integration now builds separately named MinIO images so it cannot retag the deployment/acceptance store images; backup validation still rejects any image drift. CI runs these suites on independent hosts. Record interrupted or failed rehearsals separately from a final clean run.
 
 Python setup and checks:
 
