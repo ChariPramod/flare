@@ -13,6 +13,7 @@ const SERVICES = ['dashboard', 'api', 'ws', 'tracking', 'mail'];
 const TIMEOUT_MS = 5000;
 const BODY_LIMIT = 65536;
 const CERT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_EXTERNAL_ADDRESSES = 8;
 export const UNVERIFIED = Object.freeze([
   'http-to-https-redirects',
   'port-25-ingress-and-egress',
@@ -51,10 +52,29 @@ export function publicIPv4(value) {
   );
 }
 
+export function publicIPv6(value) {
+  if (typeof value !== 'string' || isIP(value) !== 6 || value.includes('%')) return false;
+  const normalized = new URL(`http://[${value}]/`).hostname.slice(1, -1);
+  const [first, second] = normalized.split(':').map((part) => parseInt(part || '0', 16));
+  // Conservatively permit ordinary global unicast, excluding special-purpose,
+  // transition, former 6bone and documentation allocations. Never treat an
+  // embedded IPv4, local, multicast or scoped address as public ingress.
+  return (
+    first >= 0x2000 &&
+    first <= 0x3fff &&
+    !(first === 0x2001 && (second <= 0x1ff || second === 0xdb8)) &&
+    first !== 0x2002 &&
+    first !== 0x3ffe &&
+    !(first === 0x3fff && second <= 0x0fff)
+  );
+}
+
 export function validatePublicManifest(manifest) {
   return Boolean(
-    exactKeys(manifest, ['version', 'ipv4', 'hosts']) &&
-    manifest.version === 1 &&
+    ((exactKeys(manifest, ['version', 'ipv4', 'hosts']) && manifest.version === 1) ||
+      (exactKeys(manifest, ['version', 'ipv4', 'hosts', 'dashboard']) &&
+        manifest.version === 2 &&
+        manifest.dashboard === 'external')) &&
     publicIPv4(manifest.ipv4) &&
     exactKeys(manifest.hosts, SERVICES) &&
     SERVICES.every((service) => publicHostname(manifest.hosts[service])) &&
@@ -114,6 +134,10 @@ function tlsErrorCode(error) {
 // Production uses Node's normal trust store and pins the connection without a second DNS lookup.
 export function requestPublicHttps(target, { requestImpl = request, timeoutMs = TIMEOUT_MS } = {}) {
   return new Promise((resolvePromise) => {
+    const address = target.address ?? target.ipv4;
+    const family = isIP(address);
+    const canonical = (value) =>
+      isIP(value) === 6 ? new URL(`http://[${value}]/`).hostname.slice(1, -1) : value;
     let done = false;
     let req;
     let res;
@@ -134,20 +158,22 @@ export function requestPublicHttps(target, { requestImpl = request, timeoutMs = 
           path: target.path,
           method: 'GET',
           servername: target.hostname,
-          family: 4,
+          family,
           agent: false,
           rejectUnauthorized: true,
           maxHeaderSize: 16384,
           lookup: (_hostname, options, callback) => {
-            callback(null, options.all ? [{ address: target.ipv4, family: 4 }] : target.ipv4, 4);
+            callback(null, options.all ? [{ address, family }] : address, family);
           },
           headers: { Accept: '*/*', 'User-Agent': 'Flare-staging-public-check/1' },
         },
         (response) => {
           res = response;
           const socket = response.socket;
-          const address = socket.remoteAddress?.replace(/^::ffff:/, '');
-          if (address !== target.ipv4) return finish({ code: 'https-address-mismatch' });
+          const peer =
+            family === 4 ? socket.remoteAddress?.replace(/^::ffff:/, '') : socket.remoteAddress;
+          if (canonical(peer) !== canonical(address))
+            return finish({ code: 'https-address-mismatch' });
           const certificate = { ...socket.getPeerCertificate(), authorized: socket.authorized };
           const code = certificateCode(certificate, target.hostname);
           if (code !== 'ok') return finish({ code });
@@ -241,13 +267,21 @@ export async function verifyPublic(manifest, adapters = networkAdapters()) {
   const hosts = Object.fromEntries(
     SERVICES.map((service) => [service, manifest.hosts[service].toLowerCase()]),
   );
+  const externalDashboard = manifest.version === 2;
+  const dashboardAddresses = [];
   for (const service of SERVICES) {
     for (const kind of ['A', 'AAAA']) {
       try {
         const addresses = await deadline(() => adapters.dns(hosts[service], kind));
         let code = 'ok';
         if (!Array.isArray(addresses)) code = 'dns-invalid-answer';
-        else if (kind === 'AAAA') {
+        else if (service === 'dashboard' && externalDashboard) {
+          const valid = kind === 'A' ? publicIPv4 : publicIPv6;
+          if (addresses.some((address) => !valid(address))) code = 'dns-non-public-address';
+          else if (addresses.length + dashboardAddresses.length > MAX_EXTERNAL_ADDRESSES)
+            code = 'dns-address-limit';
+          else dashboardAddresses.push(...addresses);
+        } else if (kind === 'AAAA') {
           if (addresses.length) code = 'dns-unplanned-ipv6';
         } else if (addresses.some((address) => !publicIPv4(address)))
           code = 'dns-non-public-address';
@@ -259,6 +293,8 @@ export async function verifyPublic(manifest, adapters = networkAdapters()) {
       }
     }
   }
+  if (externalDashboard && !dashboardAddresses.length)
+    add('dashboard', 'dns-addresses', 'dns-address-missing');
   for (const [service, kind, hostname, expected] of [
     ['tracking', 'CNAME', hosts.tracking, hosts.api],
     ['mail', 'PTR', manifest.ipv4, hosts.mail],
@@ -284,32 +320,44 @@ export async function verifyPublic(manifest, adapters = networkAdapters()) {
     return report;
   }
   for (const probe of PUBLIC_PROBES) {
-    let code;
-    try {
-      const result = await deadline(
-        () =>
-          adapters.https({
-            hostname: hosts[probe.service],
-            ipv4: manifest.ipv4,
-            path: probe.path,
-          }),
-        TIMEOUT_MS + 100,
-      );
-      code = HTTPS_CODES.has(result?.code) ? result.code : 'https-unavailable';
-      if (code === 'ok') {
-        if (result.status >= 300 && result.status <= 399) code = 'https-redirect';
-        else if (result.status !== probe.status) code = 'https-status-mismatch';
-        else if (
-          probe.contentType &&
-          (typeof result.contentType !== 'string' ||
-            result.contentType.split(';')[0].trim().toLowerCase() !== probe.contentType)
-        )
-          code = 'https-content-type-mismatch';
+    const targets =
+      probe.service === 'dashboard' && externalDashboard
+        ? [...new Set(dashboardAddresses)].map((address) => ({ address }))
+        : [{ ipv4: manifest.ipv4 }];
+    for (const [index, target] of targets.entries()) {
+      let code;
+      try {
+        const result = await deadline(
+          () =>
+            adapters.https({
+              hostname: hosts[probe.service],
+              ...target,
+              path: probe.path,
+            }),
+          TIMEOUT_MS + 100,
+        );
+        code = HTTPS_CODES.has(result?.code) ? result.code : 'https-unavailable';
+        if (code === 'ok') {
+          if (result.status >= 300 && result.status <= 399) code = 'https-redirect';
+          else if (result.status !== probe.status) code = 'https-status-mismatch';
+          else if (
+            probe.contentType &&
+            (typeof result.contentType !== 'string' ||
+              result.contentType.split(';')[0].trim().toLowerCase() !== probe.contentType)
+          )
+            code = 'https-content-type-mismatch';
+        }
+      } catch {
+        code = 'https-unavailable';
       }
-    } catch {
-      code = 'https-unavailable';
+      add(
+        probe.service,
+        externalDashboard && probe.service === 'dashboard'
+          ? `${probe.path}:address-${index + 1}`
+          : probe.path,
+        code,
+      );
     }
-    add(probe.service, probe.path, code);
   }
   report.ok = report.checks.every((check) => check.code === 'ok');
   return report;

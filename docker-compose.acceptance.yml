@@ -13,6 +13,9 @@ services:
     networks:
       default: { ipv4_address: 172.29.250.53 }
   flare-api:
+    environment:
+      FLARE_DASHBOARD_INBOX_WS: 'true'
+      NOVU_WS_URL: http://novu-ws:3002
     # Test fixtures and zone files exist only in the disposable acceptance checkout.
     volumes:
       [

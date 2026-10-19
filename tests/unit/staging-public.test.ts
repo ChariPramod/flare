@@ -8,6 +8,7 @@ import type { Server, RequestOptions } from 'node:https';
 import {
   certificateCode,
   publicIPv4,
+  publicIPv6,
   validatePublicManifest,
   verifyPublic,
   requestPublicHttps,
@@ -226,6 +227,123 @@ describe('public staging manifest and read-only plan', () => {
   });
 });
 
+describe('external dashboard manifest', () => {
+  const split = { ...manifest, version: 2, dashboard: 'external' };
+  const v4 = '1.1.1.1';
+  const v6 = '2606:4700:4700::1111';
+  function externalAdapters(a = [v4], aaaa = [v6]) {
+    const io = adapters();
+    const normal = io.dns.getMockImplementation()!;
+    io.dns.mockImplementation(async (host, kind) =>
+      host === manifest.hosts.dashboard && ['A', 'AAAA'].includes(kind)
+        ? kind === 'A'
+          ? a
+          : aaaa
+        : normal(host, kind),
+    );
+    return io;
+  }
+  it('requires the explicit versioned external mode; legacy shape stays exact', () => {
+    expect(validatePublicManifest(split)).toBe(true);
+    for (const invalid of [
+      { ...split, dashboard: 'vercel' },
+      { ...split, version: 1 },
+      { ...split, dashboard: { mode: 'external' } },
+      { ...manifest, version: 2 },
+      { ...split, url: 'https://private' },
+    ])
+      expect(validatePublicManifest(invalid)).toBe(false);
+  });
+  it('allows ordinary global IPv6 but rejects local, embedded, scoped and special addresses', () => {
+    for (const value of [v6, '2001:4860:4860::8888', '2620:fe::9'])
+      expect(publicIPv6(value)).toBe(true);
+    for (const value of [
+      '::',
+      '::1',
+      '::ffff:8.8.8.8',
+      'fc00::1',
+      'fd00::1',
+      'fe80::1',
+      'fe80::1%lo0',
+      'ff02::1',
+      '64:ff9b::808:808',
+      '100::1',
+      '2001::1',
+      '2001:2::1',
+      '2001:10::1',
+      '2001:20::1',
+      '2001:db8::1',
+      '2002:808:808::1',
+      '3ffe::1',
+      '3fff::1',
+      '3fff:0fff::1',
+      '[2606:4700:4700::1111]',
+      '8.8.8.8',
+      '',
+    ])
+      expect(publicIPv6(value)).toBe(false);
+  });
+  it('pins and checks every resolved dashboard address while retaining backend IPv4/PTR', async () => {
+    const io = externalAdapters();
+    const report = await verifyPublic(split, io);
+    expect(report.ok).toBe(true);
+    const dashboard = io.https.mock.calls
+      .map(([target]) => target)
+      .filter((target) => target.hostname === manifest.hosts.dashboard);
+    expect(dashboard).toHaveLength(12);
+    expect(new Set(dashboard.map((target) => (target as { address?: string }).address))).toEqual(
+      new Set([v4, v6]),
+    );
+    expect(io.dns).toHaveBeenCalledWith(manifest.ipv4, 'PTR');
+    const backend = io.https.mock.calls
+      .map(([target]) => target)
+      .filter((target) => target.hostname !== manifest.hosts.dashboard);
+    expect(backend.every((target) => (target as { ipv4?: string }).ipv4 === manifest.ipv4)).toBe(
+      true,
+    );
+    expect(JSON.stringify(report)).not.toContain(v6);
+    expect(JSON.stringify(report)).not.toContain(v4);
+  });
+  it('supports an IPv6-only external dashboard and does not silently skip IPv6 probes', async () => {
+    const io = externalAdapters([], [v6]);
+    expect((await verifyPublic(split, io)).ok).toBe(true);
+    const normal = io.https.getMockImplementation()!;
+    io.https.mockImplementation(async (target) =>
+      target.hostname === manifest.hosts.dashboard
+        ? { code: 'https-unavailable', status: undefined, contentType: undefined }
+        : normal(target),
+    );
+    expect((await verifyPublic(split, io)).ok).toBe(false);
+  });
+  it.each([
+    [[], [], 'dns-address-missing'],
+    [[v4, '127.0.0.1'], [], 'dns-non-public-address'],
+    [[v4], ['::1'], 'dns-non-public-address'],
+    [[v4], ['::ffff:127.0.0.1'], 'dns-non-public-address'],
+    [[v4], ['2001:db8::1'], 'dns-non-public-address'],
+    [Array.from({ length: 9 }, (_, i) => `8.8.8.${i + 1}`), [], 'dns-address-limit'],
+  ])('never starts HTTPS after unsafe or missing external DNS (%j, %j)', async (a, aaaa, code) => {
+    const io = externalAdapters(a as string[], aaaa as string[]);
+    const report = await verifyPublic(split, io);
+    expect(report.ok).toBe(false);
+    expect(report.checks.some((check: { code: string }) => check.code === code)).toBe(true);
+    expect(io.https).not.toHaveBeenCalled();
+  });
+  it('still refuses unexpected backend IPv6 and changed backend A addresses', async () => {
+    for (const kind of ['A', 'AAAA']) {
+      const io = externalAdapters();
+      const normal = io.dns.getMockImplementation()!;
+      io.dns.mockImplementation(async (host, type) =>
+        host === manifest.hosts.api && type === kind
+          ? [type === 'A' ? v4 : v6]
+          : normal(host, type),
+      );
+      expect((await verifyPublic(split, io)).ok).toBe(false);
+      expect(io.https).not.toHaveBeenCalled();
+    }
+  });
+});
+
 describe('certificate evidence', () => {
   const now = Date.UTC(2026, 0, 1);
   const cert = {
@@ -301,7 +419,10 @@ describe('actual HTTPS request path using an isolated local TLS fixture', () => 
         else res.end('<!doctype html><title>Fixture</title>');
       },
     );
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', resolve);
+    });
     port = (server.address() as { port: number }).port;
   });
   afterAll(async () => {
@@ -327,6 +448,40 @@ describe('actual HTTPS request path using an isolated local TLS fixture', () => 
       ),
     ).toEqual({ code: 'ok', status: 200, contentType: 'text/html' });
     expect(validatePublicManifest({ ...manifest, ipv4: '127.0.0.1' })).toBe(false);
+  });
+  it('uses an actual pinned IPv6 connection with exact hostname TLS checks', async () => {
+    const ipv6 = createServer(
+      { cert: certificate, key: readFileSync(join(directory, 'key.pem')) },
+      (_req, res) => {
+        res.setHeader('content-type', 'text/html');
+        res.end('IPv6 fixture');
+      },
+    );
+    await new Promise<void>((resolve, reject) => {
+      ipv6.once('error', reject);
+      ipv6.listen(0, '::1', resolve);
+    });
+    try {
+      const result = await requestPublicHttps(
+        { hostname: manifest.hosts.dashboard, address: '::1', path: '/login' },
+        {
+          requestImpl: (options: RequestOptions, callback: Parameters<typeof request>[1]) => {
+            expect(options.family).toBe(6);
+            expect(options.rejectUnauthorized).toBe(true);
+            expect(options.servername).toBe(manifest.hosts.dashboard);
+            return request(
+              { ...options, ca: certificate, port: (ipv6.address() as { port: number }).port },
+              callback,
+            );
+          },
+        },
+      );
+      expect(result).toEqual({ code: 'ok', status: 200, contentType: 'text/html' });
+      expect(publicIPv6('::1')).toBe(false);
+    } finally {
+      ipv6.closeAllConnections();
+      await new Promise<void>((resolve) => ipv6.close(() => resolve()));
+    }
   });
   it('rejects an untrusted CA and mismatched certificate hostname', async () => {
     expect(

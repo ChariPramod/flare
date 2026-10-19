@@ -20,6 +20,8 @@ import {
   main,
   isolatedCompose,
   createRunner,
+  inspectSource,
+  allowedBind,
 } from '../../scripts/operations/backup.mjs';
 import {
   decryptFile,
@@ -48,6 +50,7 @@ type FixtureConfig = {
       environment: Record<string, string>;
       command?: string[];
       entrypoint?: string[];
+      volumes?: { type: string; source: string; target: string; read_only: boolean }[];
     }
   >;
 };
@@ -96,6 +99,12 @@ async function fixture(profile = 'local') {
     root = join(dir, 'deployment'),
     project = 'flare-source';
   await mkdir(root);
+  const split = profile === 'staging-split-web' || profile === 'staging-split-web-inbound';
+  const inbound = profile.endsWith('-inbound');
+  const proxySecret = `fdp_${randomBytes(32).toString('base64')}`;
+  const envFile = split
+    ? `STAGING_WEB_MODE=vercel\nFLARE_DASHBOARD_PROXY_SECRET=${proxySecret}\n`
+    : 'fixture';
   const privateFiles = [
     '.env',
     'docker-compose.yml',
@@ -108,13 +117,16 @@ async function fixture(profile = 'local') {
       ? [
           'docker-compose.staging.yml',
           'ops/staging/Caddyfile',
-          ...(profile === 'staging-inbound' ? ['ops/staging/postal-inbound.yml'] : []),
+          ...(split
+            ? ['docker-compose.staging-split-web.yml', 'ops/staging/Caddyfile.split-web']
+            : []),
+          ...(inbound ? ['ops/staging/postal-inbound.yml'] : []),
         ]
       : []),
   ];
   for (const path of privateFiles) {
     await mkdir(join(root, path, '..'), { recursive: true });
-    await writeFile(join(root, path), 'fixture', { mode: 0o600 });
+    await writeFile(join(root, path), path === '.env' ? envFile : 'fixture', { mode: 0o600 });
   }
   const keyFile = join(dir, 'key');
   await writeFile(keyFile, randomBytes(32), { mode: 0o600 });
@@ -131,7 +143,8 @@ async function fixture(profile = 'local') {
     ...(profile.startsWith('staging')
       ? [
           join(root, 'docker-compose.staging.yml'),
-          ...(profile === 'staging-inbound' ? [join(root, 'ops/staging/postal-inbound.yml')] : []),
+          ...(split ? [join(root, 'docker-compose.staging-split-web.yml')] : []),
+          ...(inbound ? [join(root, 'ops/staging/postal-inbound.yml')] : []),
         ]
       : []),
   ];
@@ -198,6 +211,46 @@ async function fixture(profile = 'local') {
       .map((name) => ({ Type: 'volume', Name: `${project}_${name}`, RW: true })),
     State: { Running: false, ExitCode: 0 },
   });
+  if (split) {
+    config.services['flare-api'] = {
+      environment: { FLARE_DASHBOARD_PROXY_SECRET: proxySecret },
+    };
+    config.services.ingress = {
+      environment: {},
+      volumes: [
+        {
+          type: 'bind',
+          source: join(root, 'ops/staging/Caddyfile.split-web'),
+          target: '/etc/caddy/Caddyfile',
+          read_only: true,
+        },
+      ],
+    };
+    for (const service of ['flare-api', 'ingress']) {
+      source.push({
+        ...source[0],
+        Id: digest(service).slice(7),
+        Image: digest(service),
+        Config: {
+          Env: Object.entries(config.services[service].environment).map(
+            ([key, value]) => `${key}=${value}`,
+          ),
+          Labels: { ...source[0].Config.Labels, 'com.docker.compose.service': service },
+        },
+        Mounts:
+          service === 'ingress'
+            ? [
+                {
+                  Type: 'bind',
+                  Source: join(root, 'ops/staging/Caddyfile.split-web'),
+                  Destination: '/etc/caddy/Caddyfile',
+                  RW: false,
+                },
+              ]
+            : [],
+      });
+    }
+  }
   const calls: { args: string[]; options: RunOptions }[] = [],
     volumeLabels: Record<string, Record<string, string>> = {};
   let restored: Container[] = [],
@@ -337,6 +390,8 @@ async function fixture(profile = 'local') {
     state,
     source,
     config,
+    envFile,
+    proxySecret,
     volumeLabels,
     target: {
       archive: options.output,
@@ -535,49 +590,140 @@ describe('deployment backup and isolated restore orchestration', () => {
       });
     },
   );
-  it.each(['local', 'staging', 'staging-inbound'])(
-    'backs up all %s state and restores six exact-image isolated stores only',
-    async (profile) => {
-      const f = await fixture(profile);
-      const result = await backup(f.options, f.runner);
-      expect(result.artifacts).toBe(profile.startsWith('staging') ? 10 : 8);
-      expect(f.source.every((container) => !container.State.Running)).toBe(true);
-      expect((await lstat(f.options.output)).mode & 0o777).toBe(0o700);
-      f.calls.splice(0);
-      const restored = await restore(f.target, f.runner);
-      expect(restored).toMatchObject({
-        status: 'restored-isolated',
-        sourceUntouched: true,
-        deliveryServicesStarted: false,
-      });
-      expect(await readFile(join(restored.privateRoot, '.env'), 'utf8')).toBe('fixture');
-      const compose = JSON.parse(await readFile(restored.composeFile, 'utf8'));
-      expect(Object.keys(compose.services)).toHaveLength(6);
-      expect(compose.networks.isolated.internal).toBe(true);
-      for (const [name, service] of Object.entries(compose.services) as [
-        string,
-        {
-          ports?: string[];
-          image: string;
-          environment: Record<string, string>;
-        },
-      ][]) {
-        expect(service.ports).toBeUndefined();
-        expect(service.image).toMatch(/^sha256:/);
-        expect(service.environment).toEqual(
-          Object.fromEntries(
-            Object.entries(f.config.services[name].environment).map(([key, value]) => [
-              key,
-              value.replaceAll('$', () => '$$'),
-            ]),
-          ),
-        );
-      }
-      expect(f.calls.some(({ args }) => args.includes('pull') && !args.includes('never'))).toBe(
-        false,
+  it.each([
+    'local',
+    'staging',
+    'staging-inbound',
+    'staging-split-web',
+    'staging-split-web-inbound',
+  ])('backs up all %s state and restores six exact-image isolated stores only', async (profile) => {
+    const f = await fixture(profile);
+    const result = await backup(f.options, f.runner);
+    expect(result.artifacts).toBe(profile.startsWith('staging') ? 10 : 8);
+    expect(f.source.every((container) => !container.State.Running)).toBe(true);
+    expect((await lstat(f.options.output)).mode & 0o777).toBe(0o700);
+    f.calls.splice(0);
+    const restored = await restore(f.target, f.runner);
+    expect(restored).toMatchObject({
+      status: 'restored-isolated',
+      sourceUntouched: true,
+      deliveryServicesStarted: false,
+    });
+    expect((await readFile(join(restored.privateRoot, '.env'), 'utf8')) === f.envFile).toBe(true);
+    if (profile.startsWith('staging-split-web')) {
+      for (const path of [
+        'docker-compose.staging-split-web.yml',
+        'ops/staging/Caddyfile',
+        'ops/staging/Caddyfile.split-web',
+      ])
+        expect(await readFile(join(restored.privateRoot, path), 'utf8')).toBe('fixture');
+      for (const path of ['manifest.enc', 'artifacts/private-config.enc'])
+        expect(
+          (await readFile(join(f.options.output, path))).includes(Buffer.from(f.proxySecret)),
+        ).toBe(false);
+      expect(JSON.stringify(result).includes(f.proxySecret)).toBe(false);
+    }
+    const compose = JSON.parse(await readFile(restored.composeFile, 'utf8'));
+    expect(Object.keys(compose.services)).toHaveLength(6);
+    expect(compose.networks.isolated.internal).toBe(true);
+    for (const [name, service] of Object.entries(compose.services) as [
+      string,
+      {
+        ports?: string[];
+        image: string;
+        environment: Record<string, string>;
+      },
+    ][]) {
+      expect(service.ports).toBeUndefined();
+      expect(service.image).toMatch(/^sha256:/);
+      expect(service.environment).toEqual(
+        Object.fromEntries(
+          Object.entries(f.config.services[name].environment).map(([key, value]) => [
+            key,
+            value.replaceAll('$', () => '$$'),
+          ]),
+        ),
       );
-    },
-  );
+    }
+    expect(f.calls.some(({ args }) => args.includes('pull') && !args.includes('never'))).toBe(
+      false,
+    );
+  });
+  it.each([
+    'overlay-order',
+    'missing-api',
+    'missing-ingress',
+    'missing-caddy-mount',
+    'wrong-caddy',
+    'writable-caddy',
+    'missing-key',
+    'invalid-key',
+    'rendered-key-drift',
+    'runtime-key-drift',
+    'wrong-mode',
+  ])('refuses split-web %s before maintenance', async (failure) => {
+    const f = await fixture('staging-split-web');
+    const api = f.source.find(
+      (item) => item.Config.Labels['com.docker.compose.service'] === 'flare-api',
+    )!;
+    const ingress = f.source.find(
+      (item) => item.Config.Labels['com.docker.compose.service'] === 'ingress',
+    )!;
+    if (failure === 'overlay-order')
+      api.Config.Labels['com.docker.compose.project.config_files'] = api.Config.Labels[
+        'com.docker.compose.project.config_files'
+      ]
+        .split(',')
+        .reverse()
+        .join(',');
+    if (failure === 'missing-api') f.source.splice(f.source.indexOf(api), 1);
+    if (failure === 'missing-ingress') f.source.splice(f.source.indexOf(ingress), 1);
+    if (failure === 'missing-caddy-mount') ingress.Mounts = [];
+    if (failure === 'wrong-caddy') {
+      ingress.Mounts[0].Source = join(f.root, 'ops/staging/Caddyfile');
+      f.config.services.ingress.volumes![0].source = ingress.Mounts[0].Source;
+    }
+    if (failure === 'writable-caddy') {
+      ingress.Mounts[0].RW = true;
+      f.config.services.ingress.volumes![0].read_only = false;
+    }
+    if (failure === 'missing-key')
+      await writeFile(join(f.root, '.env'), 'STAGING_WEB_MODE=vercel\n');
+    if (failure === 'invalid-key')
+      await writeFile(
+        join(f.root, '.env'),
+        'STAGING_WEB_MODE=vercel\nFLARE_DASHBOARD_PROXY_SECRET=invalid\n',
+      );
+    if (failure === 'rendered-key-drift')
+      f.config.services['flare-api'].environment.FLARE_DASHBOARD_PROXY_SECRET =
+        `fdp_${randomBytes(32).toString('base64')}`;
+    if (failure === 'runtime-key-drift') api.Config.Env = ['FLARE_DASHBOARD_PROXY_SECRET=drift'];
+    if (failure === 'wrong-mode')
+      await writeFile(join(f.root, '.env'), f.envFile.replace('vercel', 'compose'));
+    await expect(backup(f.options, f.runner)).rejects.toThrow();
+    expect(f.calls.some(({ args }) => mutating(args))).toBe(false);
+    await expect(lstat(f.options.output)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+  it('captures only the exact split Caddy asset and rejects its symlink before Docker', async () => {
+    const f = await fixture('staging-split-web-inbound');
+    const path = join(f.root, 'ops/staging/Caddyfile.split-web');
+    await rm(path);
+    await symlink(join(f.root, 'ops/staging/Caddyfile'), path);
+    await expect(inspectSource(f.options, f.runner)).rejects.toThrow(/canonical|symbolic/);
+    expect(f.calls).toHaveLength(0);
+  });
+  it('allows the split ingress asset only as its exact read-only mount in the split profile', async () => {
+    const f = await fixture('staging-split-web');
+    const definition = f.config.services.ingress;
+    const mount = f.source.find(
+      (item) => item.Config.Labels['com.docker.compose.service'] === 'ingress',
+    )!.Mounts[0];
+    expect(allowedBind(f.root, 'staging-split-web', mount, definition, { desktop: false })).toBe(
+      true,
+    );
+    expect(allowedBind(f.root, 'staging', mount, definition, { desktop: false })).toBe(false);
+    expect(allowedBind(f.root, 'local', mount, definition, { desktop: false })).toBe(false);
+  });
   it.each(['wrong-key', 'tamper', 'missing-artifact', 'unknown-artifact'])(
     'authenticates the complete bundle before any Docker action: %s',
     async (failure) => {

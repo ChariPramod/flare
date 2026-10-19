@@ -1,0 +1,47 @@
+{
+ email {$STAGING_ACME_EMAIL}
+ admin off
+ # Runtime proxy errors can include request details even without access logging.
+ log default {
+  format filter {
+   request>uri delete
+   request>headers delete
+  }
+ }
+}
+
+(private_paths) {
+ @private path /internal /internal/* /v1/internal /v1/internal/* /api/internal /api/internal/* /metrics /ready /health /health-check
+ respond @private 404
+ header X-Content-Type-Options nosniff
+ header Referrer-Policy strict-origin-when-cross-origin
+}
+
+# No dashboard site: Vercel owns STAGING_DASHBOARD_HOST and its HTTPS certificate.
+{$STAGING_API_HOST}, {$STAGING_TRACKING_HOST} {
+ route {
+  import private_paths
+  @public path /v1/* /t/*
+  handle @public {
+   reverse_proxy flare-api:4000
+  }
+  handle {
+   respond 404
+  }
+ }
+}
+
+{$STAGING_WS_HOST} {
+ # Do not enable access logs here: the pinned native SDK sends its JWT in a query.
+ # Flare checks the exact Origin and live session binding before opening native WS.
+ route {
+  import private_paths
+  @socket path /socket.io /socket.io/*
+  handle @socket {
+   reverse_proxy flare-api:4000
+  }
+  handle {
+   respond 404
+  }
+ }
+}

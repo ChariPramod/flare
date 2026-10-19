@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import {
   appendFileSync,
   closeSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -19,6 +20,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parseEnv } from 'node:util';
 import { safeRestoreFailure } from './restore-diagnostics.mjs';
 
 const [root, project] = process.argv.slice(2);
@@ -30,8 +32,9 @@ process.umask(0o077);
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'flare-cold-rehearsal-')));
 const target = `${project}-cold`,
   wrongTarget = `${project}-wrong`,
-  tamperTarget = `${project}-tamper`;
-const targets = [target, wrongTarget, tamperTarget];
+  tamperTarget = `${project}-tamper`,
+  splitTarget = `${project}-split`;
+const targets = [target, wrongTarget, tamperTarget, splitTarget];
 const key = join(scratch, 'key'),
   wrongKey = join(scratch, 'wrong-key');
 const archive = join(scratch, 'bundle'),
@@ -45,6 +48,7 @@ const log = join(scratch, 'operations.log');
 let phase = 'guard',
   cleaning = false;
 const owned = new Set();
+const ownedImageTags = new Set();
 const started = Date.now();
 function command(executable, args, options = {}) {
   try {
@@ -110,6 +114,13 @@ function cleanup() {
       failed = true;
     }
   }
+  for (const image of ownedImageTags) {
+    try {
+      docker('image', 'rm', image);
+    } catch {
+      failed = true;
+    }
+  }
   rmSync(scratch, { recursive: true, force: true });
   if (failed)
     throw new Error('Disposable recovery cleanup failed; inspect the named cold rehearsal project');
@@ -165,6 +176,39 @@ function mongo(compose, name) {
       'mongosh --quiet --username root --password "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --file /tmp/restore-mongo.js',
     ),
   );
+}
+function redisEvidence(compose) {
+  for (const service of ['redis', 'novu-redis']) {
+    assert.equal(
+      docker(
+        ...compose,
+        'exec',
+        '-T',
+        service,
+        'redis-cli',
+        '--raw',
+        'CONFIG',
+        'GET',
+        'appendonly',
+      ).trim(),
+      'appendonly\nyes',
+    );
+    for (const db of ['0', '2'])
+      assert.equal(
+        docker(
+          ...compose,
+          'exec',
+          '-T',
+          service,
+          'redis-cli',
+          '-n',
+          db,
+          'GET',
+          'acceptance:restore',
+        ).trim(),
+        `${project}/${service}/${db}`,
+      );
+  }
 }
 function flipArtifact() {
   const path = join(archive, 'artifacts/postgres-data.enc');
@@ -381,39 +425,234 @@ try {
     readFileSync(join(scratch, 'mongo-verify.json')),
   );
   assert.equal(createHash('sha256').update(postalDump(restoredCompose)).digest('hex'), postal);
-  for (const service of ['redis', 'novu-redis']) {
-    assert.equal(
-      docker(
-        ...restoredCompose,
-        'exec',
-        '-T',
-        service,
-        'redis-cli',
-        '--raw',
-        'CONFIG',
-        'GET',
-        'appendonly',
-      ).trim(),
-      'appendonly\nyes',
-    );
-    for (const db of ['0', '2'])
-      assert.equal(
-        docker(
-          ...restoredCompose,
-          'exec',
-          '-T',
-          service,
-          'redis-cli',
-          '-n',
-          db,
-          'GET',
-          'acceptance:restore',
-        ).trim(),
-        `${project}/${service}/${db}`,
-      );
-  }
+  redisEvidence(restoredCompose);
   verify(result.network, join(result.privateRoot, '.env'), 'verify');
   stopped();
+  // Reuse only the already restored, owned disposable volumes as a populated
+  // split-profile source. The original acceptance project remains stopped.
+  const splitStarted = Date.now();
+  phase = 'split-source-stop';
+  docker(...restoredCompose, 'stop', '--timeout', '120');
+  const sourceContainers = JSON.parse(docker('inspect', ...ids(target)));
+  assert.ok(sourceContainers.every((item) => !item.State.Running && item.State.ExitCode === 0));
+  docker('rm', '-v', ...sourceContainers.map((item) => item.Id));
+  const splitRoot = result.privateRoot;
+  const splitProfile = 'staging-split-web-inbound';
+  const splitFiles = [
+    'docker-compose.yml',
+    'docker-compose.staging.yml',
+    'docker-compose.staging-split-web.yml',
+    'ops/staging/postal-inbound.yml',
+  ];
+  for (const path of [
+    ...splitFiles.slice(1),
+    'ops/staging/Caddyfile',
+    'ops/staging/Caddyfile.split-web',
+  ]) {
+    mkdirSync(join(splitRoot, path, '..'), { recursive: true, mode: 0o700 });
+    cpSync(join(root, path), join(splitRoot, path));
+  }
+  mkdirSync(join(splitRoot, 'packages/db'), { recursive: true, mode: 0o700 });
+  cpSync(join(root, 'packages/db/migrations'), join(splitRoot, 'packages/db/migrations'), {
+    recursive: true,
+  });
+  let splitEnv = readFileSync(join(splitRoot, '.env'), 'utf8');
+  const forwardingKey = parseEnv(splitEnv).FLARE_DASHBOARD_PROXY_SECRET;
+  assert.match(forwardingKey ?? '', /^fdp_[A-Za-z0-9+/]{43}=$/);
+  for (const [name, value] of Object.entries({
+    STAGING_WEB_MODE: 'vercel',
+    STAGING_DASHBOARD_HOST: 'dashboard.split.invalid',
+    STAGING_API_HOST: 'api.split.invalid',
+    STAGING_WS_HOST: 'ws.split.invalid',
+    STAGING_TRACKING_HOST: 'tracking.split.invalid',
+    STAGING_ACME_EMAIL: 'operations@example.invalid',
+    STAGING_SUBNET: '172.30.250.0/24',
+    STAGING_PROXY_IP: '172.30.250.10',
+    WEB_ORIGIN: 'https://dashboard.split.invalid',
+    PUBLIC_API_URL: 'https://api.split.invalid',
+    TRACKING_URL: 'https://api.split.invalid',
+    NOVU_PUBLIC_API_URL: 'https://dashboard.split.invalid/novu',
+    NOVU_PUBLIC_WS_URL: 'https://ws.split.invalid',
+    FLARE_DASHBOARD_INBOX_WS: 'true',
+    NOVU_WS_URL: 'http://novu-ws:3002',
+  })) {
+    splitEnv = splitEnv.replace(new RegExp(`^${name}=.*\\n?`, 'gm'), '');
+    splitEnv += `\n${name}=${value}\n`;
+  }
+  writeFileSync(join(splitRoot, '.env'), splitEnv, { mode: 0o600 });
+  const splitSource = [
+    'compose',
+    '--project-name',
+    target,
+    '--project-directory',
+    splitRoot,
+    '--env-file',
+    join(splitRoot, '.env'),
+    ...splitFiles.flatMap((path) => ['-f', join(splitRoot, path)]),
+  ];
+  // This private tag is used only to create a stopped API container so backup
+  // validates the loaded forwarding key. It never starts the application.
+  const apiTag = `${target}-flare-api`;
+  assert.equal(docker('image', 'ls', '-q', apiTag).trim(), '');
+  ownedImageTags.add(apiTag);
+  docker('image', 'tag', apiImage, apiTag);
+  phase = 'split-ingress-image';
+  // The separate staging-config CI job has a different daemon. Fetch only this
+  // pinned ingress image; its container is created for mount checks, never run.
+  docker('pull', 'caddy:2.10.2-alpine');
+  phase = 'split-source-create';
+  docker(
+    ...splitSource,
+    'up',
+    '--no-start',
+    '--no-build',
+    '--pull',
+    'never',
+    '--no-deps',
+    'postgres',
+    'redis',
+    'novu-redis',
+    'minio',
+    'novu-mongodb',
+    'postal-mariadb',
+    'postal-config',
+    'ingress',
+    'flare-api',
+  );
+  const splitContainers = JSON.parse(docker('inspect', ...ids(target)));
+  assert.equal(splitContainers.length, 9);
+  assert.ok(splitContainers.every((item) => !item.State.Running && !item.State.Restarting));
+  const caddyCanaries = new Map();
+  for (const volume of ['staging-caddy-data', 'staging-caddy-config']) {
+    const canary = randomBytes(16).toString('hex');
+    caddyCanaries.set(volume, canary);
+    docker(
+      'run',
+      '--rm',
+      '--network',
+      'none',
+      '--read-only',
+      '--mount',
+      `type=volume,src=${target}_${volume},dst=/snapshot`,
+      '--entrypoint',
+      'sh',
+      'postgres:17.7-alpine',
+      '-ec',
+      'printf %s "$1" > /snapshot/acceptance-canary',
+      'sh',
+      canary,
+    );
+  }
+  const splitOptions = ['--root', splitRoot, '--project', target, '--profile', splitProfile];
+  const splitArchive = join(scratch, 'split-bundle');
+  phase = 'split-profile-plan';
+  assert.equal(operation('plan', ...splitOptions).volumeCount, 9);
+  let wrongProfileRejected = false;
+  try {
+    operation('plan', '--root', splitRoot, '--project', target, '--profile', 'staging-split-web');
+  } catch {
+    wrongProfileRejected = true;
+  }
+  assert.ok(wrongProfileRejected, 'Source labels bind the exact optional receiving overlay');
+  phase = 'split-encrypted-backup';
+  assert.equal(
+    operation(
+      'backup',
+      ...splitOptions,
+      '--output',
+      splitArchive,
+      '--key-file',
+      key,
+      '--maintenance',
+    ).artifacts,
+    10,
+  );
+  for (const path of ['manifest.enc', 'artifacts/private-config.enc'])
+    assert.equal(
+      readFileSync(join(splitArchive, path)).includes(Buffer.from(forwardingKey)),
+      false,
+    );
+  phase = 'split-isolated-restore';
+  const splitResult = operation(
+    'restore',
+    '--archive',
+    splitArchive,
+    '--key-file',
+    key,
+    '--target-root',
+    join(scratch, 'split-restored'),
+    '--target-project',
+    splitTarget,
+    '--isolated',
+  );
+  assert.equal(splitResult.status, 'restored-isolated');
+  assert.equal(splitResult.volumes.length, 9);
+  const splitRestored = JSON.parse(docker('inspect', ...ids(splitTarget)));
+  assert.equal(splitRestored.length, 6);
+  assert.equal(JSON.parse(docker('network', 'inspect', splitResult.network))[0].Internal, true);
+  for (const item of splitRestored) {
+    assert.deepEqual(Object.keys(item.HostConfig.PortBindings ?? {}), []);
+    assert.deepEqual(Object.keys(item.NetworkSettings.Networks), [splitResult.network]);
+  }
+  for (const path of [
+    '.env',
+    ...splitFiles,
+    'ops/staging/Caddyfile',
+    'ops/staging/Caddyfile.split-web',
+  ])
+    assert.equal(
+      readFileSync(join(splitResult.privateRoot, path)).equals(readFileSync(join(splitRoot, path))),
+      true,
+    );
+  assert.equal(
+    parseEnv(readFileSync(join(splitResult.privateRoot, '.env'), 'utf8'))
+      .FLARE_DASHBOARD_PROXY_SECRET === forwardingKey,
+    true,
+  );
+  for (const [volume, canary] of caddyCanaries)
+    assert.equal(
+      docker(
+        'run',
+        '--rm',
+        '--network',
+        'none',
+        '--read-only',
+        '--mount',
+        `type=volume,src=${splitTarget}_${volume},dst=/snapshot,readonly`,
+        '--entrypoint',
+        'cat',
+        'postgres:17.7-alpine',
+        '/snapshot/acceptance-canary',
+      ),
+      canary,
+    );
+  const splitRestoredCompose = [
+    'compose',
+    '--project-name',
+    splitTarget,
+    '--project-directory',
+    splitResult.root,
+    '-f',
+    splitResult.composeFile,
+  ];
+  await waitStores(splitRestoredCompose);
+  phase = 'split-restored-evidence';
+  mongo(splitRestoredCompose, 'verify');
+  assert.equal(
+    readFileSync(join(scratch, 'mongo-capture.json')).equals(
+      readFileSync(join(scratch, 'mongo-verify.json')),
+    ),
+    true,
+  );
+  assert.equal(createHash('sha256').update(postalDump(splitRestoredCompose)).digest('hex'), postal);
+  assert.equal(configFingerprint(splitTarget), postalConfig);
+  redisEvidence(splitRestoredCompose);
+  verify(splitResult.network, join(splitResult.privateRoot, '.env'), 'verify');
+  assert.ok(JSON.parse(docker('inspect', ...ids(target))).every((item) => !item.State.Running));
+  stopped();
+  console.log(
+    `Split-web cold restore rehearsal passed in ${Math.round((Date.now() - splitStarted) / 1000)}s: exact ordered profile, nine volumes, six isolated stores, encrypted forwarding key and retained Caddy assets. No ingress or delivery service started.`,
+  );
   console.log(
     `Encrypted cold restore rehearsal passed in ${Math.round((Date.now() - started) / 1000)}s: authenticated rejection before resource creation, six isolated stores, private configuration, Postal volume, tenant isolation, secrets and object bytes. Source remains stopped.`,
   );

@@ -39,6 +39,7 @@ import { OperatorReadinessController } from './operator-readiness.js';
 import { createDashboardForwardingMiddleware } from './dashboard-forwarding.js';
 import { BrowserTransfersController, browserTransferCors } from './browser-transfers.js';
 import { DashboardInboxController } from './dashboard-inbox.js';
+import { startDashboardInboxWebSocket } from './dashboard-inbox-ws.js';
 
 startTelemetry();
 const readinessStore = objectStore();
@@ -117,13 +118,17 @@ const document = JSON.parse(
   readFileSync(new URL('../../../docs/api/openapi.json', import.meta.url), 'utf8'),
 ) as OpenAPIObject;
 SwaggerModule.setup('docs', app, document);
+// Attach Socket.IO after Nest installs its request listener and before accepting connections.
+await app.init();
+const inboxSocket = startDashboardInboxWebSocket(app.getHttpServer());
 await app.listen(Number(process.env.PORT ?? 4000), '0.0.0.0');
 logger.info('Flare API listening');
 for (const signal of ['SIGTERM', 'SIGINT'])
   process.once(signal, () => {
     shutdownDeadline();
-    void app
+    void inboxSocket
       .close()
+      .then(() => app.close())
       .then(flushRequestLogs)
       .then(stopTelemetry)
       .then(() => Promise.all([sql.end(), redis.quit()]))

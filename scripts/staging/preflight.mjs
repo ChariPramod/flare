@@ -153,6 +153,9 @@ export function validateNamedStagingTransports(env) {
 export function validateStagingEnv(env) {
   const issues = [];
   const fail = (code, field) => issues.push({ code, field });
+  const webMode = env.STAGING_WEB_MODE || 'compose';
+  if (!['compose', 'vercel'].includes(webMode)) fail('web-mode-invalid', 'STAGING_WEB_MODE');
+  const splitWeb = webMode === 'vercel';
   if (env.NODE_ENV !== 'production') fail('production-required', 'NODE_ENV');
   const hostKeys = [
     'STAGING_DASHBOARD_HOST',
@@ -200,6 +203,41 @@ export function validateStagingEnv(env) {
   if (env.STORE_ENCRYPTION_KEY?.length !== 32) fail('key-format-invalid', 'STORE_ENCRYPTION_KEY');
   if (new Set(secrets.map((key) => env[key])).size !== secrets.length)
     fail('independent-secrets-required', 'SECRETS');
+  const proxySecret = env.FLARE_DASHBOARD_PROXY_SECRET;
+  if (splitWeb || proxySecret) {
+    if (
+      typeof proxySecret !== 'string' ||
+      !/^fdp_[A-Za-z0-9+/]{43}=$/.test(proxySecret) ||
+      Buffer.from(proxySecret.slice(4), 'base64').toString('base64') !== proxySecret.slice(4)
+    ) {
+      fail('dashboard-proxy-key-required', 'FLARE_DASHBOARD_PROXY_SECRET');
+    } else {
+      // Comparing the payload as well as the wrapper catches encryption-key reuse.
+      // Include named credential references without logging their names or values.
+      const material = proxySecret.slice(4);
+      const bytes = Buffer.from(material, 'base64');
+      const candidates = Object.entries(env).filter(([key]) =>
+        /(?:SECRET|PASSWORD|TOKEN|KEY)(?:_|$)/.test(key),
+      );
+      try {
+        for (const instance of JSON.parse(env.MAIL_TRANSPORTS || '[]'))
+          for (const [field, reference] of Object.entries(instance))
+            if (field.endsWith('_env') && typeof reference === 'string')
+              candidates.push([reference, env[reference]]);
+      } catch {
+        /* Named transport validation reports malformed configuration separately. */
+      }
+      if (
+        candidates.some(
+          ([key, value]) =>
+            key !== 'FLARE_DASHBOARD_PROXY_SECRET' &&
+            typeof value === 'string' &&
+            (value === proxySecret || value === material || Buffer.from(value).equals(bytes)),
+        )
+      )
+        fail('independent-dashboard-key-required', 'FLARE_DASHBOARD_PROXY_SECRET');
+    }
+  }
   if (env.FLARE_ACCEPTANCE === 'true') fail('acceptance-config-forbidden', 'FLARE_ACCEPTANCE');
   if (env.MAIL_SANDBOX === 'true') fail('sandbox-config-forbidden', 'MAIL_SANDBOX');
   const operatorIds = String(env.FLARE_OPERATOR_USER_IDS ?? '')
@@ -280,10 +318,18 @@ export function validateStagingEnv(env) {
   } catch {
     /* invalid URL reported above */
   }
-  if (env.TRUST_PROXY !== '172.30.250.10,172.30.250.11')
+  if (env.TRUST_PROXY !== (splitWeb ? '172.30.250.10' : '172.30.250.10,172.30.250.11'))
     fail('proxy-address-mismatch', 'TRUST_PROXY');
-  if (env.FLARE_FORWARD_CLIENT_IP !== 'true')
-    fail('client-ip-forwarding-required', 'FLARE_FORWARD_CLIENT_IP');
+  if (env.FLARE_FORWARD_CLIENT_IP !== (splitWeb ? 'false' : 'true'))
+    fail(
+      splitWeb ? 'legacy-forwarding-forbidden' : 'client-ip-forwarding-required',
+      'FLARE_FORWARD_CLIENT_IP',
+    );
+  if (splitWeb) {
+    if (env.FLARE_DASHBOARD_INBOX_WS !== 'true')
+      fail('private-inbox-ws-required', 'FLARE_DASHBOARD_INBOX_WS');
+    if (env.NOVU_WS_URL !== 'http://novu-ws:3002') fail('compose-endpoint-required', 'NOVU_WS_URL');
+  }
   // This template has one audited subnet. Changing it needs reviewing the overlay and host routes.
   if (env.STAGING_SUBNET && env.STAGING_SUBNET !== '172.30.250.0/24')
     fail('review-subnet-required', 'STAGING_SUBNET');

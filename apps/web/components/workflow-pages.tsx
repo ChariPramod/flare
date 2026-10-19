@@ -332,7 +332,7 @@ function SubscriberDetail({ id, writable }: { id: string; writable: boolean }) {
         ← Subscribers
       </Link>
       <PageHeader title={profile.data?.profile.email ?? id} description={`Subscriber · ${id}`} />
-      <SubscriberInbox id={id} />
+      <SubscriberInbox id={id} writable={writable} />
       <ErrorBox error={profile.error || preferences.error || update.error} />
       <div className="detail-grid">
         <section className="panel">

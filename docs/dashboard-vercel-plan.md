@@ -40,7 +40,7 @@ Configure the existing `apps/web` workspace as the Vercel project, using the pin
 - Require explicit HTTPS dashboard and backend origins in deployed mode. Preserve HttpOnly, Secure session cookies and exact-origin mutation checks.
 - Add an authenticated web-to-API forwarding mode using a dedicated secret and existing signature helpers. Bind signatures to method, URL, body, authorization, tenant headers and validated client IP; reject tampering, expired signatures and nonce replay.
 - Keep existing self-hosted forwarding behavior intact. Signed forwarding must never grant tenant or operator authority.
-- Add a restricted `/v1/dashboard/inbox/*` gateway to the private Novu Inbox API. Preserve subscriber authorization; keep Novu administration private and its existing WebSocket service external.
+- Add a restricted `/v1/dashboard/inbox/*` gateway to the private Novu Inbox API. Preserve subscriber authorization; keep Novu administration private. In split mode, expose the Flare-authorized WebSocket relay while native Novu WebSocket service stays private.
 - Default Vercel previews to no backend credentials. Display an honest configuration-required state. Connecting a preview requires an explicitly isolated sandbox backend and exact origin.
 
 ### Large email transfers
@@ -60,7 +60,18 @@ Preserve current email schemas, storage journals and cleanup behavior. No new at
 
 ### Deployment compatibility
 
-Add an optional split-web staging configuration: dashboard DNS belongs to Vercel; API, tracking, WebSocket and Postal endpoints remain on the backend. Update ingress checks, preflight and recovery-profile recognition accordingly. Preserve the existing all-Compose deployment path and multi-store backup guarantees.
+Checkpoint 2c implements the optional split-web staging configuration: dashboard DNS belongs to Vercel; API, tracking, authenticated WebSocket ingress and Postal endpoints remain on the backend. Local full-stack, ingress, browser and encrypted recovery checks passed as recorded in the acceptance ledger. An actual Vercel/backend deployment remains pending, so the external deployment gate stays open.
+
+The concrete work is:
+
+- Merge `docker-compose.staging-split-web.yml` after the base and staging files; append the optional Postal receiving overlay last. Use the corresponding `staging-split-web` or `staging-split-web-inbound` backup profile. Retain private `flare-web` for rollback and the same nine staging volumes/six isolated recovery stores.
+- Route split WS ingress through Flare, never directly to native Novu. Bind access to the live Flare session/subscriber and Redis state, recheck before every event, stop idle unauthorized forwarding within a conservative nine-second application budget, and cap native transport reconnects at five attempts. Preserve the all-Compose path.
+- Make preflight validate split origins, dedicated forwarding key, exact trusted proxy and private WS endpoint. Validate both Caddy profiles with synthetic isolated transport/header/log-privacy checks.
+- Add public manifest version 2 for a separately hosted dashboard: validate all public A/AAAA answers and pin each HTTPS connection with hostname/SNI verification. Keep backend hosts IPv4-pinned, with tracking CNAME and mail PTR checks. Preserve version 1 unchanged for all-Compose.
+- Rehearse encrypted split-profile restoration with populated stores, private key/assets and inactive Caddy volumes. Document Vercel project/secret custody separately from the backend bundle.
+- Exercise actual pinned SDK events/reconnect, revocation, viewer behavior and binding-loss recovery in local acceptance, then repeat through public TLS and the actual Vercel deployment. Local gateway evidence does not establish the platform network boundary.
+
+Commands, configuration and the remaining deployment checklist are in [vercel.md](vercel.md), [staging.md](staging.md) and [backup-recovery.md](backup-recovery.md). Record actual pass/failure evidence in [acceptance.md](acceptance.md) before marking a gate complete.
 
 ## Checkpoint 3 — Verification and delivery
 

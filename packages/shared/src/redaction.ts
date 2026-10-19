@@ -3,7 +3,7 @@ const sensitive =
 export function redactText(value: string) {
   return value
     .replace(/(\/preferences\/)[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '$1[REDACTED]')
-    .replace(/https?:\/\/[^\s"<>]+/gi, (raw) => {
+    .replace(/(?:https?|wss?):\/\/[^\s"<>]+/gi, (raw) => {
       try {
         const url = new URL(raw);
         if (url.username) url.username = 'REDACTED';
@@ -63,7 +63,7 @@ const outgoingContent =
   /^\/v1\/(?:emails|events\/(?:postal|sns|novu|trigger)|workflows|activity|templates|template-preview|layouts|translations|content|publish|publications|automations|automation-events|automation-runs)(?:\/|$)/i;
 const inboxCredential = /^\/v1\/subscribers\/[^/]+\/inbox-token\/?$/i;
 const logContent = /^\/v1\/logs(?:\/|$)/i;
-const dashboardContent = /^\/v1\/(?:browser-transfers|dashboard\/inbox)(?:\/|$)/i;
+const dashboardContent = /^(?:\/v1\/(?:browser-transfers|dashboard\/inbox)|\/socket\.io)(?:\/|$)/i;
 export function redactRequestLogBodies(path: string, requestBody: unknown, responseBody: unknown) {
   // Log responses can contain older serialized credentials and recursive log copies.
   const marker = dashboardContent.test(path)

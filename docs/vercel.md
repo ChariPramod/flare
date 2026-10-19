@@ -4,7 +4,7 @@ This is a staged implementation of the [approved dashboard plan](dashboard-verce
 
 ## Current boundary
 
-Checkpoints 2a–2b add signed dashboard forwarding, configuration validation, direct large-content transfers and a private Inbox gateway. Ordinary proxy requests/responses remain capped at 4 MiB. This is **not the complete split-host deployment**: split-host ingress/preflight, recovery-profile changes and actual Vercel connectivity remain checkpoint 2c. The all-Compose deployment retains its existing proxy behavior unless direct transfers are explicitly enabled for testing.
+Checkpoints 2a–2b provide signed dashboard forwarding, configuration validation, direct large-content transfers and a private Inbox HTTP gateway. Checkpoint 2c adds the split-web Compose/Caddy profile, authenticated Inbox WebSocket relay, profile-aware preflight/public checks and encrypted recovery support. Ordinary proxy requests/responses remain capped at 4 MiB. **No Vercel project or public backend has been deployed.** Local full-stack, ingress, browser and recovery checks passed; use the [acceptance ledger](acceptance.md) for measured results. The existing all-Compose profile remains available.
 
 ## Project import settings
 
@@ -59,26 +59,69 @@ For local acceptance, `FLARE_BROWSER_TRANSFERS=true` on the web service enables 
 
 ## Private Inbox gateway
 
-In Vercel mode the dashboard's `/novu/v1/inbox/*` route signs requests to `/v1/dashboard/inbox/*` on Flare. Every request requires a live Flare session and verified dashboard proof. Bootstrap checks the subscriber HMAC/application identifier, then stores a Redis binding between the native token hash and that session, organization, environment and subscriber record. Binding lifetime is capped by the live session, native token expiry and twelve hours. Later requests recheck those identities and permissions; revocation, environment/subscriber changes or missing Redis state fail closed. After binding expiry/loss, reload the subscriber page to remount Inbox and obtain a fresh bootstrap. Closing and reopening its popover retains the existing native session; automatic rebootstrap is not implemented.
+In Vercel mode the dashboard's `/novu/v1/inbox/*` route signs requests to `/v1/dashboard/inbox/*` on Flare. Every request requires a live Flare session and verified dashboard proof. Bootstrap checks the subscriber HMAC/application identifier, then stores a Redis binding between the native token hash and that session, organization, environment and subscriber record. Binding lifetime is capped by the live session, native token expiry and twelve hours. Later requests recheck those identities and permissions; revocation, environment/subscriber changes or missing Redis state fail closed. Binding expiry/loss requires a fresh authenticated HTTP bootstrap. Use **Reconnect Inbox** to refetch subscriber access and replace the retired SDK session; closing and reopening the native popover alone retains its session. The dashboard revalidates its session and performs an uncached Inbox read every 15 seconds while visible, and checks Inbox access on visibility resume. Failures hide stale content and offer a generic retry message. Viewer sessions use an escaped, read-only notification list without automatic seen/read writes. Leaving the page, changing session/tenant/role, or reconnecting retires the previous client and closes its socket, including late initialization. Reconnection never creates a missing Redis binding or bypasses a revoked Flare session.
 
 Only the default Inbox operations in pinned Novu 3.19.0 are allowed: session, notification feed/count, read/unread/archive/snooze/delete/actions and preferences. Viewer sessions can read; mutations require write access. The gateway never forwards a Novu administrator API key and is excluded from the public OpenAPI, SDK and MCP catalog. Responses retain Novu's SDK envelope and are bounded to 2 MiB. Gateway requests are bounded to 64 KiB. Native authorization is bound into the forwarding signature.
 
-Set the backend’s `NOVU_PUBLIC_API_URL` to `${WEB_ORIGIN}/novu`, or unset it to use that fallback. Replace the example localhost value when deploying. A native Novu URL here sends the browser outside the Flare gateway. HTTP Inbox traffic uses the dashboard gateway; native WebSocket notifications still use the separately configured `NOVU_PUBLIC_WS_URL`. Public TLS/WebSocket ingress, browser reconnects and actual Vercel connectivity require checkpoint 2c validation. The existing self-hosted `/novu` route remains unchanged for this checkpoint.
+Set the backend’s `NOVU_PUBLIC_API_URL` to `${WEB_ORIGIN}/novu`. Replace the example localhost value when deploying. A native Novu URL here sends the browser outside the Flare HTTP gateway. In the split profile, `NOVU_PUBLIC_WS_URL=https://<STAGING_WS_HOST>` reaches Caddy and then Flare's authenticated relay; native `novu-ws:3002` remains private. The existing all-Compose `/novu` and native WebSocket routes retain their compatibility behavior.
+
+The split relay requires the exact dashboard Origin, native token and Flare session identifier established by HTTP bootstrap. It checks the live session, membership, environment, subscriber and Redis binding before connecting upstream, before forwarding each event, and after a five-second idle interval following each completed check. Each authorization has a two-second deadline. The conservative idle forwarding cutoff is nine seconds: up to two seconds remaining in an in-flight check that read authority before revocation, five seconds until the next check, and two seconds for that check. This budget assumes a responsive event loop; physical socket closure and network receipt can occur later. Each new event is withheld until its immediate recheck succeeds. Only notification/count events flow outward, and browser application events are rejected. Connection counts, event/queue sizes and authorization deadlines are bounded. Native transport loss allows up to five SDK reconnect attempts, each with fresh authorization; an authority failure closes access and requires a fresh bootstrap. These are application limits, not proof of public network latency or actual Vercel connectivity.
+
+The pinned SDK sends its native JWT in the WebSocket query. Both checked-in Caddyfiles suppress request URI and headers from runtime error logs; do not add unrestricted access logging, request tracing or an upstream proxy that records those queries. Flare also redacts this route from request logs. Keep native admin and WebSocket ports private.
+
+## Split backend profile and public checks
+
+Merge `ops/staging/env.example` and `ops/staging/env.split-web.example` into one private backend `.env`, without duplicate keys. Set `STAGING_WEB_MODE=vercel`, the matching forwarding secret, exact public origins and the reviewed internal endpoints. The split overlay requires `FLARE_DASHBOARD_INBOX_WS=true` and `NOVU_WS_URL=http://novu-ws:3002`; `TRUST_PROXY` is only `172.30.250.10`. It disables the legacy web-IP forwarding mode. The private `flare-web` service is retained for a reviewed rollback but has no split Caddy dashboard site.
+
+From the prepared backend checkout, use this exact ordered profile for all lifecycle commands:
+
+```sh
+flare_compose=(docker compose --project-name flare-staging --project-directory "$PWD" \
+  --env-file "$PWD/.env" -f docker-compose.yml -f docker-compose.staging.yml \
+  -f docker-compose.staging-split-web.yml)
+# Only when Postal receiving is configured; append last and retain on every command:
+# flare_compose+=(-f ops/staging/postal-inbound.yml)
+node scripts/staging/preflight.mjs
+"${flare_compose[@]}" config --quiet
+"${flare_compose[@]}" config --format json | node scripts/staging/validate-model.mjs --split-web
+# Add --postal-inbound to validate-model when the receiving overlay is selected.
+"${flare_compose[@]}" run --rm --no-deps ingress caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+```
+
+The rendered model contains secrets: pipe it directly to the validator, never print or save it in a ticket. Follow [staging bootstrap](staging.md#secrets-and-internal-relay-trust) to initialize Postal/Novu, seed the owner and configure independent environment credentials before opening ingress. After those prerequisites and private validation:
+
+```sh
+"${flare_compose[@]}" up -d --build --wait
+```
+
+The dashboard DNS and HTTPS certificate belong to Vercel. API, tracking and WS DNS belong to the backend host; mail A/PTR and receiving DNS remain Postal requirements. Caddy exposes `/v1/*` and `/t/*` on API/tracking hosts and only `/socket.io` paths on the WS host. The WS target is Flare's API, never public native Novu. Caddy has no dashboard site in this profile. See [staging routing](staging.md#hostnames-and-routing).
+
+After public DNS/TLS exist, copy `ops/staging/public-manifest.split-web.example.json` to a private path and replace its deliberately invalid placeholders. Keep its exact `version: 2`, `dashboard: "external"`, `ipv4` and five-host `hosts` shape. Run from outside the backend:
+
+```sh
+node scripts/staging/verify-public.mjs --manifest /absolute/private/path/public-manifest.json
+```
+
+Version 2 separately resolves the external dashboard's A/AAAA addresses, requires at least one and allows at most eight public addresses. It validates and connects to every resulting unique address, pinning each connection while retaining the dashboard hostname, SNI and ordinary TLS certificate verification. There is no second DNS resolution or redirect following. API, tracking, WS and mail still must resolve only to the configured backend IPv4; their AAAA records are rejected by this IPv4 backend profile. Tracking CNAME and mail PTR checks remain required. Any failed DNS check prevents all HTTPS probes. This does not verify Vercel account ownership, authenticated browser behavior or an Inbox WebSocket upgrade.
+
+The version-1 manifest remains the all-Compose same-host contract. Do not relax it or replace expected IP checks to accommodate a split dashboard; select version 2 explicitly.
+
+## Backup, recovery and rollback
+
+Use `staging-split-web`, or `staging-split-web-inbound` with the receiving override, in [the backup utility](backup-recovery.md). The source containers must record the exact ordered file set. Both Caddy assets, backend `.env` including the forwarding secret, and nine persistent volumes are encrypted and captured. Restore starts only the six stores on an isolated network; application, Caddy and delivery services stay stopped.
+
+Keep the Vercel account/project, release, domain/build settings, exact origins, preview restrictions and matching server-only secret under separate recovery custody. A backend restore does not restore Vercel. The disposable split-profile rehearsal checks preservation of populated local stores/configuration; it does not prove off-host recovery or an executed deployment rollback. Before switching back to Compose, review dashboard DNS/HTTPS ownership, origins, forwarding mode, the canonical file set and one-active-producer recovery policy. Do not run the archived application files automatically. Rehearse that cutover against isolated data before the pilot.
 
 ## Remaining deployment gates
 
 Vercel functions have a documented 4.5 MB request/response payload ceiling. Direct transfer bodies bypass that function; small grants and normal dashboard calls remain within the 4 MiB proxy guard. [Vercel function limits](https://vercel.com/docs/functions/limitations).
 
-Before treating split hosting as ready, complete and verify:
+Local fixtures and the disposable stack establish application/configuration behavior. Before declaring split hosting ready, record these results on the actual Vercel project and backend:
 
-1. Split-host Caddy/DNS/preflight configuration, secret handling and recovery-profile recognition.
-2. Actual Vercel project import, login/MFA, environment switching, transfer boundaries, browser Inbox/WebSocket reconnects, revocation and rollback against an isolated backend.
+1. Import/build with the settings above; exact custom origin and preview isolation; signed client-IP behavior through Vercel's actual headers.
+2. HTTPS/public checks, large transfers and download headers through the real ingress, with no large payload routed through a Vercel function.
+3. Password/MFA login, environment switching, session revocation, viewer restrictions, expired grants and lost-response retry against real origins.
+4. Pinned Inbox HTTP and WebSocket delivery, reconnect after network/native service loss, idle revocation within the configured bound, expiry, Redis binding loss and fresh-bootstrap recovery. Keep native administration private throughout.
+5. Off-host encrypted restore, independent key retrieval, Vercel configuration recovery, alerts, host reboot and reviewed rollback to Compose.
 
-Checkpoint 2c must prove these deployment-specific behaviors:
-
-- The exact public API origin reaches the persistent backend directly for large transfers, with TLS and configured request limits. It must not send large bodies back through a Vercel function. Ingress must preserve the required Origin, authorization, preflight and download headers without trusting caller-supplied proxy addresses.
-- The dashboard reaches only its configured backend; previews stay disconnected unless explicitly assigned an isolated backend. Login/MFA and logout/revocation must work across the real origins, including failed forwarding and expired grants.
-- The native Inbox HTTP admin surface remains private. The default SDK feed, counts, preferences and permitted mutations must work through the gateway; WebSocket delivery/reconnection needs separate TLS ingress verification. Test viewers as well as writable roles, session expiry, environment switching and Redis binding loss.
-- Backup/restore profiles must recognize the split deployment's environment variables and forwarding key, including documented custody/rotation of the Vercel-side configuration. Restore into isolation and test rollback to the retained self-hosted deployment before opening a pilot.
-
-Keep the existing Compose deployment available until these gates pass. No accounts, domain, backend host or external Postal verification are created by this checkpoint.
+Keep the existing Compose deployment available until these gates pass. Public DNS/PTR, real Postal sending/receiving, physical pool isolation, receiver authentication and inbox placement remain separately unverified. No account, domain or backend host is created by this checkpoint.

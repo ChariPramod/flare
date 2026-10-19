@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { parseEnv } from 'node:util';
 import { pipeline } from 'node:stream/promises';
 import {
   decryptFile,
@@ -85,7 +86,39 @@ const PROFILES = {
     'docker-compose.staging.yml',
     'ops/staging/postal-inbound.yml',
   ],
+  'staging-split-web': [
+    'docker-compose.yml',
+    'docker-compose.staging.yml',
+    'docker-compose.staging-split-web.yml',
+  ],
+  'staging-split-web-inbound': [
+    'docker-compose.yml',
+    'docker-compose.staging.yml',
+    'docker-compose.staging-split-web.yml',
+    'ops/staging/postal-inbound.yml',
+  ],
 };
+const splitProfile = (profile) =>
+  profile === 'staging-split-web' || profile === 'staging-split-web-inbound';
+const profileAssets = (profile) => [
+  ...(profile.startsWith('staging') ? ['ops/staging/Caddyfile'] : []),
+  ...(splitProfile(profile) ? ['ops/staging/Caddyfile.split-web'] : []),
+];
+function splitConfiguration(files, profile) {
+  if (!splitProfile(profile)) return;
+  const environment = parseEnv(Buffer.from(files['.env'], 'base64').toString('utf8'));
+  const key = environment.FLARE_DASHBOARD_PROXY_SECRET;
+  if (
+    environment.STAGING_WEB_MODE !== 'vercel' ||
+    typeof key !== 'string' ||
+    !/^fdp_[A-Za-z0-9+/]{43}=$/.test(key) ||
+    Buffer.from(key.slice(4), 'base64').toString('base64') !== key.slice(4)
+  )
+    die(
+      'Split-web recovery requires its explicit mode and dedicated forwarding key in private .env',
+    );
+  return environment;
+}
 const COMPOSE_LABEL = 'com.docker.compose.';
 const MAX_JSON = 32 * 1024 * 1024;
 function inside(root, path) {
@@ -241,8 +274,7 @@ async function inspectImage(runner, reference) {
 async function listPrivate(root, profile) {
   // Checking only the final file misses symlinks in ancestors such as root/ops.
   await canonical(join(root, 'ops'));
-  const paths = ['.env', ...PROFILES[profile]];
-  if (profile.startsWith('staging')) paths.push('ops/staging/Caddyfile');
+  const paths = ['.env', ...PROFILES[profile], ...profileAssets(profile)];
   async function visit(path) {
     await canonical(join(root, path));
     const stat = await lstat(join(root, path));
@@ -292,8 +324,15 @@ export function allowedBind(root, profile, mount, definition, engine) {
   )
     return false;
   const readOnly = mount.RW === false;
-  const fixed = ['ops/postal/config', 'ops/certs', 'ops/staging/Caddyfile'];
+  const fixed = ['ops/postal/config', 'ops/certs'];
   if (fixed.some((path) => inside(join(root, path), source))) return readOnly === true;
+  const ingressAsset = splitProfile(profile)
+    ? 'ops/staging/Caddyfile.split-web'
+    : profile.startsWith('staging')
+      ? 'ops/staging/Caddyfile'
+      : undefined;
+  if (ingressAsset && source === join(root, ingressAsset))
+    return readOnly && mount.Destination === '/etc/caddy/Caddyfile';
   return (
     profile === 'acceptance' &&
     (inside(join(root, 'acceptance'), source) ||
@@ -313,8 +352,7 @@ export async function inspectSource(options, runner = createRunner()) {
   const root = await canonical(options.root),
     project = projectName(options.project),
     profile = options.profile;
-  if (!PROFILES[profile])
-    die('Choose the reviewed local, staging, staging-inbound or acceptance Compose profile');
+  if (!Object.hasOwn(PROFILES, profile)) die('Choose an explicit reviewed Compose backup profile');
   if (
     profile === 'acceptance' &&
     (!/^flare-acceptance-[0-9]+-[0-9]+$/.test(project) ||
@@ -327,6 +365,7 @@ export async function inspectSource(options, runner = createRunner()) {
     await regular(file);
   }
   const privateFiles = await listPrivate(root, profile);
+  const splitEnvironment = splitConfiguration(privateFiles, profile);
   const engine = await localDocker(runner);
   const compose = [
     'compose',
@@ -339,6 +378,21 @@ export async function inspectSource(options, runner = createRunner()) {
     ...files.flatMap((file) => ['-f', file]),
   ];
   const config = json(await runner.run([...compose, 'config', '--format', 'json']));
+  if (splitEnvironment) {
+    const ingress = config.services?.ingress;
+    if (
+      config.services?.['flare-api']?.environment?.FLARE_DASHBOARD_PROXY_SECRET !==
+        splitEnvironment.FLARE_DASHBOARD_PROXY_SECRET ||
+      !(ingress?.volumes ?? []).some(
+        (mount) =>
+          mount.type === 'bind' &&
+          mount.source === join(root, 'ops/staging/Caddyfile.split-web') &&
+          mount.target === '/etc/caddy/Caddyfile' &&
+          mount.read_only === true,
+      )
+    )
+      die('Split-web runtime does not match its private forwarding key and ingress asset');
+  }
   const logicalVolumes = volumeNames(profile);
   if (config.name !== project || !exactKeys(config.volumes ?? {}, logicalVolumes))
     die('Reviewed Compose volume/project identity mismatch');
@@ -406,6 +460,20 @@ export async function inspectSource(options, runner = createRunner()) {
           'Runtime environment differs from private Compose configuration; reconcile before backup',
         );
     runtime[service] = { image: container.Image, environment };
+    if (
+      splitEnvironment &&
+      service === 'ingress' &&
+      !(container.Mounts ?? []).some(
+        (mount) =>
+          mount.Type === 'bind' &&
+          mount.Destination === '/etc/caddy/Caddyfile' &&
+          (mount.Source === join(root, 'ops/staging/Caddyfile.split-web') ||
+            (engine.desktop &&
+              mount.Source === `/host_mnt${join(root, 'ops/staging/Caddyfile.split-web')}`)) &&
+          allowedBind(root, profile, mount, definition, engine),
+      )
+    )
+      die('Split-web ingress runtime is missing its exact read-only configuration mount');
     for (const mount of container.Mounts ?? []) {
       if (mount.Type === 'volume' && !Object.values(volumes).includes(mount.Name)) {
         if (
@@ -450,6 +518,8 @@ export async function inspectSource(options, runner = createRunner()) {
       die('Mongo configuration volume has a foreign writer');
   if (!exactKeys(stores, Object.keys(STORES)))
     die('All six store containers must exist before backup');
+  if (splitEnvironment && (!seen.has('flare-api') || !seen.has('ingress')))
+    die('Split-web API and ingress containers must exist before backup');
   for (const volume of Object.values(volumes))
     if (!selected.some((container) => container.Mounts?.some((mount) => mount.Name === volume)))
       die('A source volume has no reviewed container mount');
@@ -651,7 +721,7 @@ export async function backup(options, runner = createRunner()) {
 function validateManifest(manifest) {
   if (
     manifest?.version !== 1 ||
-    !PROFILES[manifest.source?.profile] ||
+    !Object.hasOwn(PROFILES, manifest.source?.profile ?? '') ||
     !/^\d{4}-\d\d-\d\dT/.test(manifest.createdAt ?? '') ||
     !/^[a-f0-9]{32}$/.test(manifest.id ?? '')
   )
@@ -708,7 +778,7 @@ async function validatePrivate(path, profile) {
     'ops/postal/config/postal.yml',
     'ops/postal/config/signing.key',
     'ops/certs/postal-public.pem',
-    ...(profile.startsWith('staging') ? ['ops/staging/Caddyfile'] : []),
+    ...profileAssets(profile),
   ];
   if (required.some((name) => !Object.hasOwn(files, name))) die('Incomplete private configuration');
   for (const [path, content] of Object.entries(files)) {
@@ -725,6 +795,7 @@ async function validatePrivate(path, profile) {
     )
       die('Unsafe private configuration path or content');
   }
+  splitConfiguration(files, profile);
   return files;
 }
 async function freshResources(runner, project) {

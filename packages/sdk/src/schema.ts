@@ -25831,6 +25831,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        subscriberId: string;
+                        subscriberHash: string;
+                        applicationIdentifier: string | null;
+                        backendUrl: string;
+                        socketUrl: string;
+                        socketOptions?: {
+                            /** @enum {string} */
+                            socketType: "self-hosted";
+                            transports: "websocket"[];
+                            auth: {
+                                /** Format: uuid */
+                                flareSessionId: string;
+                            } & {
+                                [key: string]: unknown;
+                            };
+                            reconnectionAttempts: number;
+                            reconnectionDelayMax: number;
+                            timeout: number;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    } & {
                         [key: string]: unknown;
                     };
                 };

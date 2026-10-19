@@ -38,6 +38,7 @@ services:
   flare-api:
     environment:
       NODE_ENV: production
+      STAGING_WEB_MODE: compose
       TRUST_PROXY: '${STAGING_PROXY_IP:-172.30.250.10},172.30.250.11'
   flare-web:
     environment:

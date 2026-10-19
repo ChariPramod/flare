@@ -1,0 +1,17 @@
+# Merge after docker-compose.yml and docker-compose.staging.yml.
+# The dashboard hostname belongs to Vercel. Keep private flare-web for rollback;
+# only the API, tracking and authenticated Inbox WebSocket sites reach this host.
+services:
+  ingress:
+    volumes:
+      - ./ops/staging/Caddyfile.split-web:/etc/caddy/Caddyfile:ro
+  flare-api:
+    environment:
+      STAGING_WEB_MODE: vercel
+      TRUST_PROXY: '172.30.250.10'
+      FLARE_DASHBOARD_PROXY_SECRET: ${FLARE_DASHBOARD_PROXY_SECRET:?Set an independent dashboard forwarding key}
+      FLARE_DASHBOARD_INBOX_WS: 'true'
+      NOVU_WS_URL: http://novu-ws:3002
+  flare-web:
+    environment:
+      FLARE_FORWARD_CLIENT_IP: 'false'

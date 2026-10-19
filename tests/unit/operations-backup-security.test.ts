@@ -145,6 +145,40 @@ async function signedFixture(mutate: Mutation) {
 }
 
 describe('independent authenticated backup input review', () => {
+  it.each(['missing-split-asset', 'wrong-mode', 'missing-key', 'extra-overlay'])(
+    'rejects authenticated split configuration %s before Docker or target effects',
+    async (failure) => {
+      const fixture = await signedFixture(({ manifest, privateFiles, bodies }) => {
+        manifest.source.profile = 'staging-split-web-inbound';
+        for (const name of ['staging-caddy-data', 'staging-caddy-config'])
+          bodies[name] = Buffer.alloc(1024);
+        for (const path of [
+          'docker-compose.staging.yml',
+          'docker-compose.staging-split-web.yml',
+          'ops/staging/postal-inbound.yml',
+          'ops/staging/Caddyfile',
+          'ops/staging/Caddyfile.split-web',
+        ])
+          privateFiles[path] = Buffer.from('reviewed fixture').toString('base64');
+        privateFiles['.env'] = Buffer.from(
+          `STAGING_WEB_MODE=${failure === 'wrong-mode' ? 'compose' : 'vercel'}\n` +
+            (failure === 'missing-key'
+              ? ''
+              : `FLARE_DASHBOARD_PROXY_SECRET=fdp_${randomBytes(32).toString('base64')}\n`),
+        ).toString('base64');
+        if (failure === 'missing-split-asset')
+          delete privateFiles['ops/staging/Caddyfile.split-web'];
+        if (failure === 'extra-overlay')
+          privateFiles['docker-compose.custom.yml'] = Buffer.from('unreviewed').toString('base64');
+      });
+      await expect(restore(fixture.options, fixture.runner)).rejects.toThrow(
+        /configuration|Split-web/,
+      );
+      expect(fixture.calls).toHaveLength(0);
+      await expect(readFile(fixture.options.targetRoot)).rejects.toMatchObject({ code: 'ENOENT' });
+    },
+  );
+
   it.each([
     [
       ['./same', '0'],

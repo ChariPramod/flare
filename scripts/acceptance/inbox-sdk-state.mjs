@@ -8,7 +8,10 @@ const [phase, orgId, environmentId, sessionId, ...bindingHashes] = process.argv.
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 let redis;
 try {
-  assert.ok(['timezone', 'cleanup'].includes(phase), 'Known Inbox SDK fixture operation');
+  assert.ok(
+    ['timezone', 'binding-loss', 'revoke', 'cleanup'].includes(phase),
+    'Known Inbox SDK fixture operation',
+  );
   assert.ok(uuid.test(orgId ?? '') && uuid.test(environmentId ?? ''), 'Valid fixture tenant');
   const [environment] = await sql`
     select e.novu_key_cipher from environments e
@@ -42,10 +45,11 @@ try {
       bindingHashes.length <= 10 && bindingHashes.every((hash) => /^[a-f0-9]{64}$/.test(hash)),
       'Bounded owned native token hashes',
     );
-    const rows = await sql`update sessions set revoked_at=coalesce(revoked_at,now())
-      where id=${sessionId} and user_id in
-        (select id from users where email=${process.env.SEED_OWNER_EMAIL}) returning id`;
-    assert.equal(rows.length, 1, 'Only the fixture owner session is revoked');
+    const rows = await sql`select id from sessions where id=${sessionId} and user_id in
+      (select id from users where email=${process.env.SEED_OWNER_EMAIL})`;
+    assert.equal(rows.length, 1, 'Only the fixture owner session is selected');
+    if (phase !== 'binding-loss')
+      await sql`update sessions set revoked_at=coalesce(revoked_at,now()) where id=${sessionId}`;
     const { Redis } = createRequire(new URL('../../apps/api/package.json', import.meta.url))(
       'ioredis',
     );
@@ -58,9 +62,9 @@ try {
     });
     redis.on('error', () => undefined);
     await redis.connect();
-    if (bindingHashes.length)
+    if (phase !== 'revoke' && bindingHashes.length)
       await redis.del(...bindingHashes.map((hash) => `dashboard-inbox:v1:${sessionId}:${hash}`));
-    console.log('Owned browser SDK session and native bindings cleaned up.');
+    console.log('Owned browser SDK fixture state updated.');
   }
 } catch {
   throw new Error('Disposable Inbox SDK fixture operation failed');

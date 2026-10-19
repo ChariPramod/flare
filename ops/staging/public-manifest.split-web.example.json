@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "dashboard": "external",
+  "ipv4": "203.0.113.10",
+  "hosts": {
+    "dashboard": "flare.staging.example.invalid",
+    "api": "api.staging.example.invalid",
+    "ws": "ws.staging.example.invalid",
+    "tracking": "track.notify.staging.example.invalid",
+    "mail": "mail.staging.example.invalid"
+  }
+}

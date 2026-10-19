@@ -17,7 +17,7 @@ function required(name: string) {
   if (!value) throw new Error(`${name} is required for disposable Inbox SDK acceptance`);
   return value;
 }
-function fixture(phase: 'timezone' | 'cleanup', values: string[]) {
+function fixture(phase: 'timezone' | 'binding-loss' | 'revoke' | 'cleanup', values: string[]) {
   const directory = required('E2E_ACCEPTANCE_DIRECTORY');
   const project = required('E2E_ACCEPTANCE_PROJECT');
   if (
@@ -73,6 +73,11 @@ type Schedule = {
 type Notification = { id: string; body: string; isRead: boolean };
 type Result<T> = Promise<{ data?: T; error?: unknown }>;
 type Sdk = {
+  on(
+    name: string,
+    listener: (event: { error?: unknown; result?: Notification }) => void,
+  ): () => void;
+  socket: { connect(): Promise<{ error?: unknown }>; disconnect(): Promise<{ error?: unknown }> };
   notifications: {
     list(
       options?: Record<string, unknown>,
@@ -86,8 +91,19 @@ type Sdk = {
     schedule: { get(): Result<Schedule>; update(value: Schedule): Result<Schedule> };
   };
 };
+type BrowserSdk = {
+  AcceptanceNovuSdk: { Novu: new (options: Record<string, unknown>) => Sdk };
+  acceptanceInbox: {
+    sdk: Sdk;
+    options: Record<string, unknown>;
+    connections: number;
+    failures: number;
+    failureReasons: string[];
+    received: string[];
+  };
+};
 
-test('pinned browser SDK uses the signed Inbox gateway without mutating subscriber timezone', async ({
+test('pinned browser SDK uses signed Inbox HTTP and live authorized sockets with recovery', async ({
   page,
   baseURL,
 }) => {
@@ -133,21 +149,41 @@ test('pinned browser SDK uses the signed Inbox gateway without mutating subscrib
     'x-environment-id': environment.id,
   };
   const hashes = new Set<string>();
+  let controlSessionId: string | undefined;
   const operations: { method: string; path: string; status: number }[] = [];
   let bootstrap: { timezone?: string; subscriberKeys: string[]; keys: string[] } | undefined;
   let scheduleHours: unknown;
   let bridgeFailed = false;
+  let closedSockets = 0;
+  const closeSockets: (() => Promise<void>)[] = [];
+  const handshakes: { keys: string[]; validToken: boolean }[] = [];
   const address = `2001:db8:${randomBytes(12).toString('hex').match(/.{4}/g)!.join(':')}`;
   try {
     const before = JSON.parse(fixture('timezone', tenant));
     expect(before.timezone).not.toBe('Pacific/Chatham');
     const access = await json(`/subscribers/${subscriberId}/inbox-token`, headers);
-    await page.route(`${baseURL}/acceptance-inbox-sdk`, (route) =>
-      route.fulfill({
-        contentType: 'text/html',
-        body: '<!doctype html><title>Inbox SDK acceptance</title>',
-      }),
-    );
+    expect(access.socketOptions?.socketType).toBe('self-hosted');
+    await page.routeWebSocket('ws://127.0.0.1:4000/socket.io/**', (socket) => {
+      const query = new URL(socket.url()).searchParams;
+      handshakes.push({
+        keys: [...query.keys()].sort(),
+        validToken: /^[\w-]+\.[\w-]+\.[\w-]+$/.test(query.get('token') ?? ''),
+      });
+      const server = socket.connectToServer();
+      server.onClose(async () => {
+        closedSockets++;
+        await socket.close({ code: 1000 });
+      });
+      socket.onClose(async () => {
+        await server.close({ code: 1000 });
+      });
+      closeSockets.push(async () => {
+        await Promise.all([
+          socket.close({ code: 1001, reason: 'Disposable transport interruption' }),
+          server.close({ code: 1001, reason: 'Disposable transport interruption' }),
+        ]);
+      });
+    });
     await page.route(`${baseURL}/sdk-inbox/v1/inbox/**`, async (route) => {
       const request = route.request();
       try {
@@ -212,20 +248,50 @@ test('pinned browser SDK uses the signed Inbox gateway without mutating subscrib
         await route.abort('failed');
       }
     });
-    await page.goto(`${baseURL}/acceptance-inbox-sdk`);
+    // Obtain the real loopback document origin before replacing its contents.
+    // A fulfilled synthetic navigation has no network address-space evidence:
+    // Chromium blocks its real sockets with Local Network Access checks.
+    await page.goto(`${baseURL}/login`);
+    await page.setContent('<!doctype html><title>Inbox SDK acceptance</title>');
     await page.addScriptTag({ content: bundle.outputFiles[0].text });
     const outcome = await page.evaluate(
       async (options) => {
-        const browser = window as unknown as {
-          AcceptanceNovuSdk: { Novu: new (options: Record<string, unknown>) => Sdk };
-        };
-        const sdk = new browser.AcceptanceNovuSdk.Novu({
+        const browser = window as unknown as BrowserSdk;
+        const config = {
           applicationIdentifier: options.applicationIdentifier,
           subscriberHash: options.subscriberHash,
           subscriber: options.subscriberId,
           backendUrl: `${location.origin}/sdk-inbox`,
-          socketUrl: location.origin,
+          socketUrl: options.socketUrl,
+          socketOptions: options.socketOptions,
           useCache: false,
+        };
+        const sdk = new browser.AcceptanceNovuSdk.Novu(config);
+        const state = {
+          sdk,
+          options: config,
+          connections: 0,
+          failures: 0,
+          failureReasons: [] as string[],
+          received: [] as string[],
+        };
+        browser.acceptanceInbox = state;
+        sdk.on('socket.connect.resolved', (event) => {
+          if (event.error) {
+            state.failures++;
+            const message =
+              typeof event.error === 'object' && event.error && 'message' in event.error
+                ? String(event.error.message)
+                : '';
+            state.failureReasons.push(
+              ['Inbox socket access unavailable', 'websocket error', 'timeout'].includes(message)
+                ? message
+                : 'unknown socket failure',
+            );
+          } else state.connections++;
+        });
+        sdk.on('notifications.notification_received', (event) => {
+          if (typeof event.result?.body === 'string') state.received.push(event.result.body);
         });
         async function value<T>(result: Result<T>, label: string): Promise<T> {
           try {
@@ -327,6 +393,8 @@ test('pinned browser SDK uses the signed Inbox gateway without mutating subscrib
       {
         applicationIdentifier: access.applicationIdentifier,
         subscriberHash: access.subscriberHash,
+        socketOptions: access.socketOptions,
+        socketUrl: apiOrigin,
         subscriberId,
         body,
       },
@@ -356,7 +424,131 @@ test('pinned browser SDK uses the signed Inbox gateway without mutating subscrib
     ).toBe(true);
     expect(operations.some((operation) => operation.path === 'preferences/global')).toBe(true);
     expect(JSON.parse(fixture('timezone', tenant))).toEqual(before);
+
+    // These are real native worker events, not mocked socket messages. The Node
+    // bridge above signs HTTP only; Chromium opens the persistent API socket itself.
+    const workflowId = `acceptance-inbox-socket-${randomBytes(8).toString('hex')}`;
+    const liveBody = `Live gateway event ${workflowId}`;
+    await json('/workflows', headers, {
+      workflowId,
+      name: 'Disposable live Inbox socket',
+      steps: [
+        {
+          stepId: 'inbox',
+          name: 'Inbox delivery',
+          type: 'in_app',
+          controlValues: { body: liveBody },
+        },
+      ],
+    });
+    const received = () =>
+      page.evaluate(
+        (value) =>
+          (window as unknown as BrowserSdk).acceptanceInbox.received.filter(
+            (entry) => entry === value,
+          ).length,
+        liveBody,
+      );
+    async function deliver(using = headers) {
+      const run = await json('/events/trigger', using, { name: workflowId, to: subscriberId });
+      await expect
+        .poll(async () => (await json(`/activity/${run.ids[0]}`, using)).status)
+        .toBe('accepted');
+    }
+    await page.waitForFunction(() => {
+      const s = (window as unknown as BrowserSdk).acceptanceInbox;
+      return s.connections > 0 || s.failures > 0;
+    });
+    const connected = await page.evaluate(() => {
+      const { connections, failures, failureReasons } = (window as unknown as BrowserSdk)
+        .acceptanceInbox;
+      return { connections, failures, failureReasons };
+    });
+    expect({ ...connected, handshakes }).toEqual({
+      connections: 1,
+      failures: 0,
+      failureReasons: [],
+      handshakes: [{ keys: ['EIO', 'token', 'transport'], validToken: true }],
+    });
+    await deliver();
+    await expect.poll(received).toBe(1);
+
+    // Interrupt the actual browser transport. The pinned SDK's bounded automatic
+    // reconnect must obtain current authority again before native events resume.
+    await closeSockets[0]!();
+    await expect
+      .poll(() =>
+        page.evaluate(() => (window as unknown as BrowserSdk).acceptanceInbox.connections),
+      )
+      .toBe(2);
+    await deliver();
+    await expect.poll(received).toBe(2);
+
+    const beforeLoss = closedSockets;
+    fixture('binding-loss', [...tenant, sessionId, ...hashes]);
+    await expect.poll(() => closedSockets, { timeout: 10000 }).toBeGreaterThan(beforeLoss);
+    await page.evaluate(async () => {
+      const { sdk } = (window as unknown as BrowserSdk).acceptanceInbox;
+      await sdk.socket.disconnect();
+      await sdk.socket.connect();
+    });
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as BrowserSdk).acceptanceInbox.failures))
+      .toBe(1);
+    expect(await received()).toBe(2);
+
+    // A new SDK instance repeats signed HTTP bootstrap. Reconnecting only the old
+    // native token cannot recreate a lost Flare authority binding.
+    const bootstraps = operations.filter((operation) => operation.path === 'session').length;
+    await page.evaluate(async () => {
+      const browser = window as unknown as BrowserSdk;
+      const state = browser.acceptanceInbox;
+      await state.sdk.socket.disconnect();
+      state.sdk = new browser.AcceptanceNovuSdk.Novu(state.options);
+      state.sdk.on('socket.connect.resolved', (event) => {
+        if (event.error) state.failures++;
+        else state.connections++;
+      });
+      state.sdk.on('notifications.notification_received', (event) => {
+        if (typeof event.result?.body === 'string') state.received.push(event.result.body);
+      });
+      const feed = await state.sdk.notifications.list();
+      if (feed.error || !feed.data) throw new Error('Fresh signed Inbox bootstrap failed');
+    });
+    await expect
+      .poll(() =>
+        page.evaluate(() => (window as unknown as BrowserSdk).acceptanceInbox.connections),
+      )
+      .toBe(3);
+    expect(operations.filter((operation) => operation.path === 'session').length).toBe(
+      bootstraps + 1,
+    );
+    await deliver();
+    await expect.poll(received).toBe(3);
+
+    const control = await json(
+      '/auth/login',
+      {},
+      { email: required('E2E_EMAIL'), password: required('E2E_PASSWORD') },
+    );
+    controlSessionId = JSON.parse(
+      Buffer.from(control.token.split('.')[1], 'base64url').toString(),
+    ).jti;
+    const controlHeaders = { ...headers, Authorization: `Bearer ${control.token}` };
+    const beforeRevocation = closedSockets;
+    fixture('revoke', [...tenant, sessionId]);
+    await expect.poll(() => closedSockets, { timeout: 10000 }).toBeGreaterThan(beforeRevocation);
+    await deliver(controlHeaders);
+    expect(await received()).toBe(3);
+    await page.evaluate(async () => {
+      const { sdk } = (window as unknown as BrowserSdk).acceptanceInbox;
+      const result = await sdk.notifications.list();
+      if (!result.error) throw new Error('Revoked Flare session retained native feed access');
+      await sdk.socket.disconnect();
+    });
+    expect(bridgeFailed).toBe(false);
   } finally {
+    if (controlSessionId) fixture('cleanup', [...tenant, controlSessionId]);
     fixture('cleanup', [...tenant, sessionId, ...hashes]);
   }
 });

@@ -47190,6 +47190,84 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "properties": {
+                    "subscriberId": {
+                      "type": "string"
+                    },
+                    "subscriberHash": {
+                      "type": "string"
+                    },
+                    "applicationIdentifier": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "backendUrl": {
+                      "type": "string"
+                    },
+                    "socketUrl": {
+                      "type": "string"
+                    },
+                    "socketOptions": {
+                      "type": "object",
+                      "properties": {
+                        "socketType": {
+                          "type": "string",
+                          "enum": [
+                            "self-hosted"
+                          ]
+                        },
+                        "transports": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "websocket"
+                            ]
+                          },
+                          "minItems": 1,
+                          "maxItems": 1
+                        },
+                        "auth": {
+                          "type": "object",
+                          "properties": {
+                            "flareSessionId": {
+                              "type": "string",
+                              "format": "uuid"
+                            }
+                          },
+                          "required": [
+                            "flareSessionId"
+                          ],
+                          "additionalProperties": true
+                        },
+                        "reconnectionAttempts": {
+                          "type": "integer"
+                        },
+                        "reconnectionDelayMax": {
+                          "type": "integer"
+                        },
+                        "timeout": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "socketType",
+                        "transports",
+                        "auth",
+                        "reconnectionAttempts",
+                        "reconnectionDelayMax",
+                        "timeout"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "subscriberId",
+                    "subscriberHash",
+                    "applicationIdentifier",
+                    "backendUrl",
+                    "socketUrl"
+                  ],
                   "additionalProperties": true
                 }
               }

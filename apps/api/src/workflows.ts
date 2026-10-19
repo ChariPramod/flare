@@ -78,6 +78,20 @@ export async function subscriberInboxAccess(principal: Principal, id: string) {
       process.env.NOVU_PUBLIC_API_URL ||
       `${process.env.WEB_ORIGIN ?? 'http://localhost:3000'}/novu`,
     socketUrl: process.env.NOVU_PUBLIC_WS_URL ?? 'http://localhost:3002',
+    ...(process.env.FLARE_DASHBOARD_INBOX_WS === 'true' &&
+    principal.kind === 'session' &&
+    principal.sessionId
+      ? {
+          socketOptions: {
+            socketType: 'self-hosted' as const,
+            transports: ['websocket'] as ['websocket'],
+            auth: { flareSessionId: principal.sessionId },
+            reconnectionAttempts: 5,
+            reconnectionDelayMax: 10000,
+            timeout: 5000,
+          },
+        }
+      : {}),
   };
 }
 function engineDefinition(workflow: Workflow, deps: ContentDependencies = emptyDependencies()) {

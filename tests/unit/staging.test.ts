@@ -108,6 +108,65 @@ describe('staging offline preflight', () => {
     );
     expect(JSON.stringify(report)).not.toContain('sensitive-short-value');
   });
+  it('accepts an explicit Vercel dashboard with independent signing and private WebSocket routing', () => {
+    const env = {
+      ...environment(),
+      STAGING_WEB_MODE: 'vercel',
+      TRUST_PROXY: '172.30.250.10',
+      FLARE_FORWARD_CLIENT_IP: 'false',
+      FLARE_DASHBOARD_INBOX_WS: 'true',
+      NOVU_WS_URL: 'http://novu-ws:3002',
+      FLARE_DASHBOARD_PROXY_SECRET: `fdp_${Buffer.alloc(32, 42).toString('base64')}`,
+    };
+    expect(validateStagingEnv(env)).toEqual([]);
+    for (const key of ['', 'not-a-private-signing-key', `fdp_${'x'.repeat(43)}=`]) {
+      expect(validateStagingEnv({ ...env, FLARE_DASHBOARD_PROXY_SECRET: key })).toContainEqual({
+        code: 'dashboard-proxy-key-required',
+        field: 'FLARE_DASHBOARD_PROXY_SECRET',
+      });
+    }
+    for (const change of [
+      { JWT_SECRET: env.FLARE_DASHBOARD_PROXY_SECRET },
+      { FLARE_ENCRYPTION_KEY: env.FLARE_DASHBOARD_PROXY_SECRET.slice(4) },
+      { STORE_ENCRYPTION_KEY: '*'.repeat(32) },
+      {
+        MAIL_TRANSPORTS: JSON.stringify([{ ...postalInstance, api_key_env: 'CREDENTIAL_VALUE' }]),
+        CREDENTIAL_VALUE: env.FLARE_DASHBOARD_PROXY_SECRET.slice(4),
+      },
+    ]) {
+      expect(validateStagingEnv({ ...env, ...change })).toContainEqual({
+        code: 'independent-dashboard-key-required',
+        field: 'FLARE_DASHBOARD_PROXY_SECRET',
+      });
+    }
+    for (const [change, code, field] of [
+      [{ STAGING_WEB_MODE: 'preview' }, 'web-mode-invalid', 'STAGING_WEB_MODE'],
+      [{ TRUST_PROXY: '172.30.250.10,172.30.250.11' }, 'proxy-address-mismatch', 'TRUST_PROXY'],
+      [{ TRUST_PROXY: '0.0.0.0/0' }, 'proxy-address-mismatch', 'TRUST_PROXY'],
+      [
+        { FLARE_FORWARD_CLIENT_IP: 'true' },
+        'legacy-forwarding-forbidden',
+        'FLARE_FORWARD_CLIENT_IP',
+      ],
+      [
+        { FLARE_DASHBOARD_INBOX_WS: 'false' },
+        'private-inbox-ws-required',
+        'FLARE_DASHBOARD_INBOX_WS',
+      ],
+      [{ NOVU_WS_URL: 'https://api.novu.co' }, 'compose-endpoint-required', 'NOVU_WS_URL'],
+      [{ WEB_ORIGIN: 'https://*.vercel.app' }, 'public-url-mismatch', 'WEB_ORIGIN'],
+      [
+        { NOVU_PUBLIC_API_URL: 'https://api.novu.co' },
+        'public-url-mismatch',
+        'NOVU_PUBLIC_API_URL',
+      ],
+    ] as const) {
+      expect(validateStagingEnv({ ...env, ...change })).toContainEqual({ code, field });
+    }
+    expect(
+      JSON.stringify(validateStagingEnv({ ...env, JWT_SECRET: env.FLARE_DASHBOARD_PROXY_SECRET })),
+    ).not.toContain(env.FLARE_DASHBOARD_PROXY_SECRET);
+  });
   it('requires a complete SMTP and OIDC configuration', () => {
     const result = validateStagingEnv({
       ...environment(),

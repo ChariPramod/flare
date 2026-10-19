@@ -42,6 +42,9 @@ it.each([
   '/v1/dashboard/inbox/session',
   '/V1/DASHBOARD/INBOX/notifications',
   '/v1/dashboard/inbox/notifications/:id/read',
+  '/socket.io',
+  '/socket.io/',
+  '/SOCKET.IO/unsupported',
 ])('omits dashboard credentials and native content from current and historical %s logs', (path) => {
   const payload = JSON.stringify({ token: 'private-grant', body: 'private notification' });
   expect(redactRequestLogBodies(path, { query: { token: 'private-grant' } }, payload)).toEqual({
@@ -54,6 +57,14 @@ it.each([
 });
 
 describe('Inbox credential redaction', () => {
+  it.each(['ws', 'wss'])('redacts native query credentials from %s URLs', (scheme) => {
+    const source = `${scheme}://inbox.example.test/socket.io/?EIO=4&transport=websocket&token=opaque-fixture&token=another-fixture`;
+    const cleaned = new URL(redactText(source));
+    expect(cleaned.protocol).toBe(`${scheme}:`);
+    expect(cleaned.searchParams.getAll('token')).toEqual(['[REDACTED]']);
+    expect(cleaned.searchParams.get('transport')).toBe('websocket');
+    expect(JSON.stringify(redact({ note: source }))).not.toContain('opaque-fixture');
+  });
   const names = [
     'subscriberHash',
     'subscriber_hash',

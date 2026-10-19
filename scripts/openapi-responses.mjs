@@ -116,6 +116,29 @@ const publication = obj(
   ['id', 'status'],
 );
 const mappings = {
+  WorkflowController_inbox: obj(
+    {
+      subscriberId: str,
+      subscriberHash: str,
+      applicationIdentifier: { type: 'string', nullable: true },
+      backendUrl: str,
+      socketUrl: str,
+      socketOptions: obj({
+        socketType: { type: 'string', enum: ['self-hosted'] },
+        transports: {
+          type: 'array',
+          items: { type: 'string', enum: ['websocket'] },
+          minItems: 1,
+          maxItems: 1,
+        },
+        auth: obj({ flareSessionId: { type: 'string', format: 'uuid' } }),
+        reconnectionAttempts: int,
+        reconnectionDelayMax: int,
+        timeout: int,
+      }),
+    },
+    ['subscriberId', 'subscriberHash', 'applicationIdentifier', 'backendUrl', 'socketUrl'],
+  ),
   MailController_capabilities: obj({
     attachment_max_bytes: int,
     attachment_max_count: int,

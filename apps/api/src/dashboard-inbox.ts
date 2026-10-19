@@ -311,10 +311,14 @@ export function dashboardInboxOperation(method: string, target: string, body: un
 }
 
 type Dependencies = {
-  liveSession(principal: Principal): Promise<{ remainingSeconds: number; role: Role } | undefined>;
+  liveSession(
+    principal: Principal,
+    signal?: AbortSignal,
+  ): Promise<{ remainingSeconds: number; role: Role } | undefined>;
   subscriber(
     principal: Principal,
     subscriberId: string,
+    signal?: AbortSignal,
   ): Promise<{ id: string; applicationIdentifier: string } | undefined>;
   credentials(
     principal: Principal,
@@ -548,35 +552,109 @@ export function createDashboardInboxGateway(deps: Dependencies) {
   };
 }
 
-const gateway = createDashboardInboxGateway({
-  async liveSession(principal) {
-    const [session] =
-      await sql`select m.role, extract(epoch from (s.expires_at-clock_timestamp())) as remaining
+async function abortableQuery<T>(
+  query: PromiseLike<T> & { cancel(): void },
+  signal?: AbortSignal,
+): Promise<T> {
+  signal?.throwIfAborted();
+  const cancel = () => query.cancel();
+  signal?.addEventListener('abort', cancel, { once: true });
+  try {
+    const result = await query;
+    signal?.throwIfAborted();
+    return result;
+  } finally {
+    signal?.removeEventListener('abort', cancel);
+  }
+}
+
+type AuthorityDependencies = Pick<Dependencies, 'liveSession' | 'subscriber' | 'redis' | 'now'>;
+export const dashboardInboxAuthority: AuthorityDependencies = {
+  async liveSession(principal, signal) {
+    const [session] = await abortableQuery(
+      sql`select m.role, extract(epoch from (s.expires_at-clock_timestamp())) as remaining
       from sessions s join memberships m on m.user_id=s.user_id and m.org_id=${principal.orgId}
       join environments e on e.org_id=m.org_id and e.id=${principal.environmentId}
       where s.id=${principal.sessionId!} and s.user_id=${principal.actorId}
-      and s.revoked_at is null and s.expires_at>clock_timestamp()`;
+      and s.revoked_at is null and s.expires_at>clock_timestamp()`,
+      signal,
+    );
     return session
       ? { role: session.role as Role, remainingSeconds: Number(session.remaining) }
       : undefined;
   },
-  async subscriber(principal, subscriberId) {
-    const [row] = await withTenant(
-      sql,
-      principal,
-      (tx) => tx`select s.id,e.novu_application_id
+  async subscriber(principal, subscriberId, signal) {
+    signal?.throwIfAborted();
+    const [row] = await withTenant(sql, principal, (tx) =>
+      abortableQuery(
+        tx`select s.id,e.novu_application_id
       from subscribers s join environments e on e.id=s.environment_id and e.org_id=s.org_id
       where s.subscriber_id=${subscriberId}`,
+        signal,
+      ),
     );
     return row?.novu_application_id
       ? { id: String(row.id), applicationIdentifier: String(row.novu_application_id) }
       : undefined;
   },
-  credentials: subscriberInboxAccess,
   redis,
+  now: Date.now,
+};
+
+/** A session identifier is not authority: the signed HTTP bootstrap must have bound this token. */
+export function createDashboardInboxSocketAuthority(deps: AuthorityDependencies) {
+  return async (sessionId: string, token: string, signal: AbortSignal) => {
+    signal.throwIfAborted();
+    if (!z.string().uuid().safeParse(sessionId).success) throw new UnauthorizedException();
+    nativeToken(token);
+    const stored = await deps.redis.get(`dashboard-inbox:v1:${sessionId}:${hashToken(token)}`);
+    signal.throwIfAborted();
+    const parsed = bindingSchema.safeParse(JSON.parse(stored ?? 'null'));
+    if (
+      !parsed.success ||
+      parsed.data.sessionId !== sessionId ||
+      parsed.data.expiresAt <= deps.now()
+    )
+      throw new UnauthorizedException();
+    const binding = parsed.data;
+    const principal: Principal = {
+      kind: 'session',
+      role: 'viewer',
+      production: false,
+      sessionId,
+      actorId: binding.actorId,
+      orgId: binding.orgId,
+      environmentId: binding.environmentId,
+    };
+    const started = deps.now();
+    const live = await deps.liveSession(principal, signal);
+    signal.throwIfAborted();
+    if (
+      !live ||
+      !Number.isFinite(live.remainingSeconds) ||
+      live.remainingSeconds <= 0 ||
+      !can({ ...principal, role: live.role }, 'read')
+    )
+      throw new UnauthorizedException();
+    const subscriber = await deps.subscriber(principal, binding.subscriberId, signal);
+    signal.throwIfAborted();
+    const expiresAt = Math.min(binding.expiresAt, started + live.remainingSeconds * 1000);
+    if (
+      !subscriber ||
+      subscriber.id !== binding.subscriberRecordId ||
+      subscriber.applicationIdentifier !== binding.applicationIdentifier ||
+      expiresAt <= deps.now()
+    )
+      throw new UnauthorizedException();
+    return { ...binding, expiresAt };
+  };
+}
+
+const gateway = createDashboardInboxGateway({
+  ...dashboardInboxAuthority,
+  credentials: subscriberInboxAccess,
   fetch: (...args) => fetch(...args),
   nativeOrigin: () => process.env.NOVU_API_URL ?? 'http://novu-api:3000',
-  now: Date.now,
 });
 
 @ApiExcludeController()

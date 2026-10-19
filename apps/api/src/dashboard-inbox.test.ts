@@ -9,7 +9,11 @@ import { createDashboardForwardingMiddleware } from './dashboard-forwarding.js';
 vi.mock('./context.js', () => ({ sql: vi.fn(), redis: {} }));
 vi.mock('./auth.js', () => ({ Access: () => () => undefined }));
 vi.mock('./workflows.js', () => ({ subscriberInboxAccess: vi.fn() }));
-import { createDashboardInboxGateway, dashboardInboxOperation } from './dashboard-inbox.js';
+import {
+  createDashboardInboxGateway,
+  createDashboardInboxSocketAuthority,
+  dashboardInboxOperation,
+} from './dashboard-inbox.js';
 
 const secret = `fdp_${Buffer.alloc(32, 5).toString('base64')}`;
 const principal: Principal = {
@@ -468,6 +472,78 @@ it('accepts the pinned preferences UI twelve-hour schedule without rewriting its
     },
   };
   expect(dashboardInboxOperation('PATCH', `${base}preferences`, body).body).toEqual(body);
+});
+it('requires the existing signed HTTP binding for sockets and rechecks current tenant authority', async () => {
+  const authorize = createDashboardInboxSocketAuthority(deps);
+  const signal = new AbortController().signal;
+  await expect(authorize(principal.sessionId!, jwt(), signal)).rejects.toMatchObject({
+    status: 401,
+  });
+  const token = await initialize();
+  vi.mocked(deps.liveSession).mockResolvedValue({ remainingSeconds: 30, role: 'viewer' });
+  const binding = await authorize(principal.sessionId!, token, signal);
+  expect(binding).toMatchObject({
+    sessionId: principal.sessionId,
+    orgId: principal.orgId,
+    environmentId: principal.environmentId,
+    subscriberRecordId: subscriber.id,
+    expiresAt: now + 30000,
+  });
+  expect(deps.liveSession).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      actorId: principal.actorId,
+      orgId: principal.orgId,
+      environmentId: principal.environmentId,
+    }),
+    signal,
+  );
+  await expect(
+    authorize('e62363d0-f598-4db7-acbf-464392a52aef', token, signal),
+  ).rejects.toMatchObject({ status: 401 });
+  vi.mocked(deps.liveSession).mockResolvedValue(undefined);
+  await expect(authorize(principal.sessionId!, token, signal)).rejects.toMatchObject({
+    status: 401,
+  });
+});
+it('fails socket authority closed after binding loss, subscriber replacement, native remap or expiry', async () => {
+  const token = await initialize();
+  const authorize = createDashboardInboxSocketAuthority(deps);
+  const signal = new AbortController().signal;
+  for (const row of [
+    undefined,
+    { ...subscriber, id: 'ec987f34-e931-4d39-a55b-bcd22a0bfdf0' },
+    { ...subscriber, applicationIdentifier: 'changed' },
+  ]) {
+    vi.mocked(deps.subscriber).mockResolvedValue(row);
+    await expect(authorize(principal.sessionId!, token, signal)).rejects.toMatchObject({
+      status: 401,
+    });
+  }
+  vi.mocked(deps.subscriber).mockResolvedValue(subscriber);
+  now += 3600000;
+  await expect(authorize(principal.sessionId!, token, signal)).rejects.toMatchObject({
+    status: 401,
+  });
+  now -= 3600000;
+  values.clear();
+  await expect(authorize(principal.sessionId!, token, signal)).rejects.toMatchObject({
+    status: 401,
+  });
+  vi.mocked(deps.redis.get).mockRejectedValue(new Error('private redis failure'));
+  await expect(authorize(principal.sessionId!, token, signal)).rejects.toThrow();
+});
+it('does not continue socket authorization after a canceled lookup', async () => {
+  const token = await initialize();
+  vi.mocked(deps.liveSession).mockClear();
+  const controller = new AbortController();
+  vi.mocked(deps.redis.get).mockImplementation(async (key) => {
+    controller.abort();
+    return values.get(key) ?? null;
+  });
+  await expect(
+    createDashboardInboxSocketAuthority(deps)(principal.sessionId!, token, controller.signal),
+  ).rejects.toThrow();
+  expect(deps.liveSession).not.toHaveBeenCalled();
 });
 it.each(['00:00 AM', '13:00 PM', '12:60 AM', '09:00 AM trailing', '24:00'])(
   'rejects invalid preference schedule time %s',

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { dashboardBackend, DashboardProxyError } from '../../../lib/dashboard-backend';
+import { isPrivateDashboardPath } from '../../../lib/private-paths';
 export const runtime = 'nodejs';
 const names = { token: 'flare_session', org: 'flare_org', env: 'flare_environment' };
 type SessionResponse = {
@@ -16,6 +17,8 @@ const options = {
 };
 async function handler(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
+  if (isPrivateDashboardPath(['api', ...path]))
+    return NextResponse.json({ message: 'Not found' }, { status: 404 });
   if (path.some((p) => !p || p === '.' || p === '..' || p.includes('/') || p.includes('\\')))
     return NextResponse.json({ message: 'Invalid API path' }, { status: 400 });
   let backend: ReturnType<typeof dashboardBackend>;
@@ -220,3 +223,14 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
   }
 }
 export { handler as GET, handler as POST, handler as PATCH, handler as PUT, handler as DELETE };
+
+export async function OPTIONS(_req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
+  const { path } = await context.params;
+  if (isPrivateDashboardPath(['api', ...path]))
+    return NextResponse.json({ message: 'Not found' }, { status: 404 });
+  // Preserve Next's automatic OPTIONS contract for all other existing API routes.
+  return new NextResponse(null, {
+    status: 204,
+    headers: { Allow: 'DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT' },
+  });
+}

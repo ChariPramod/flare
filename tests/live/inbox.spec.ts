@@ -35,7 +35,10 @@ test('live subscriber Inbox renders native delivery and persists read state', as
   const notification = (await feed()).find((item) => item.body === body)!;
   expect(notification).toBeDefined();
   expect(notification.isRead).toBe(false);
-  await page.locator('.inbox-panel').getByRole('button').click();
+  await page
+    .locator('.inbox-panel')
+    .getByRole('button', { name: 'Open notifications', exact: true })
+    .click();
   await expect(page.getByText(body, { exact: true })).toBeVisible();
   const marked = page.waitForResponse(
     (result) =>
@@ -48,7 +51,7 @@ test('live subscriber Inbox renders native delivery and persists read state', as
     .poll(async () => (await feed()).find((item) => item.id === notification.id)?.isRead)
     .toBe(true);
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'In-app inbox' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'In-app Inbox' })).toBeVisible();
   expect((await feed()).find((item) => item.id === notification.id)?.isRead).toBe(true);
 
   const accessResult = await page.request.get(`/api/subscribers/${subscriberId}/inbox-token`);
