@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { Controller, Get, Post, Put, Body, Req, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Req, Res, Param, Query } from '@nestjs/common';
 import type { RawBodyRequest } from '@nestjs/common';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { withTenant, toJson } from '@flare/db';
 import type { Transaction } from '@flare/db';
@@ -11,6 +11,8 @@ import { Public } from './auth.js';
 import { parse, sql } from './context.js';
 import type { AuthRequest } from './context.js';
 import { audit } from './identity.js';
+import { BrowserTransfer } from './browser-transfers-auth.js';
+import { browserTransferDownload } from './browser-transfers-download.js';
 const uuid = z.string().uuid();
 async function scopedMessage(tx: Transaction, req: AuthRequest, id: string) {
   const [row] =
@@ -64,7 +66,10 @@ export class InboundController {
       };
     });
   }
-  @Get('inbound/:id/body') body(@Req() req: AuthRequest, @Param('id') id: string) {
+  @BrowserTransfer('inbound.body') @Get('inbound/:id/body') body(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+  ) {
     return withTenant(sql, req.principal, async (tx) => {
       const row = await scopedMessage(tx, req, id);
       if (!row.body_key) throw new MailError(409, 'Inbound message has not been parsed');
@@ -73,24 +78,36 @@ export class InboundController {
       ) as unknown;
     });
   }
-  @Get('inbound/:id/raw') raw(@Req() req: AuthRequest, @Param('id') id: string) {
-    return withTenant(sql, req.principal, async (tx) => {
+  @BrowserTransfer('inbound.raw') @Get('inbound/:id/raw') async raw(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Query('format') format?: string,
+    @Res({ passthrough: true }) res?: Response,
+  ) {
+    parse(z.enum(['binary', 'json']).optional(), format);
+    const bytes = await withTenant(sql, req.principal, async (tx) => {
       const row = await scopedMessage(tx, req, id);
-      return {
-        filename: `${id}.eml`,
-        content_type: 'message/rfc822',
-        content: (await objectStore().get(String(row.raw_key), inboundLimits().raw)).toString(
-          'base64',
-        ),
-      };
+      return objectStore().get(String(row.raw_key), inboundLimits().raw);
     });
+    if (format === 'binary')
+      return browserTransferDownload(bytes, `${id}.eml`, 'message/rfc822', res);
+    return {
+      filename: `${id}.eml`,
+      content_type: 'message/rfc822',
+      content: bytes.toString('base64'),
+    };
   }
-  @Get('inbound/:id/attachments/:attachmentId') attachment(
+  @BrowserTransfer('inbound.attachment')
+  @Get('inbound/:id/attachments/:attachmentId')
+  async attachment(
     @Req() req: AuthRequest,
     @Param('id') id: string,
     @Param('attachmentId') attachmentId: string,
+    @Query('format') format?: string,
+    @Res({ passthrough: true }) res?: Response,
   ) {
-    return withTenant(sql, req.principal, async (tx) => {
+    parse(z.enum(['binary', 'json']).optional(), format);
+    const result = await withTenant(sql, req.principal, async (tx) => {
       await scopedMessage(tx, req, id);
       const [file] =
         await tx`select * from inbound_attachments where id=${parse(uuid, attachmentId)} and inbound_id=${id}`;
@@ -98,11 +115,16 @@ export class InboundController {
       return {
         filename: file.filename,
         content_type: file.content_type,
-        content: (
-          await objectStore().get(String(file.object_key), inboundLimits().attachments)
-        ).toString('base64'),
+        bytes: await objectStore().get(String(file.object_key), inboundLimits().attachments),
       };
     });
+    if (format === 'binary')
+      return browserTransferDownload(result.bytes, result.filename, result.content_type, res);
+    return {
+      filename: result.filename,
+      content_type: result.content_type,
+      content: result.bytes.toString('base64'),
+    };
   }
   @Get('forwarding-rules') rules(@Req() req: AuthRequest) {
     return withTenant(

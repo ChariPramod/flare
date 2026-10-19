@@ -13,6 +13,7 @@ import {
   GetBucketVersioningCommand,
 } from '@aws-sdk/client-s3';
 import { MailError, mailLimits } from './validation.js';
+import { isBase64 } from '@flare/shared';
 import type { EmailInput } from './validation.js';
 
 export function publicAddress(ip: string) {
@@ -175,8 +176,7 @@ export async function attachments(input: EmailInput) {
   for (const item of input.attachments) {
     if (
       item.content !== undefined &&
-      (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(item.content) ||
-        item.content.length > Math.ceil(remaining / 3) * 4)
+      (item.content.length > Math.ceil(remaining / 3) * 4 || !isBase64(item.content))
     )
       throw new MailError(422, 'Invalid or oversized base64 attachment');
     const content =

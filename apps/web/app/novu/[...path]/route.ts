@@ -15,10 +15,6 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
   let backend: ReturnType<typeof dashboardBackend>;
   try {
     backend = dashboardBackend(req);
-    if (backend.mode === 'vercel')
-      throw new DashboardProxyError(
-        'Dashboard configuration required: the Vercel Inbox gateway is not available yet.',
-      );
   } catch (error) {
     return NextResponse.json(
       {
@@ -37,6 +33,34 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
   if (body && Buffer.byteLength(body) > 1024 * 1024)
     return NextResponse.json({ message: 'Request too large' }, { status: 413 });
   try {
+    if (backend.mode === 'vercel') {
+      const token = req.cookies.get('flare_session')?.value,
+        org = req.cookies.get('flare_org')?.value,
+        environment = req.cookies.get('flare_environment')?.value;
+      if (!token || !org || !environment)
+        return NextResponse.json({ message: 'Sign in to open this Inbox' }, { status: 401 });
+      if (body && Buffer.byteLength(body) > 64 * 1024)
+        return NextResponse.json({ message: 'Inbox request too large' }, { status: 413 });
+      const response = await backend.fetch(
+        `/v1/dashboard/inbox/${path.slice(2).map(encodeURIComponent).join('/')}${req.nextUrl.search}`,
+        {
+          method: req.method,
+          body,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'x-org-id': org,
+            'x-environment-id': environment,
+            'Content-Type': 'application/json',
+            ...(authorization ? { 'x-flare-inbox-authorization': authorization } : {}),
+          },
+          signal: AbortSignal.timeout(20000),
+        },
+      );
+      return new NextResponse((await response.text()) || null, {
+        status: response.status,
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+      });
+    }
     if (path.join('/') === 'v1/inbox/session') {
       const input = JSON.parse(body ?? '{}') as {
         applicationIdentifier?: string;
@@ -91,8 +115,11 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
       status: response.status,
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
     });
-  } catch {
-    return NextResponse.json({ message: 'Self-hosted Inbox is unavailable' }, { status: 503 });
+  } catch (error) {
+    return NextResponse.json(
+      { message: error instanceof DashboardProxyError ? error.message : 'Inbox is unavailable' },
+      { status: error instanceof DashboardProxyError ? error.status : 503 },
+    );
   }
 }
 export { handler as GET, handler as POST, handler as PATCH, handler as PUT, handler as DELETE };

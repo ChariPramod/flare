@@ -68,6 +68,37 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
       );
   }
   try {
+    if (joined === 'browser-transfer-config') {
+      if (req.method !== 'GET')
+        return NextResponse.json({ message: 'Method not allowed' }, { status: 405 });
+      if (!org || !env)
+        return NextResponse.json(
+          { message: 'Select an organization and environment.' },
+          { status: 403 },
+        );
+      const response = await backend.fetch('/v1/auth/me', {
+        headers,
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!response.ok) {
+        if ([401, 403].includes(response.status))
+          for (const name of Object.values(names)) jar.delete(name);
+        return new NextResponse(await response.text(), {
+          status: response.status === 403 ? 401 : response.status,
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+            ...(response.headers.has('retry-after')
+              ? { 'Retry-After': response.headers.get('retry-after')! }
+              : {}),
+          },
+        });
+      }
+      return NextResponse.json(
+        { enabled: backend.mode === 'vercel' || process.env.FLARE_BROWSER_TRANSFERS === 'true' },
+        { headers: { 'Cache-Control': 'no-store' } },
+      );
+    }
     if (joined === 'session/switch') {
       const selection = JSON.parse(body ?? '{}') as { orgId?: string; environmentId?: string };
       if (
@@ -101,6 +132,8 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
       return NextResponse.json(await response.json());
     }
     const endpoint = joined === 'session' ? 'auth/me' : path.map(encodeURIComponent).join('/');
+    if (joined === 'browser-transfers' && req.method === 'POST')
+      headers.Origin = req.headers.get('origin')!;
     if (req.headers.get('idempotency-key'))
       headers['Idempotency-Key'] = req.headers.get('idempotency-key')!;
     if (req.headers.get('traceparent')) headers.traceparent = req.headers.get('traceparent')!;

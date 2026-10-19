@@ -2670,6 +2670,169 @@
     }
   },
   {
+    "id": "BrowserTransfersController_issue",
+    "method": "POST",
+    "path": "/v1/browser-transfers",
+    "access": "read",
+    "public": false,
+    "sessionOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "operation": {
+                  "type": "string",
+                  "enum": [
+                    "email.send"
+                  ]
+                },
+                "body_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "body_bytes": {
+                  "type": "integer",
+                  "minimum": 2,
+                  "maximum": 9007199254740991
+                },
+                "idempotency_key": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "^[\\x21-\\x7e]+$"
+                }
+              },
+              "required": [
+                "operation",
+                "body_sha256",
+                "body_bytes",
+                "idempotency_key"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operation": {
+                  "type": "string",
+                  "enum": [
+                    "email.detail"
+                  ]
+                },
+                "message_id": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "required": [
+                "operation",
+                "message_id"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operation": {
+                  "type": "string",
+                  "enum": [
+                    "email.source"
+                  ]
+                },
+                "message_id": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "required": [
+                "operation",
+                "message_id"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operation": {
+                  "type": "string",
+                  "enum": [
+                    "inbound.body"
+                  ]
+                },
+                "message_id": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "required": [
+                "operation",
+                "message_id"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operation": {
+                  "type": "string",
+                  "enum": [
+                    "inbound.raw"
+                  ]
+                },
+                "message_id": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "required": [
+                "operation",
+                "message_id"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "operation": {
+                  "type": "string",
+                  "enum": [
+                    "inbound.attachment"
+                  ]
+                },
+                "message_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "attachment_id": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "required": [
+                "operation",
+                "message_id",
+                "attachment_id"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "id": "ContentController_list",
     "method": "GET",
     "path": "/v1/layouts",
@@ -3780,6 +3943,20 @@
           ],
           "additionalProperties": false
         },
+        "query": {
+          "type": "object",
+          "properties": {
+            "format": {
+              "type": "string",
+              "enum": [
+                "binary",
+                "json"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
         "idempotencyKey": {
           "type": "string",
           "maxLength": 256
@@ -3816,6 +3993,20 @@
             "id",
             "attachmentId"
           ],
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "properties": {
+            "format": {
+              "type": "string",
+              "enum": [
+                "binary",
+                "json"
+              ]
+            }
+          },
+          "required": [],
           "additionalProperties": false
         },
         "idempotencyKey": {

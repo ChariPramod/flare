@@ -25,6 +25,7 @@ import { Access } from './auth.js';
 import { config, parse, sql } from './context.js';
 import type { AuthRequest } from './context.js';
 import { audit } from './identity.js';
+import { BrowserTransfer } from './browser-transfers-auth.js';
 const uuid = z.string().uuid();
 const store = objectStore();
 export function mailOptions() {
@@ -66,7 +67,10 @@ export class MailController {
   @Get('sending-policy') async sendingPolicy(@Req() req: AuthRequest) {
     return getSendingPolicy(sql, req.principal.orgId);
   }
-  @Access('send') @Post('emails') async send(@Req() req: AuthRequest, @Body() body: unknown) {
+  @BrowserTransfer('email.send') @Access('send') @Post('emails') async send(
+    @Req() req: AuthRequest,
+    @Body() body: unknown,
+  ) {
     const result = await submitEmails(mailOptions(), req.principal, [body], {
       key: req.get('idempotency-key'),
     });
@@ -101,7 +105,10 @@ export class MailController {
         tx`select id,domain_id,request->>'from' as "from",request->>'subject' as subject,status,scheduled_at,next_attempt_at,hold_reason,traffic_class,created_at from messages where (${req.principal.domainId ?? null}::uuid is null or domain_id=${req.principal.domainId ?? null}) order by created_at desc limit 100`,
     );
   }
-  @Get('emails/:id') async get(@Req() req: AuthRequest, @Param('id') id: string) {
+  @BrowserTransfer('email.detail') @Get('emails/:id') async get(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+  ) {
     id = parse(uuid, id);
     return withTenant(sql, req.principal, async (tx) => {
       const [message] =
@@ -119,7 +126,10 @@ export class MailController {
       };
     });
   }
-  @Get('emails/:id/source') async source(@Req() req: AuthRequest, @Param('id') id: string) {
+  @BrowserTransfer('email.source') @Get('emails/:id/source') async source(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+  ) {
     await this.get(req, id);
     const [message] = await withTenant(
       sql,

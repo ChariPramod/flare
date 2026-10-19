@@ -131,6 +131,8 @@ for (const file of readdirSync('apps/api/src').filter(
       }
   for (const controller of source.statements.filter(ts.isClassDeclaration)) {
     if (!controller.name || !registeredControllers.has(controller.name.text)) continue;
+    // Private protocol adapters are not public SDK/MCP resources.
+    if (deco(controller, 'ApiExcludeController')) continue;
     const prefix = arg(deco(controller, 'Controller'));
     if (prefix === undefined && !deco(controller, 'Controller')) continue;
     for (const method of controller.members.filter(ts.isMethodDeclaration)) {
@@ -207,7 +209,9 @@ for (const file of readdirSync('apps/api/src').filter(
                 in: 'query',
                 name: key,
                 required: !parameter.questionToken,
-                schema: validator ? schema(validator) : scalar,
+                schema: validator
+                  ? schema(validator instanceof z.ZodOptional ? validator.unwrap() : validator)
+                  : scalar,
               });
             else if (validator) {
               const s = schema(validator);
@@ -298,6 +302,7 @@ for (const file of readdirSync('apps/api/src').filter(
             parameters.push({ in: 'header', name, required: true, schema: scalar });
         const sessionOnly =
           operator ||
+          controller.name.text === 'BrowserTransfersController' ||
           method.getText().includes('sessionOnly(req)') ||
           ['manage_keys', 'manage_team'].includes(access);
         const response = responseFor(id);
@@ -327,9 +332,24 @@ for (const file of readdirSync('apps/api/src').filter(
               description: 'Success',
               content: {
                 [response.contentType ?? 'application/json']: { schema: response.schema ?? json },
+                ...(response.binary
+                  ? { [response.binary]: { schema: { type: 'string', format: 'binary' } } }
+                  : {}),
               },
               headers: {
                 'x-request-id': { schema: scalar },
+                ...(response.binary
+                  ? {
+                      'Content-Disposition': {
+                        schema: scalar,
+                        description: 'Binary downloads use a safe attachment filename.',
+                      },
+                      'Cache-Control': {
+                        schema: scalar,
+                        description: 'Binary download responses are no-store.',
+                      },
+                    }
+                  : {}),
                 'RateLimit-Limit': { schema: { type: 'integer' } },
                 'RateLimit-Remaining': { schema: { type: 'integer' } },
                 'RateLimit-Reset': {

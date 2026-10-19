@@ -1,5 +1,57 @@
 import { describe, expect, it } from 'vitest';
-import { redact, redactText } from './redaction.js';
+import { redact, redactText, redactRequestLogBodies } from './redaction.js';
+
+describe('browser transfer credential text redaction', () => {
+  const jwt = [{ alg: 'HS256' }, { sub: 'fixture' }, 'synthetic signature']
+    .map((part) => Buffer.from(JSON.stringify(part)).toString('base64url'))
+    .join('.');
+  const grant = `fbt_${jwt}`;
+
+  it('hides prefixed grants in plain and serialized text while preserving legacy JWT redaction', () => {
+    expect(redactText(`Transfer Bearer ${grant}; ordinary Bearer ${jwt}.`)).toBe(
+      'Transfer Bearer [REDACTED]; ordinary Bearer [REDACTED].',
+    );
+    expect(redact({ diagnostic: JSON.stringify({ note: grant, status: 'pending' }) })).toEqual({
+      diagnostic: '{"note":"[REDACTED]","status":"pending"}',
+    });
+  });
+
+  it('hides grants in generic route queries and historical payloads without dropping metadata', () => {
+    expect(
+      redactRequestLogBodies(
+        '/v1/contacts',
+        {
+          query: { note: grant, page: 2 },
+          body: { diagnostic: `https://example.test/inspect?note=${grant}&page=2` },
+        },
+        JSON.stringify({ diagnostic: grant, count: 3 }),
+      ),
+    ).toEqual({
+      request_body: {
+        query: { note: '[REDACTED]', page: 2 },
+        body: { diagnostic: 'https://example.test/inspect?note=[REDACTED]&page=2' },
+      },
+      response_body: '{"diagnostic":"[REDACTED]","count":3}',
+    });
+  });
+});
+
+it.each([
+  '/v1/browser-transfers',
+  '/V1/BROWSER-TRANSFERS/',
+  '/v1/dashboard/inbox/session',
+  '/V1/DASHBOARD/INBOX/notifications',
+  '/v1/dashboard/inbox/notifications/:id/read',
+])('omits dashboard credentials and native content from current and historical %s logs', (path) => {
+  const payload = JSON.stringify({ token: 'private-grant', body: 'private notification' });
+  expect(redactRequestLogBodies(path, { query: { token: 'private-grant' } }, payload)).toEqual({
+    request_body: {
+      body: '[DASHBOARD CREDENTIALS AND CONTENT REDACTED]',
+      query: '[DASHBOARD CREDENTIALS AND CONTENT REDACTED]',
+    },
+    response_body: '[DASHBOARD CREDENTIALS AND CONTENT REDACTED]',
+  });
+});
 
 describe('Inbox credential redaction', () => {
   const names = [

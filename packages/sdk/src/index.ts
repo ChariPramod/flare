@@ -49,11 +49,27 @@ type BodyInput<O> = O extends { requestBody: { content: { 'application/json': in
 export type RequestInput<P extends keyof paths, M extends Method> = PathInput<Operation<P, M>> &
   QueryInput<Operation<P, M>> &
   BodyInput<Operation<P, M>> & { idempotencyKey?: string; signal?: AbortSignal };
-type Content<R> = R extends { content: infer C } ? C[keyof C] : never;
+type Content<R> = R extends { content: infer C }
+  ? C extends { 'application/json': infer J }
+    ? J
+    : C[keyof C]
+  : never;
 export type ResponseOutput<P extends keyof paths, M extends Method> =
   Operation<P, M> extends { responses: infer R }
     ? Content<R[Extract<keyof R, 200 | 201 | 202 | 204>]>
     : never;
+type RequestedOutput<P extends keyof paths, M extends Method, I> = P extends
+  '/v1/inbound/{id}/raw' | '/v1/inbound/{id}/attachments/{attachmentId}'
+  ? I extends {
+      query: { format: 'binary' };
+    }
+    ? Uint8Array
+    : I extends { query?: { format?: infer F } }
+      ? 'binary' extends F
+        ? ResponseOutput<P, M> | Uint8Array
+        : ResponseOutput<P, M>
+      : ResponseOutput<P, M>
+  : ResponseOutput<P, M>;
 export type EmailInput = NonNullable<
   Operations['MailController_send']['requestBody']
 >['content']['application/json'];
@@ -89,20 +105,21 @@ export class FlareClient {
       throw new Error('Select an explicit environment UUID and valid optional organization UUID');
     this.options = { ...options };
   }
-  async request<P extends keyof paths, M extends Method>(
-    method: M,
-    path: P,
-    input: RequestInput<P, M>,
-  ): Promise<ResponseOutput<P, M>> {
+  async request<
+    P extends keyof paths,
+    M extends Method,
+    const I extends RequestInput<P, M> = RequestInput<P, M>,
+  >(method: M, path: P, input: I): Promise<RequestedOutput<P, M, I>> {
     return this.operation(method.toUpperCase(), path, input as RequestOptions) as Promise<
-      ResponseOutput<P, M>
+      RequestedOutput<P, M, I>
     >;
   }
   // Runtime catalog validation also protects CLI and MCP callers that cannot use TypeScript.
   async operation(method: string, template: string, input: RequestOptions = {}): Promise<unknown> {
     method = method.toUpperCase();
-    if (!operations.some((o) => o.method === method && o.path === template))
-      throw new Error('Unsupported Flare operation');
+    const selected = operations.find((o) => o.method === method && o.path === template);
+    if (!selected) throw new Error('Unsupported Flare operation');
+    if (selected.sessionOnly) throw new Error('This operation requires a dashboard user session');
     const path = template.replace(/\{([^}]+)\}/g, (_all, key: string) => {
       const value = input.path?.[key];
       if (value === undefined || value === '' || value === '.' || value === '..')
@@ -145,6 +162,13 @@ export class FlareClient {
         null,
       );
     }
+    if (
+      response.ok &&
+      input.query?.format === 'binary' &&
+      (template === '/v1/inbound/{id}/raw' ||
+        template === '/v1/inbound/{id}/attachments/{attachmentId}')
+    )
+      return new Uint8Array(await response.arrayBuffer());
     const text = await response.text();
     let data: unknown = text;
     try {

@@ -1,8 +1,9 @@
 'use client';
 import Link from 'next/link';
-import { emailPreview } from '../lib/email-preview';
+import { emailPreview, EMAIL_PREVIEW_CHAR_LIMIT } from '../lib/email-preview';
 import { useEffect, useState } from 'react';
 import { api, useApi, useAction, date, pretty } from '../lib/api';
+import { browserTransfer, downloadFilename, responseJson } from '../lib/browser-transfers';
 import { PageHeader, DataTable, Button, Badge, Field, Modal, ErrorBox, Loading, Empty } from './ui';
 type InboundRow = {
   id: string;
@@ -27,13 +28,25 @@ type Rule = {
   destinations: string[];
   enabled: boolean;
 };
-async function download(path: string) {
-  const file = await api<{ filename: string; content_type: string; content: string }>(path);
-  const bytes = Uint8Array.from(atob(file.content), (v) => v.charCodeAt(0));
-  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+async function download(path: string, fallbackName: string) {
+  const response = await browserTransfer(path, 'GET');
+  let bytes: Blob;
+  let filename: string;
+  if (response) {
+    if (!response.ok) await responseJson(response);
+    bytes = await response.blob();
+    filename = downloadFilename(response.headers.get('content-disposition'), fallbackName);
+  } else {
+    const file = await api<{ filename: string; content_type: string; content: string }>(path);
+    bytes = new Blob([Uint8Array.from(atob(file.content), (v) => v.charCodeAt(0))], {
+      type: 'application/octet-stream',
+    });
+    filename = downloadFilename(null, file.filename);
+  }
+  const url = URL.createObjectURL(bytes);
   const link = document.createElement('a');
   link.href = url;
-  link.download = file.filename;
+  link.download = filename;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -262,7 +275,7 @@ function InboundDetail({ id }: { id: string }) {
         title={row.subject || 'Inbound message'}
         description={`${row.mail_from || 'Empty envelope sender'} → ${row.rcpt_to}`}
         actions={
-          <Button onClick={() => void download(`inbound/${id}/raw`).catch(setError)}>
+          <Button onClick={() => void download(`inbound/${id}/raw`, `${id}.eml`).catch(setError)}>
             Download original MIME
           </Button>
         }
@@ -306,7 +319,9 @@ function InboundDetail({ id }: { id: string }) {
       {row.attachments.map((file) => (
         <p key={file.id}>
           <Button
-            onClick={() => void download(`inbound/${id}/attachments/${file.id}`).catch(setError)}
+            onClick={() =>
+              void download(`inbound/${id}/attachments/${file.id}`, file.filename).catch(setError)
+            }
           >
             {file.filename} · {file.size} bytes
           </Button>
@@ -331,17 +346,29 @@ function InboundBody({ id, html }: { id: string; html: boolean }) {
   const query = useApi<{ text: string; html: string }>(`inbound/${id}/body`);
   if (query.isPending) return <Loading />;
   if (!query.data) return <ErrorBox error={query.error} />;
-  // No scripts, network loads, forms or navigation privileges are granted to received mail.
-  const content = emailPreview(query.data.html);
-  return html ? (
-    <iframe
-      title="Received HTML preview"
-      sandbox=""
-      referrerPolicy="no-referrer"
-      srcDoc={content}
-      style={{ width: '100%', height: 420, border: '1px solid var(--border)' }}
-    />
-  ) : (
-    <pre className="code-preview">{query.data.text || 'No plain text body'}</pre>
+  const selected = (html ? query.data.html : query.data.text) || '';
+  const truncated = selected.length > EMAIL_PREVIEW_CHAR_LIMIT;
+  // Sanitize only the selected HTML tab. Full bytes remain available through downloads.
+  return (
+    <>
+      {truncated && (
+        <p className="muted" role="status">
+          This preview is shortened. Download original MIME to read the full message.
+        </p>
+      )}
+      {html ? (
+        <iframe
+          title="Received HTML preview"
+          sandbox=""
+          referrerPolicy="no-referrer"
+          srcDoc={emailPreview(selected)}
+          style={{ width: '100%', height: 420, border: '1px solid var(--border)' }}
+        />
+      ) : (
+        <pre className="code-preview">
+          {selected.slice(0, EMAIL_PREVIEW_CHAR_LIMIT) || 'No plain text body'}
+        </pre>
+      )}
+    </>
   );
 }

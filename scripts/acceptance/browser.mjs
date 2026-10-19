@@ -19,6 +19,7 @@ export function acceptanceBrowserEnvironment(envPath, project, ambient = process
     throw new Error('Use the disposable acceptance environment and project');
   if (
     values.WEB_ORIGIN !== origin ||
+    values.PUBLIC_API_URL !== 'http://127.0.0.1:4000' ||
     values.NOVU_PUBLIC_API_URL !== `${origin}/novu` ||
     values.NOVU_PUBLIC_WS_URL !== 'http://127.0.0.1:3002' ||
     (ambient.E2E_BASE_URL !== undefined && ambient.E2E_BASE_URL !== origin)
@@ -26,11 +27,18 @@ export function acceptanceBrowserEnvironment(envPath, project, ambient = process
     throw new Error(
       'Acceptance browsers require the generated IPv4 loopback origins without overrides',
     );
+  if (!/^fdp_[A-Za-z0-9+/]{43}=$/.test(values.FLARE_DASHBOARD_PROXY_SECRET ?? ''))
+    throw new Error('Acceptance browser gateway signing key must be generated privately');
   const fixtures = JSON.parse(readFileSync(join(directory, 'acceptance/fixtures.json'), 'utf8'));
   const operatorFixture = join(directory, 'acceptance/operator.json');
   if (
     !uuid.test(fixtures?.inbound ?? '') ||
     !uuid.test(fixtures?.redrive ?? '') ||
+    !uuid.test(fixtures?.largeInbound ?? '') ||
+    !uuid.test(fixtures?.largeAttachment ?? '') ||
+    !/^[a-f0-9]{64}$/.test(fixtures?.largeRawSha256 ?? '') ||
+    !Number.isSafeInteger(fixtures?.largeRawBytes) ||
+    fixtures.largeRawBytes <= 4.5 * 1024 * 1024 ||
     !statSync(operatorFixture).isFile() ||
     !values.SEED_OWNER_EMAIL ||
     !values.SEED_OWNER_PASSWORD ||
@@ -45,6 +53,8 @@ export function acceptanceBrowserEnvironment(envPath, project, ambient = process
     E2E_FROM: 'sender@acceptance.test',
     E2E_TO: values.SEED_SUBSCRIBER_EMAIL,
     E2E_ACCEPTANCE: 'true',
+    // Consumed only by the Playwright Node transport bridge, never injected into the page.
+    E2E_DASHBOARD_PROXY_SECRET: values.FLARE_DASHBOARD_PROXY_SECRET,
     E2E_OPERATOR_FIXTURE: operatorFixture,
     E2E_ACCEPTANCE_DIRECTORY: directory,
     E2E_ACCEPTANCE_PROJECT: project,
@@ -52,6 +62,10 @@ export function acceptanceBrowserEnvironment(envPath, project, ambient = process
     PLAYWRIGHT_NO_COPY_PROMPT: '1',
     E2E_INBOUND_ID: fixtures.inbound,
     E2E_REDRIVE_ID: fixtures.redrive,
+    E2E_LARGE_INBOUND_ID: fixtures.largeInbound,
+    E2E_LARGE_ATTACHMENT_ID: fixtures.largeAttachment,
+    E2E_LARGE_RAW_SHA256: fixtures.largeRawSha256,
+    E2E_LARGE_RAW_BYTES: String(fixtures.largeRawBytes),
   };
 }
 

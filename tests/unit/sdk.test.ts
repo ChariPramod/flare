@@ -1,8 +1,60 @@
 import { it, expect, vi } from 'vitest';
 import { randomBytes, createHmac } from 'node:crypto';
-import { FlareClient, FlareError, verifyWebhook } from '../../packages/sdk/src/index.js';
+import {
+  FlareClient,
+  FlareError,
+  verifyWebhook,
+  operationCatalog,
+} from '../../packages/sdk/src/index.js';
 const environmentId = '00000000-0000-4000-8000-000000000001',
   apiKey = `fl_${randomBytes(32).toString('base64url')}`;
+it('keeps private Inbox outside the catalog and rejects session-only transfer issuance before sending credentials', async () => {
+  const fetcher = vi.fn<typeof fetch>();
+  const client = new FlareClient({
+    baseUrl: 'https://flare.example.test',
+    environmentId,
+    apiKey,
+    fetch: fetcher,
+  });
+  expect(
+    operationCatalog.some((operation) => operation.path.startsWith('/v1/dashboard/inbox')),
+  ).toBe(false);
+  expect(
+    operationCatalog.find((operation) => operation.path === '/v1/browser-transfers')?.sessionOnly,
+  ).toBe(true);
+  await expect(client.operation('POST', '/v1/browser-transfers', { body: {} })).rejects.toThrow(
+    'dashboard user session',
+  );
+  expect(fetcher).not.toHaveBeenCalled();
+});
+it('preserves binary inbound bytes and the default JSON/base64 response', async () => {
+  const bytes = new Uint8Array([0, 255, 254, 128, 13, 10, 65]);
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(
+      new Response(bytes, { headers: { 'content-type': 'application/octet-stream' } }),
+    )
+    .mockResolvedValueOnce(
+      Response.json({
+        filename: 'data.bin',
+        content_type: 'application/octet-stream',
+        content: Buffer.from(bytes).toString('base64'),
+      }),
+    );
+  const client = new FlareClient({
+    baseUrl: 'https://flare.example.test',
+    environmentId,
+    apiKey,
+    fetch: fetcher,
+  });
+  const binary: Uint8Array = await client.request('get', '/v1/inbound/{id}/raw', {
+    path: { id: environmentId },
+    query: { format: 'binary' },
+  });
+  expect(binary).toEqual(bytes);
+  const json = await client.request('get', '/v1/inbound/{id}/raw', { path: { id: environmentId } });
+  expect(Buffer.from(json.content, 'base64')).toEqual(Buffer.from(bytes));
+});
 it('uses explicit tenant headers, path encoding and stable idempotency without retrying mutations', async () => {
   const calls: { url: URL; init: RequestInit }[] = [];
   const fetcher = vi.fn(async (url: URL | RequestInfo, init?: RequestInit) => {

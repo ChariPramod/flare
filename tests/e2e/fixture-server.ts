@@ -1,6 +1,6 @@
 /** Isolated browser-contract fixture. Never imported by or deployed with a Flare service. */
 import { createServer } from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { webhookSecret } from '../../packages/shared/src/webhooks.js';
 import { renderText, templateSchema } from '../../packages/shared/src/audience.js';
 import { automationSchema } from '../../packages/shared/src/automations.js';
@@ -59,6 +59,23 @@ const workflows = new Map<string, Record<string, unknown>>(),
   emails = new Map<string, Record<string, unknown>>(),
   runs = new Map<string, Record<string, unknown>>();
 const inboundMessages = new Map<string, Record<string, unknown>>();
+const inboundBodies = new Map<string, { text: string; html: string }>();
+const inboundRaw = new Map<string, Buffer>();
+const inboundFiles = new Map<string, { filename: string; bytes: Buffer }>();
+const emailSources = new Map<string, string>();
+const emailSubmissions = new Map<string, { id: string; hash: string }>();
+const transferGrants = new Map<
+  string,
+  {
+    path: string;
+    method: string;
+    input: Record<string, unknown>;
+    environment: string;
+    expires: number;
+  }
+>();
+const transferEvents: Record<string, unknown>[] = [];
+let expireNextTransfer = false;
 const forwardingRules = new Map<string, Record<string, unknown>>();
 const emailCapabilities = {
   attachment_max_bytes: 10 * 1024 * 1024,
@@ -78,6 +95,17 @@ const layouts = new Map<string, Record<string, unknown>>(),
   dictionaries = new Map<string, Record<string, string>>();
 const logId = '00000000-0000-4000-8000-000000000099';
 const server = createServer(async (req, res) => {
+  if (req.headers.origin === 'http://localhost:4310') {
+    res.setHeader('Access-Control-Allow-Origin', 'http://localhost:4310');
+    res.setHeader('Access-Control-Allow-Headers', 'authorization,content-type,idempotency-key');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+  }
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
   const reply = (value: unknown, status = 200) => {
     res.writeHead(status, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(value));
@@ -122,6 +150,14 @@ const server = createServer(async (req, res) => {
       domains.clear();
       emails.clear();
       inboundMessages.clear();
+      inboundBodies.clear();
+      inboundRaw.clear();
+      inboundFiles.clear();
+      emailSources.clear();
+      emailSubmissions.clear();
+      transferGrants.clear();
+      transferEvents.length = 0;
+      expireNextTransfer = false;
       forwardingRules.clear();
       Object.assign(emailCapabilities, {
         attachment_max_bytes: 10 * 1024 * 1024,
@@ -139,9 +175,42 @@ const server = createServer(async (req, res) => {
       automationRuns.clear();
       return reply({ reset: true });
     }
-    let text = '';
-    for await (const chunk of req) text += String(chunk);
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    const text = Buffer.concat(chunks).toString('utf8');
     const body = text ? JSON.parse(text) : {};
+    if (path === '/fixtures/transfer-events') return reply(transferEvents);
+    if (path === '/fixtures/transfer-behavior' && method === 'POST') {
+      expireNextTransfer = Boolean(body.expire_next);
+      return reply({ updated: true });
+    }
+    if (path === '/fixtures/large-transfers' && method === 'POST') {
+      const id = '00000000-0000-4000-8000-000000000188',
+        attachment = '00000000-0000-4000-8000-000000000189';
+      const bytes = Buffer.alloc(5 * 1024 * 1024, 97);
+      inboundMessages.set(id, {
+        id,
+        domain_id: '00000000-0000-4000-8000-000000000087',
+        mail_from: 'sender@example.test',
+        rcpt_to: 'support@example.test',
+        subject: 'Large incoming message',
+        status: 'parsed',
+        size: bytes.length,
+        created_at: new Date().toISOString(),
+        headers: [],
+        attempts: [{ ordinal: 1, status: 'parsed' }],
+        forwards: [],
+        error: null,
+        attachments: [{ id: attachment, filename: 'large-report.bin', size: bytes.length }],
+      });
+      inboundBodies.set(id, {
+        text: `Large incoming body\n${'x'.repeat(5 * 1024 * 1024)}`,
+        html: `<h1>Large incoming body</h1><img src="https://remote-image.invalid/pixel"><script>window.parent.compromised=true</script><p>${'x'.repeat(5 * 1024 * 1024)}</p>`,
+      });
+      inboundRaw.set(id, bytes);
+      inboundFiles.set(attachment, { filename: 'large-report.bin', bytes });
+      return reply({ id, attachment_id: attachment, size: bytes.length });
+    }
     if (path === '/fixtures/email-capabilities' && method === 'POST') {
       Object.assign(emailCapabilities, body);
       return reply(emailCapabilities);
@@ -431,6 +500,32 @@ const server = createServer(async (req, res) => {
       if (method === 'PATCH') contact.unsubscribed = body.unsubscribed;
       return reply({ email: contact.email, unsubscribed: contact.unsubscribed, topics: [] });
     }
+    const transfer = transferGrants.get(req.headers.authorization?.replace(/^Bearer /, '') ?? '');
+    if (transfer) {
+      if (req.headers.origin !== 'http://localhost:4310')
+        return reply({ message: 'Invalid transfer origin' }, 403);
+      transferEvents.push({
+        kind: 'execution',
+        operation: transfer.input.operation,
+        body_bytes: Buffer.byteLength(text),
+        idempotency_key: req.headers['idempotency-key'],
+        expired: transfer.expires <= Date.now(),
+      });
+      if (transfer.expires <= Date.now())
+        return reply({ message: 'Browser transfer expired. Retry to authorize again.' }, 401);
+      if (transfer.path !== path || transfer.method !== method)
+        return reply({ message: 'Transfer scope mismatch' }, 403);
+      if (
+        method === 'POST' &&
+        (transfer.input.body_sha256 !== createHash('sha256').update(text).digest('hex') ||
+          transfer.input.body_bytes !== Buffer.byteLength(text) ||
+          transfer.input.idempotency_key !== req.headers['idempotency-key'])
+      )
+        return reply({ message: 'Transfer payload mismatch' }, 403);
+      req.headers.authorization = `Bearer ${token}`;
+      req.headers['x-org-id'] = org;
+      req.headers['x-environment-id'] = transfer.environment;
+    }
     if (req.headers.authorization !== `Bearer ${token}`)
       return reply({ message: 'Session expired' }, 401);
     if (path.startsWith('operator/')) {
@@ -595,6 +690,39 @@ const server = createServer(async (req, res) => {
     )
       return reply({ message: 'No tenant access' }, 403);
     const production = req.headers['x-environment-id'] === prod;
+    if (path === 'browser-transfers' && method === 'POST') {
+      const routes: Record<string, string> = {
+        'email.send': 'emails',
+        'email.detail': `emails/${body.message_id}`,
+        'email.source': `emails/${body.message_id}/source`,
+        'inbound.body': `inbound/${body.message_id}/body`,
+        'inbound.raw': `inbound/${body.message_id}/raw`,
+        'inbound.attachment': `inbound/${body.message_id}/attachments/${body.attachment_id}`,
+      };
+      const target = routes[body.operation];
+      if (!target) return reply({ message: 'Unsupported browser transfer' }, 400);
+      if (body.operation === 'email.send' && fixtureRole === 'viewer')
+        return reply({ message: 'Sending is forbidden' }, 403);
+      const transferToken = `fixture-transfer-${randomUUID()}`;
+      const expires = Date.now() + (expireNextTransfer ? -1000 : 60000);
+      expireNextTransfer = false;
+      const transferMethod = body.operation === 'email.send' ? 'POST' : 'GET';
+      transferGrants.set(transferToken, {
+        path: target,
+        method: transferMethod,
+        input: body,
+        environment: String(req.headers['x-environment-id']),
+        expires,
+      });
+      transferEvents.push({ kind: 'grant', ...body });
+      const binary = ['inbound.raw', 'inbound.attachment'].includes(body.operation);
+      return reply({
+        url: `http://127.0.0.1:4311/v1/${target}${binary ? '?format=binary' : ''}`,
+        method: transferMethod,
+        token: transferToken,
+        expires_at: new Date(expires).toISOString(),
+      });
+    }
     if (path === 'auth/mfa/setup')
       return reply({ secret: 'BROWSER-CONTRACT-SETUP-KEY', uri: 'otpauth://totp/fixture' });
     if (path === 'auth/mfa/enable') {
@@ -763,16 +891,39 @@ const server = createServer(async (req, res) => {
         return reply({ data: rows.slice((page - 1) * limit, page * limit) });
       }
       if (path.endsWith('/body'))
+        return reply(
+          inboundBodies.get(path.split('/')[1]!) ?? {
+            text: 'Please help with my account.',
+            html: '<h1>Support request</h1><img src="https://remote-image.invalid/pixel"><script>window.parent.compromised=true</script>',
+          },
+        );
+      if (path.endsWith('/raw') || path.includes('/attachments/')) {
+        const raw = path.endsWith('/raw');
+        const file = raw
+          ? {
+              filename: inboundRaw.has(path.split('/')[1]!)
+                ? `${path.split('/')[1]}.eml`
+                : 'support.eml',
+              bytes: inboundRaw.get(path.split('/')[1]!) ?? Buffer.from('note'),
+            }
+          : (inboundFiles.get(path.split('/')[3]!) ?? {
+              filename: 'note.txt',
+              bytes: Buffer.from('note'),
+            });
+        if (url.searchParams.get('format') === 'binary') {
+          res.writeHead(200, {
+            'Content-Type': 'application/octet-stream',
+            'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
+          });
+          res.end(file.bytes);
+          return;
+        }
         return reply({
-          text: 'Please help with my account.',
-          html: '<h1>Support request</h1><img src="https://remote-image.invalid/pixel"><script>window.parent.compromised=true</script>',
-        });
-      if (path.endsWith('/raw') || path.includes('/attachments/'))
-        return reply({
-          filename: path.endsWith('/raw') ? 'support.eml' : 'note.txt',
+          filename: file.filename,
           content_type: 'text/plain',
-          content: Buffer.from('note').toString('base64'),
+          content: file.bytes.toString('base64'),
         });
+      }
       return reply(inboundMessages.get(path.split('/')[1]!) ?? inbound);
     }
     if (path === 'forwarding-rules') return reply([...forwardingRules.values()]);
@@ -906,6 +1057,13 @@ const server = createServer(async (req, res) => {
         return reply({ message: 'Sender domain is not verified' }, 403);
       if (!req.headers['idempotency-key'])
         return reply({ message: 'Browser should supply an idempotency key' }, 422);
+      const submissionKey = `${req.headers['x-environment-id']}/${req.headers['idempotency-key']}`;
+      const hash = createHash('sha256').update(text).digest('hex');
+      const previous = emailSubmissions.get(submissionKey);
+      if (previous)
+        return previous.hash === hash
+          ? reply({ id: previous.id }, 201)
+          : reply({ message: 'Idempotency key conflicts with another message' }, 409);
       const id = randomUUID(),
         created_at = new Date().toISOString();
       const row = {
@@ -913,7 +1071,16 @@ const server = createServer(async (req, res) => {
         domain_id: domain.id,
         from: body.from,
         subject: body.subject,
-        request: body,
+        request: {
+          ...body,
+          attachments: (body.attachments ?? []).map(
+            (file: { filename: string; content_type: string; content?: string }) => ({
+              filename: file.filename,
+              content_type: file.content_type,
+              size: Buffer.from(file.content ?? '', 'base64').length,
+            }),
+          ),
+        },
         status: body.scheduled_at ? 'scheduled' : 'sent',
         scheduled_at: body.scheduled_at ?? created_at,
         created_at,
@@ -924,16 +1091,34 @@ const server = createServer(async (req, res) => {
           : [{ provider: 'smtp', ordinal: 1, status: 'accepted', started_at: created_at }],
       };
       emails.set(id, row);
+      emailSubmissions.set(submissionKey, { id, hash });
+      emailSources.set(
+        id,
+        `From: ${row.from}\r\nSubject: ${row.subject}\r\n\r\nBrowser fixture MIME\r\n${body.text ?? body.html ?? ''}\r\n${(body.attachments ?? []).map((file: { content?: string }) => file.content ?? '').join('\r\n')}`,
+      );
       return reply({ id }, 201);
     }
-    if (path === 'emails') return reply([...emails.values()]);
+    if (path === 'emails')
+      return reply(
+        [...emails.values()].map(
+          ({
+            request: _request,
+            recipients: _recipients,
+            events: _events,
+            attempts: _attempts,
+            ...metadata
+          }) => metadata,
+        ),
+      );
     if (path.startsWith('emails/')) {
       const [, id, action] = path.split('/'),
         row = emails.get(id!);
       if (!row) return reply({ message: 'Email not found' }, 404);
       if (action === 'source')
         return reply({
-          source: `From: ${row.from}\r\nSubject: ${row.subject}\r\n\r\nBrowser fixture MIME`,
+          source:
+            emailSources.get(id!) ??
+            `From: ${row.from}\r\nSubject: ${row.subject}\r\n\r\nBrowser fixture MIME`,
         });
       if (action === 'cancel') row.status = 'canceled';
       if (row.cancellation) (row.cancellation as { eligible: boolean }).eligible = false;

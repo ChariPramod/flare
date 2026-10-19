@@ -16,6 +16,7 @@ export function redactText(value: string) {
       }
     })
     .replace(/\b(?:fl_|whsec_)[A-Za-z0-9_+/=-]{12,}/g, '[REDACTED]')
+    .replace(/\bfbt_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[REDACTED]')
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[REDACTED]')
     .replace(/-----BEGIN[^-]*PRIVATE KEY-----[\s\S]*?-----END[^-]*PRIVATE KEY-----/g, '[REDACTED]');
 }
@@ -62,17 +63,20 @@ const outgoingContent =
   /^\/v1\/(?:emails|events\/(?:postal|sns|novu|trigger)|workflows|activity|templates|template-preview|layouts|translations|content|publish|publications|automations|automation-events|automation-runs)(?:\/|$)/i;
 const inboxCredential = /^\/v1\/subscribers\/[^/]+\/inbox-token\/?$/i;
 const logContent = /^\/v1\/logs(?:\/|$)/i;
+const dashboardContent = /^\/v1\/(?:browser-transfers|dashboard\/inbox)(?:\/|$)/i;
 export function redactRequestLogBodies(path: string, requestBody: unknown, responseBody: unknown) {
   // Log responses can contain older serialized credentials and recursive log copies.
-  const marker = logContent.test(path)
-    ? '[LOG CONTENT REDACTED]'
-    : inboxCredential.test(path)
-      ? '[INBOX CREDENTIAL REDACTED]'
-      : inboundContent.test(path)
-        ? '[INBOUND CONTENT REDACTED]'
-        : outgoingContent.test(path)
-          ? '[EMAIL CONTENT REDACTED]'
-          : undefined;
+  const marker = dashboardContent.test(path)
+    ? '[DASHBOARD CREDENTIALS AND CONTENT REDACTED]'
+    : logContent.test(path)
+      ? '[LOG CONTENT REDACTED]'
+      : inboxCredential.test(path)
+        ? '[INBOX CREDENTIAL REDACTED]'
+        : inboundContent.test(path)
+          ? '[INBOUND CONTENT REDACTED]'
+          : outgoingContent.test(path)
+            ? '[EMAIL CONTENT REDACTED]'
+            : undefined;
   return {
     request_body: marker ? { body: marker, query: marker } : redact(requestBody),
     response_body: marker ?? redact(responseBody),

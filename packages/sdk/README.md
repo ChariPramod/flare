@@ -30,7 +30,16 @@ HTTP failures throw `FlareError` with `status`, `requestId`, `retryAfter`, and s
 
 `verifyWebhook(secret, originalBody, headers)` verifies Svix-compatible HMAC signatures and the five-minute timestamp window before returning parsed JSON. Store event IDs to deduplicate webhook deliveries. It is for Flare webhook receivers, not Postal or SNS native callbacks.
 
-Publication requires an owner/admin-delegated key created with `allow_publish: true`; ordinary full-access keys cannot publish. Session-only account/team/key APIs are included in the complete HTTP contract but cannot be executed by this API-key client.
+Publication requires an owner/admin-delegated key created with `allow_publish: true`; ordinary full-access keys cannot publish. Session-only account/team/key and browser-transfer APIs are included in the complete HTTP contract but are rejected by this API-key client before a network request. The private dashboard Inbox gateway is excluded from the catalog.
+
+Inbound source and attachments keep their JSON/base64 default. To retrieve exact bytes, explicitly select binary format; both typed `request()` and runtime `operation()` return `Uint8Array`:
+
+```ts
+const bytes = await flare.request('get', '/v1/inbound/{id}/raw', {
+  path: { id: inboundId },
+  query: { format: 'binary' },
+});
+```
 
 Read-only native-work inspection:
 

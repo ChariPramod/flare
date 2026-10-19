@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added session-bound direct transfers for large email and inbound content, exact-byte/idempotent retries, safe binary downloads, and a signed private Inbox gateway for Vercel. Gateway requests retain live session/subscriber authorization and bounded native access; credentials/content stay out of logs. Fixed stack overflow in large base64 validation, bounded inbound preview rendering, and redacted transfer grants embedded in arbitrary log text. Accept the pinned Inbox SDK’s automatic timezone without modifying subscriber profiles, and support its default schedule time format; actual SDK browser acceptance covers these boundaries. Added real-service and browser regressions, SDK binary download types, and updated deployment guidance. Final acceptance and push status are tracked in `PROGRESS.md`; actual split-host deployment remains a separate gate.
+
 - Add the signed-forwarding foundation for a Vercel dashboard: explicit HTTPS origins, disabled previews by default, validated platform client IPs, exact request signatures and atomic Redis replay protection. Preserve session/tenant/operator authorization and valid sessions across forwarding outages. Bound Vercel proxy payloads to 4 MiB and keep native Inbox explicitly unavailable there until its private gateway exists. Add real HTTP/Redis and actual Nest acceptance coverage; direct transfers and the complete split-host deployment remain pending.
 
 - Give integration MinIO builds separate image names so they cannot replace the deployment/acceptance images during backup validation. Preserve strict backup image-drift checks and add precise, credential-safe encrypted-rehearsal failure phases.

@@ -51,3 +51,6 @@ export * from './automations.js';
 export * from './telemetry.js';
 
 export { reconciliationQuery } from './reconciliation.js';
+
+export * from './browser-transfers.js';
+export * from './base64.js';

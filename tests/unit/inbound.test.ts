@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { randomBytes, randomUUID, generateKeyPairSync, sign } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
@@ -126,6 +127,48 @@ function payload(mime = rawMail(), id = 1) {
     size: mime.length,
   };
 }
+it('accepts and parses the full large-transfer MIME fixture without recursive base64 validation', async () => {
+  const nodemailer = createRequire(new URL('../../packages/mail/package.json', import.meta.url))(
+    'nodemailer',
+  );
+  const attachment = Buffer.alloc(5 * 1024 * 1024, 0x71);
+  const html = `<p>Large transfer fixture</p><p>${'漢'.repeat(1_600_000)}</p><script>alert(1)</script><img src="https://remote.invalid/large-tracker">`;
+  const composed = await nodemailer
+    .createTransport({ streamTransport: true, buffer: true, newline: 'windows' })
+    .sendMail({
+      from: 'incoming@example.net',
+      to: 'visible@example.com',
+      subject: 'Acceptance large inbound transfer',
+      html,
+      textEncoding: 'base64',
+      attachments: [
+        {
+          filename: 'large-fixture.bin',
+          content: attachment,
+          contentType: 'application/octet-stream',
+        },
+      ],
+    });
+  const mime = Buffer.from(composed.message);
+  expect(mime.length).toBeGreaterThan(13 * 1024 * 1024);
+  expect(mime.length).toBeLessThan(25 * 1024 * 1024);
+  const receipt = await acceptInbound(sql, options.store, domainId, {
+    id: 'large-transfer',
+    mail_from: 'incoming@example.net',
+    rcpt_to: 'hidden@example.com',
+    message: mime.toString('base64'),
+    base64: true,
+    size: mime.length,
+  });
+  await parseInbound(sql, options.store, receipt.id);
+  const [row] = await sql`select status,body_key from inbound_messages where id=${receipt.id}`;
+  expect(row!.status).toBe('parsed');
+  expect(JSON.parse(objects.get(String(row!.body_key))!.toString()).html).toBe(html);
+  const [file] =
+    await sql`select size,object_key from inbound_attachments where inbound_id=${receipt.id}`;
+  expect(Number(file!.size)).toBe(attachment.length);
+  expect(objects.get(String(file!.object_key))!.equals(attachment)).toBe(true);
+}, 15000);
 it('persists raw MIME, deduplicates receipt and parsing, preserves the envelope and emits metadata only', async () => {
   const body = payload(),
     first = await acceptInbound(sql, options.store, domainId, body);

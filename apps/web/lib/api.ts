@@ -1,40 +1,46 @@
 'use client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-  ) {
-    super(message);
-  }
-}
+import { browserTransfer, responseJson } from './browser-transfers';
+export { ApiError } from './browser-transfers';
 export async function api<T = Record<string, unknown>>(
   path: string,
   method = 'GET',
   body?: unknown,
   key?: string,
+  signal?: AbortSignal,
 ): Promise<T> {
-  const response = await fetch(`/api/${path}`, {
+  return apiSerialized<T>(
+    path,
     method,
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', ...(key ? { 'Idempotency-Key': key } : {}) },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok)
-    throw new ApiError(
-      typeof data.message === 'string'
-        ? data.message
-        : JSON.stringify(data.message ?? data.errors ?? 'Request failed'),
-      response.status,
-    );
-  return data as T;
+    body === undefined ? undefined : JSON.stringify(body),
+    key,
+    signal,
+  );
+}
+async function apiSerialized<T>(
+  path: string,
+  method: string,
+  serializedBody?: string,
+  key?: string,
+  signal?: AbortSignal,
+): Promise<T> {
+  const response =
+    (await browserTransfer(path, method, serializedBody, key, signal)) ??
+    (await fetch(`/api/${path}`, {
+      method,
+      credentials: 'same-origin',
+      redirect: 'error',
+      signal,
+      headers: { 'Content-Type': 'application/json', ...(key ? { 'Idempotency-Key': key } : {}) },
+      ...(serializedBody === undefined ? {} : { body: serializedBody }),
+    }));
+  return responseJson<T>(response);
 }
 export function useApi<T>(path: string, interval?: number) {
   return useQuery({
     queryKey: ['api', path],
-    queryFn: () => api<T>(path),
+    queryFn: ({ signal }) => api<T>(path, 'GET', undefined, undefined, signal),
     refetchInterval: interval,
     retry: false,
   });
@@ -44,12 +50,17 @@ export function useAction<T = unknown>(path: string, method = 'POST', idempotent
   const submission = useRef<{ body: string; key: string } | null>(null);
   return useMutation({
     mutationFn: (body: unknown) => {
+      const serialized = JSON.stringify(body);
       if (idempotent) {
-        const serialized = JSON.stringify(body);
         if (submission.current?.body !== serialized)
           submission.current = { body: serialized, key: crypto.randomUUID() };
       }
-      return api<T>(path, method, body, submission.current?.key);
+      return apiSerialized<T>(
+        path,
+        method,
+        idempotent ? submission.current!.body : serialized,
+        submission.current?.key,
+      );
     },
     onSuccess: () => client.invalidateQueries({ queryKey: ['api'] }),
   });

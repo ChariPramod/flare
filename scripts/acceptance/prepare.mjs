@@ -11,7 +11,7 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 const directory = realpathSync(mkdtempSync(join(tmpdir(), 'flare-acceptance-')));
 // Respect Git's source boundary, including uncommitted source, while excluding ignored caches/secrets.
 const sourceFiles = execFileSync(
@@ -44,17 +44,19 @@ let env = readFileSync(envPath, 'utf8');
 env = env
   // Docker publishes IPv4 loopback ports. Avoid an unrelated IPv6 localhost listener.
   .replace(/^WEB_ORIGIN=.*$/m, 'WEB_ORIGIN=http://127.0.0.1:3000')
+  .replace(/^PUBLIC_API_URL=.*$/m, 'PUBLIC_API_URL=http://127.0.0.1:4000')
   .replace(/^NOVU_PUBLIC_API_URL=.*$/m, 'NOVU_PUBLIC_API_URL=http://127.0.0.1:3000/novu')
   .replace(/^NOVU_PUBLIC_WS_URL=.*$/m, 'NOVU_PUBLIC_WS_URL=http://127.0.0.1:3002')
   .replace(/^SEED_DOMAIN=.*$/m, 'SEED_DOMAIN=acceptance.test')
   .replace(/^AUTH_RATE_BURST=.*$/m, 'AUTH_RATE_BURST=100')
   .replace(/^FLARE_OPERATOR_USER_IDS=.*\n?/gm, '')
+  .replace(/^FLARE_DASHBOARD_PROXY_SECRET=.*\n?/gm, '')
   .replace(/^MAIL_SANDBOX=.*\n?/gm, '')
   .replace(/^SEED_SUBSCRIBER_EMAIL=.*$/m, 'SEED_SUBSCRIBER_EMAIL=recipient@example.net');
 writeFileSync(
   envPath,
   env +
-    `\nFLARE_ACCEPTANCE=true\nMAIL_SANDBOX=true\nDOMAIN_DNS_SERVERS=172.29.250.53\nFLARE_OPERATOR_USER_IDS=${operatorId}\n`,
+    `\nFLARE_ACCEPTANCE=true\nMAIL_SANDBOX=true\nDOMAIN_DNS_SERVERS=172.29.250.53\nFLARE_OPERATOR_USER_IDS=${operatorId}\nFLARE_DASHBOARD_PROXY_SECRET=fdp_${randomBytes(32).toString('base64')}\n`,
   {
     mode: 0o600,
   },

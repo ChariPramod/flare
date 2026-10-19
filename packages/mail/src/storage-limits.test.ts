@@ -7,7 +7,8 @@ vi.mock('@aws-sdk/client-s3', async (original) => ({
     send = mocks.send;
   },
 }));
-import { objectStore } from './storage.js';
+import { attachments, objectStore } from './storage.js';
+import { emailSchema } from './validation.js';
 afterEach(() => {
   mocks.send.mockReset();
 });
@@ -52,4 +53,31 @@ it('accepts an exact-limit object and rejects invalid limits before an S3 reques
   for (const limit of [NaN, Infinity, -1, 0.5, Number.MAX_SAFE_INTEGER + 1])
     await expect(objectStore().get('fixture', limit)).rejects.toMatchObject({ status: 422 });
   expect(mocks.send).not.toHaveBeenCalled();
+});
+
+it('accepts large outgoing base64 attachments up to the unchanged decoded limit without a regex stack overflow', async () => {
+  const bytes = Buffer.alloc(10 * 1024 * 1024, 0x71);
+  const input = emailSchema.parse({
+    from: 'sender@example.test',
+    to: ['reader@example.net'],
+    subject: 'Large attachment',
+    text: 'Fixture',
+    attachments: [{ filename: 'large.bin', content: bytes.toString('base64') }],
+  });
+  const decoded = await attachments(input);
+  expect(decoded[0]!.content.equals(bytes)).toBe(true);
+  await expect(
+    attachments({
+      ...input,
+      attachments: [...input.attachments, { filename: 'extra.bin', content: 'YQ==' }],
+    }),
+  ).rejects.toMatchObject({ status: 422 });
+  await expect(
+    attachments({
+      ...input,
+      attachments: [
+        { ...input.attachments[0]!, content: `${input.attachments[0]!.content!.slice(0, -4)}!===` },
+      ],
+    }),
+  ).rejects.toMatchObject({ status: 422 });
 });

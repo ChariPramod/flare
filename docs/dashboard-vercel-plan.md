@@ -31,7 +31,7 @@ Use shared components for these improvements so other modules benefit without re
 
 ## Checkpoint 2 — Make split hosting safe
 
-Execute this checkpoint in reviewable parts: **2a**, signed forwarding and deployment configuration validation; **2b**, direct browser transfers and the private Inbox gateway; **2c**, split-host ingress/recovery configuration and deployment acceptance. Part 2a alone does not establish complete Vercel support. Current settings and explicit remaining gates are recorded in [the Vercel guide](vercel.md).
+Execute this checkpoint in reviewable parts: **2a**, signed forwarding and deployment configuration validation; **2b**, direct browser transfers and the private Inbox gateway; **2c**, split-host ingress/recovery configuration and deployment acceptance. Parts 2a–2b do not establish complete Vercel support; checkpoint 2c must validate ingress, recovery profiles and an actual deployment. Current settings and explicit remaining gates are recorded in [the Vercel guide](vercel.md).
 
 ### Vercel configuration and authentication
 

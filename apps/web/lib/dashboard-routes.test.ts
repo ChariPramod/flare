@@ -34,6 +34,7 @@ beforeEach(() => {
   vi.stubEnv('FLARE_API_URL', 'https://api.example.test');
   vi.stubEnv('FLARE_DASHBOARD_PROXY_SECRET', secret);
   vi.stubEnv('FLARE_FORWARD_CLIENT_IP', 'true');
+  vi.stubEnv('FLARE_BROWSER_TRANSFERS', '');
   values.clear();
   jar.set.mockClear();
   jar.delete.mockClear();
@@ -196,15 +197,6 @@ it('rejects UTF-8 payloads above the Vercel byte limit even when the character c
   expect(response.status).toBe(413);
   expect(fetcher).not.toHaveBeenCalled();
 });
-it('fails explicitly for native Inbox on Vercel before contacting either backend', async () => {
-  const response = await inbox(
-    request('v1/inbox/session', 'POST', '{}'),
-    context('v1/inbox/session'),
-  );
-  expect(response.status).toBe(503);
-  expect(await response.text()).toMatch(/Vercel Inbox gateway/);
-  expect(fetcher).not.toHaveBeenCalled();
-});
 it('preserves self-host Inbox bootstrap authorization and redirect rejection through the central helper', async () => {
   vi.stubEnv('VERCEL', '');
   vi.stubEnv('NOVU_API_URL', 'http://novu-api:3000');
@@ -335,4 +327,94 @@ it('returns retryable forwarding failures for session-switch and operator probes
   expect(values.get('flare_session')).toBe('session-cookie');
   expect(jar.delete).not.toHaveBeenCalled();
   expect(jar.set).not.toHaveBeenCalled();
+});
+
+it('exposes deployed transfer mode only after signed live-session validation', async () => {
+  const response = await api(
+    request('browser-transfer-config'),
+    context('browser-transfer-config'),
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ enabled: true });
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  const check = verified(0);
+  expect(check.url.pathname).toBe('/v1/auth/me');
+  expect(check.headers).toMatchObject({
+    Authorization: 'Bearer session-cookie',
+    'x-org-id': org,
+    'x-environment-id': environment,
+  });
+});
+it.each(['', 'true', 'false'])('keeps self-host transfers opt-in with flag %j', async (flag) => {
+  vi.stubEnv('VERCEL', '');
+  vi.stubEnv('FLARE_BROWSER_TRANSFERS', flag);
+  const response = await api(
+    request('browser-transfer-config'),
+    context('browser-transfer-config'),
+  );
+  expect(await response.json()).toEqual({ enabled: flag === 'true' });
+  expect(fetcher).toHaveBeenCalledOnce();
+});
+it.each(['flare_session', 'flare_org', 'flare_environment'])(
+  'does not disclose mode without %s',
+  async (name) => {
+    values.delete(name);
+    const response = await api(
+      request('browser-transfer-config'),
+      context('browser-transfer-config'),
+    );
+    expect(response.status).toBe(name === 'flare_session' ? 401 : 403);
+    expect(fetcher).not.toHaveBeenCalled();
+  },
+);
+it('requires GET for transfer config and fails closed for revoked sessions without caching success', async () => {
+  expect(
+    (
+      await api(
+        request('browser-transfer-config', 'POST', '{}'),
+        context('browser-transfer-config'),
+      )
+    ).status,
+  ).toBe(405);
+  expect(fetcher).not.toHaveBeenCalled();
+  fetcher.mockResolvedValueOnce(Response.json({ message: 'Membership revoked' }, { status: 403 }));
+  const response = await api(
+    request('browser-transfer-config'),
+    context('browser-transfer-config'),
+  );
+  expect(response.status).toBe(401);
+  expect(values.size).toBe(0);
+});
+it('preserves session cookies when transfer configuration cannot verify forwarding', async () => {
+  fetcher.mockResolvedValueOnce(
+    Response.json(
+      { message: 'Invalid forwarding proof' },
+      { status: 401, headers: { 'x-flare-proxy-error': 'invalid-proof' } },
+    ),
+  );
+  const response = await api(
+    request('browser-transfer-config'),
+    context('browser-transfer-config'),
+  );
+  expect(response.status).toBe(503);
+  expect(response.headers.get('retry-after')).toBe('1');
+  expect(jar.delete).not.toHaveBeenCalled();
+});
+it('forwards only the validated grant-issuance Origin while leaving ordinary proxy headers unchanged', async () => {
+  const body = JSON.stringify({ operation: 'email.detail', message_id: org });
+  expect(
+    (
+      await api(
+        request('browser-transfers', 'POST', body, { origin: 'https://wrong.example.test' }),
+        context('browser-transfers'),
+      )
+    ).status,
+  ).toBe(403);
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(
+    (await api(request('browser-transfers', 'POST', body), context('browser-transfers'))).status,
+  ).toBe(200);
+  expect(verified(0).headers.Origin).toBe(origin);
+  await api(request('emails'), context('emails'));
+  expect(verified(1).headers.Origin).toBeUndefined();
 });

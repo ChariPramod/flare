@@ -827,6 +827,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/browser-transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * issue (read)
+         * @description Session-only, short-lived browser transfer grant bound to the organization, environment and exact operation. Send grants bind exact UTF-8 body bytes and idempotency key. Redemption requires the configured browser Origin and a live session. Tokens are returned only in this no-store response and must never be put in a URL.
+         */
+        post: operations["BrowserTransfersController_issue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/layouts": {
         parameters: {
             query?: never;
@@ -1252,7 +1272,7 @@ export interface paths {
         };
         /**
          * raw (read)
-         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         * @description Defaults to the compatible JSON/base64 response. Request format=binary for a bounded attachment download with Content-Disposition and no-store. Browser transfer grants select the exact binary target.
          */
         get: operations["InboundController_raw"];
         put?: never;
@@ -1272,7 +1292,7 @@ export interface paths {
         };
         /**
          * attachment (read)
-         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         * @description Defaults to the compatible JSON/base64 response. Request format=binary for a bounded attachment download with Content-Disposition and no-store. Browser transfer grants select the exact binary target.
          */
         get: operations["InboundController_attachment"];
         put?: never;
@@ -9833,6 +9853,183 @@ export interface operations {
             };
         };
     };
+    BrowserTransfersController_issue: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required for user sessions. API keys are bound to one environment; supplying this header verifies that selection. */
+                "x-environment-id"?: string;
+                /** @description Required for user sessions; optional tenant assertion for API keys. */
+                "x-org-id"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    operation: "email.send";
+                    body_sha256: string;
+                    body_bytes: number;
+                    idempotency_key: string;
+                } | {
+                    /** @enum {string} */
+                    operation: "email.detail";
+                    /** Format: uuid */
+                    message_id: string;
+                } | {
+                    /** @enum {string} */
+                    operation: "email.source";
+                    /** Format: uuid */
+                    message_id: string;
+                } | {
+                    /** @enum {string} */
+                    operation: "inbound.body";
+                    /** Format: uuid */
+                    message_id: string;
+                } | {
+                    /** @enum {string} */
+                    operation: "inbound.raw";
+                    /** Format: uuid */
+                    message_id: string;
+                } | {
+                    /** @enum {string} */
+                    operation: "inbound.attachment";
+                    /** Format: uuid */
+                    message_id: string;
+                    /** Format: uuid */
+                    attachment_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Success */
+            201: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uri */
+                        url: string;
+                        /** @enum {string} */
+                        method: "GET" | "POST";
+                        token: string;
+                        /** Format: date-time */
+                        expires_at: string;
+                    } & {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     ContentController_list: {
         parameters: {
             query?: never;
@@ -13245,7 +13442,9 @@ export interface operations {
     };
     InboundController_raw: {
         parameters: {
-            query?: never;
+            query?: {
+                format?: "binary" | "json";
+            };
             header?: {
                 /** @description Required for user sessions. API keys are bound to one environment; supplying this header verifies that selection. */
                 "x-environment-id"?: string;
@@ -13263,6 +13462,10 @@ export interface operations {
             200: {
                 headers: {
                     "x-request-id"?: string;
+                    /** @description Binary downloads use a safe attachment filename. */
+                    "Content-Disposition"?: string;
+                    /** @description Binary download responses are no-store. */
+                    "Cache-Control"?: string;
                     "RateLimit-Limit"?: number;
                     "RateLimit-Remaining"?: number;
                     /** @description Seconds until bucket refills */
@@ -13277,6 +13480,7 @@ export interface operations {
                     } & {
                         [key: string]: unknown;
                     };
+                    "message/rfc822": string;
                 };
             };
             /** @description Request failed */
@@ -13383,7 +13587,9 @@ export interface operations {
     };
     InboundController_attachment: {
         parameters: {
-            query?: never;
+            query?: {
+                format?: "binary" | "json";
+            };
             header?: {
                 /** @description Required for user sessions. API keys are bound to one environment; supplying this header verifies that selection. */
                 "x-environment-id"?: string;
@@ -13402,6 +13608,10 @@ export interface operations {
             200: {
                 headers: {
                     "x-request-id"?: string;
+                    /** @description Binary downloads use a safe attachment filename. */
+                    "Content-Disposition"?: string;
+                    /** @description Binary download responses are no-store. */
+                    "Cache-Control"?: string;
                     "RateLimit-Limit"?: number;
                     "RateLimit-Remaining"?: number;
                     /** @description Seconds until bucket refills */
@@ -13416,6 +13626,7 @@ export interface operations {
                     } & {
                         [key: string]: unknown;
                     };
+                    "*/*": string;
                 };
             };
             /** @description Request failed */

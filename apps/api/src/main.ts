@@ -37,6 +37,8 @@ import { OperatorController } from './operator.js';
 import { OperatorGuard } from './operator-auth.js';
 import { OperatorReadinessController } from './operator-readiness.js';
 import { createDashboardForwardingMiddleware } from './dashboard-forwarding.js';
+import { BrowserTransfersController, browserTransferCors } from './browser-transfers.js';
+import { DashboardInboxController } from './dashboard-inbox.js';
 
 startTelemetry();
 const readinessStore = objectStore();
@@ -78,6 +80,8 @@ class HealthController {
     DeadLettersController,
     OperatorController,
     OperatorReadinessController,
+    BrowserTransfersController,
+    DashboardInboxController,
   ],
   providers: [
     OperatorGuard,
@@ -107,6 +111,7 @@ app.use(
   }),
 );
 app.use(helmet());
+app.use(browserTransferCors);
 app.enableCors({ origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000', credentials: true });
 const document = JSON.parse(
   readFileSync(new URL('../../../docs/api/openapi.json', import.meta.url), 'utf8'),

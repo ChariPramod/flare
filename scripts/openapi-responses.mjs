@@ -388,6 +388,24 @@ mappings.WorkflowController_inspection = closed(
   }),
 );
 export function responseFor(id) {
+  if (id === 'BrowserTransfersController_issue')
+    return {
+      schema: obj({
+        url: { type: 'string', format: 'uri' },
+        method: { type: 'string', enum: ['GET', 'POST'] },
+        token: str,
+        expires_at: { type: 'string', format: 'date-time' },
+      }),
+      description:
+        'Session-only, short-lived browser transfer grant bound to the organization, environment and exact operation. Send grants bind exact UTF-8 body bytes and idempotency key. Redemption requires the configured browser Origin and a live session. Tokens are returned only in this no-store response and must never be put in a URL.',
+    };
   if (id === 'OperationsController_exportLogs') return { schema: str, contentType: 'text/csv' };
+  if (id === 'InboundController_raw' || id === 'InboundController_attachment')
+    return {
+      schema: mappings[id],
+      binary: id === 'InboundController_raw' ? 'message/rfc822' : '*/*',
+      description:
+        'Defaults to the compatible JSON/base64 response. Request format=binary for a bounded attachment download with Content-Disposition and no-store. Browser transfer grants select the exact binary target.',
+    };
   return { schema: mappings[id] ?? json };
 }

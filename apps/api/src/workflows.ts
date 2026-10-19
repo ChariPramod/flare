@@ -29,7 +29,7 @@ import {
   subscriberSchema,
   workflowSchema,
 } from '@flare/shared';
-import type { Preferences, Workflow } from '@flare/shared';
+import type { Preferences, Principal, Workflow } from '@flare/shared';
 import { z } from 'zod';
 import { publicationEngineBody, translationPayload, emptyDependencies } from '@flare/platform';
 import type { ContentDependencies } from '@flare/platform';
@@ -54,6 +54,31 @@ const listQuery = z.object({
 function ensureDevelopment(req: AuthRequest) {
   if (!canEditWorkflow(req.principal))
     throw new ForbiddenException('Production workflows are read-only. Publish from Development.');
+}
+/** Shared dashboard bootstrap; possession of a subscriber id never bypasses tenant lookup. */
+export async function subscriberInboxAccess(principal: Principal, id: string) {
+  id = safeId(id);
+  const [subscriber] = await withTenant(
+    sql,
+    principal,
+    (tx) => tx`select id from subscribers where subscriber_id=${id}`,
+  );
+  if (!subscriber) throw new NotFoundException();
+  const key = await novuKey(principal);
+  const [environment] = await withTenant(
+    sql,
+    principal,
+    (tx) => tx`select novu_application_id from environments where id=${principal.environmentId}`,
+  );
+  return {
+    subscriberId: id,
+    subscriberHash: createHmac('sha256', key).update(id).digest('hex'),
+    applicationIdentifier: environment?.novu_application_id,
+    backendUrl:
+      process.env.NOVU_PUBLIC_API_URL ||
+      `${process.env.WEB_ORIGIN ?? 'http://localhost:3000'}/novu`,
+    socketUrl: process.env.NOVU_PUBLIC_WS_URL ?? 'http://localhost:3002',
+  };
 }
 function engineDefinition(workflow: Workflow, deps: ContentDependencies = emptyDependencies()) {
   try {
@@ -449,23 +474,7 @@ export class WorkflowController {
     @Req() req: AuthRequest,
     @Param('id') id: string,
   ) {
-    await this.getSubscriber(req, id);
-    const key = await novuKey(req.principal);
-    const [environment] = await withTenant(
-      sql,
-      req.principal,
-      (tx) =>
-        tx`select novu_application_id from environments where id=${req.principal.environmentId}`,
-    );
-    return {
-      subscriberId: id,
-      subscriberHash: createHmac('sha256', key).update(id).digest('hex'),
-      applicationIdentifier: environment?.novu_application_id,
-      backendUrl:
-        process.env.NOVU_PUBLIC_API_URL ||
-        `${process.env.WEB_ORIGIN ?? 'http://localhost:3000'}/novu`,
-      socketUrl: process.env.NOVU_PUBLIC_WS_URL ?? 'http://localhost:3002',
-    };
+    return subscriberInboxAccess(req.principal, id);
   }
   @Get('topics') async topics(@Req() req: AuthRequest) {
     return withTenant(sql, req.principal, async (tx) => ({

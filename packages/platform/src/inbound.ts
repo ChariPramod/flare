@@ -3,7 +3,7 @@ import { simpleParser } from 'mailparser';
 import { z } from 'zod';
 import { withTenant, toJson } from '@flare/db';
 import type { Sql, Transaction } from '@flare/db';
-import { fingerprint, canSend } from '@flare/shared';
+import { fingerprint, canSend, isBase64 } from '@flare/shared';
 import type { Principal } from '@flare/shared';
 import {
   MailError,
@@ -70,8 +70,7 @@ export async function acceptInbound(sql: Sql, store: ObjectStore, domainId: stri
     .safeParse(raw);
   if (!input.success) throw new MailError(422, 'Invalid or oversized Postal RawMessage');
   const encoded = input.data.message.replace(/[\r\n]/g, '');
-  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded))
-    throw new MailError(422, 'Invalid MIME base64');
+  if (!isBase64(encoded)) throw new MailError(422, 'Invalid MIME base64');
   const mime = Buffer.from(encoded, 'base64');
   if (!mime.length || mime.length > limits.raw || mime.length !== input.data.size)
     throw new MailError(422, 'MIME size mismatch');

@@ -36,6 +36,8 @@ import { config, parse, redis, sql } from './context.js';
 import type { AuthRequest } from './context.js';
 import { withMfaProof } from './mfa-proof.js';
 import { verifiedDashboardClientAddress } from './dashboard-forwarding.js';
+import { redeemBrowserTransfer } from './browser-transfers-auth.js';
+import type { BrowserTransferOperation } from './browser-transfers-auth.js';
 
 export const Public = () => SetMetadata('public', true);
 export const Access = (action: Action | 'send') => SetMetadata('access', action);
@@ -92,7 +94,21 @@ export class AuthGuard implements CanActivate {
     }
     const token = req.headers.authorization?.match(/^Bearer (\S+)$/)?.[1];
     if (!token) throw new UnauthorizedException('Bearer authentication required');
-    if (token.startsWith('fl_')) {
+    if (token.startsWith('fbt_')) {
+      req.principal = await redeemBrowserTransfer(
+        req,
+        token,
+        this.reflector.getAllAndOverride<BrowserTransferOperation>('browserTransferOperation', [
+          context.getHandler(),
+          context.getClass(),
+        ]),
+      );
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader(
+        'Access-Control-Expose-Headers',
+        'Content-Disposition, Content-Length, Content-Type, Retry-After, X-Request-Id',
+      );
+    } else if (token.startsWith('fl_')) {
       const principal = await authenticateApiKey(token);
       req.principal = principal;
       await enforceLimit(res, `key:${principal.actorId}`, principal.rateLimit, principal.rateBurst);
