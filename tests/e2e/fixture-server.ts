@@ -58,6 +58,13 @@ const workflows = new Map<string, Record<string, unknown>>(),
   domains = new Map<string, Record<string, unknown>>(),
   emails = new Map<string, Record<string, unknown>>(),
   runs = new Map<string, Record<string, unknown>>();
+const inboundMessages = new Map<string, Record<string, unknown>>();
+const forwardingRules = new Map<string, Record<string, unknown>>();
+const emailCapabilities = {
+  attachment_max_bytes: 10 * 1024 * 1024,
+  attachment_max_count: 50,
+  mime_max_bytes: 25 * 1024 * 1024,
+};
 const endpoints = new Map<string, Record<string, unknown>>(),
   deliveries = new Map<string, Record<string, unknown>>();
 const contacts = new Map<string, Record<string, unknown>>(),
@@ -114,6 +121,14 @@ const server = createServer(async (req, res) => {
       dictionaries.clear();
       domains.clear();
       emails.clear();
+      inboundMessages.clear();
+      forwardingRules.clear();
+      Object.assign(emailCapabilities, {
+        attachment_max_bytes: 10 * 1024 * 1024,
+        attachment_max_count: 50,
+        mime_max_bytes: 25 * 1024 * 1024,
+      });
+      operatorPolicy.usage = { reserved: 0, sent_24h: 0 };
       runs.clear();
       endpoints.clear();
       deliveries.clear();
@@ -127,6 +142,91 @@ const server = createServer(async (req, res) => {
     let text = '';
     for await (const chunk of req) text += String(chunk);
     const body = text ? JSON.parse(text) : {};
+    if (path === '/fixtures/email-capabilities' && method === 'POST') {
+      Object.assign(emailCapabilities, body);
+      return reply(emailCapabilities);
+    }
+    if (path === '/fixtures/inbound-pagination' && method === 'POST') {
+      for (let ordinal = 1; ordinal <= 61; ordinal++) {
+        const id = randomUUID();
+        inboundMessages.set(id, {
+          id,
+          domain_id: '00000000-0000-4000-8000-000000000087',
+          mail_from: `sender-${ordinal}@example.test`,
+          rcpt_to: 'support@example.test',
+          subject: `Received ${String(ordinal).padStart(3, '0')}`,
+          status: 'parsed',
+          size: 250,
+          error: null,
+          created_at: new Date(Date.now() - ordinal * 1000).toISOString(),
+          headers: [],
+          attachments: [],
+          attempts: [{ ordinal: 1, status: 'parsed' }],
+          forwards: [],
+        });
+      }
+      for (let ordinal = 1; ordinal <= 31; ordinal++) {
+        const id = randomUUID();
+        forwardingRules.set(id, {
+          id,
+          domain_id: '00000000-0000-4000-8000-000000000087',
+          recipient: `forward-${String(ordinal).padStart(2, '0')}@example.test`,
+          sender: 'forwarding@example.test',
+          destinations: ['team@example.test'],
+          enabled: true,
+        });
+      }
+      return reply({ messages: inboundMessages.size, rules: forwardingRules.size });
+    }
+    if (path === '/fixtures/email-outcomes' && method === 'POST') {
+      const id = randomUUID(),
+        at = new Date().toISOString();
+      emails.set(id, {
+        id,
+        domain_id: randomUUID(),
+        from: 'sender@example.test',
+        subject: 'Uncertain provider acceptance',
+        status: body.mixed ? 'bounced' : 'failed',
+        delivery_started_at: at,
+        scheduled_at: at,
+        created_at: at,
+        error: 'Provider outcome is ambiguous after worker interruption',
+        request: {
+          from: 'sender@example.test',
+          to: body.mixed
+            ? ['bounced@example.test', 'reader@example.test']
+            : ['reader@example.test'],
+          subject: 'Uncertain provider acceptance',
+          text: 'This send must not be retried automatically.',
+          attachments: [],
+        },
+        recipients: [
+          ...(body.mixed
+            ? [{ address: 'bounced@example.test', kind: 'to', status: 'bounced' }]
+            : []),
+          { address: 'reader@example.test', kind: 'to', status: 'failed' },
+        ],
+        events: [],
+        attempts: [{ provider: 'postal', ordinal: 1, status: 'ambiguous', started_at: at }],
+      });
+      return reply({ id });
+    }
+    if (path === '/fixtures/email-pagination' && method === 'POST') {
+      emails.clear();
+      for (let ordinal = 1; ordinal <= Number(body.count ?? 26); ordinal++) {
+        const id = randomUUID();
+        emails.set(id, {
+          id,
+          domain_id: randomUUID(),
+          from: 'sender@example.test',
+          subject: `Page fixture ${String(ordinal).padStart(2, '0')}`,
+          status: 'queued',
+          created_at: new Date().toISOString(),
+          scheduled_at: new Date().toISOString(),
+        });
+      }
+      return reply({ count: emails.size });
+    }
     if (path === '/fixtures/domain-readiness' && method === 'POST') {
       fixtureRole = 'viewer';
       const id = body.id ?? randomUUID();
@@ -166,7 +266,8 @@ const server = createServer(async (req, res) => {
     }
     if (path === '/fixtures/sending-policy' && method === 'POST') {
       fixtureRole = body.viewer ? 'viewer' : 'owner';
-      operatorPolicy.state = 'suspended';
+      if (body.usage) operatorPolicy.usage = body.usage;
+      operatorPolicy.state = body.state ?? 'suspended';
       operatorPolicy.feedback = {
         recipients_24h: 20,
         hard_bounces: 1,
@@ -655,7 +756,12 @@ const server = createServer(async (req, res) => {
           resolved: {},
           dependencies: { layouts: [], templates: [], translations: [] },
         });
-      if (path === 'inbound') return reply({ data: [inbound] });
+      if (path === 'inbound') {
+        const page = Number(url.searchParams.get('page') ?? 1);
+        const limit = Number(url.searchParams.get('limit') ?? 50);
+        const rows = inboundMessages.size ? [...inboundMessages.values()] : [inbound];
+        return reply({ data: rows.slice((page - 1) * limit, page * limit) });
+      }
       if (path.endsWith('/body'))
         return reply({
           text: 'Please help with my account.',
@@ -667,9 +773,9 @@ const server = createServer(async (req, res) => {
           content_type: 'text/plain',
           content: Buffer.from('note').toString('base64'),
         });
-      return reply(inbound);
+      return reply(inboundMessages.get(path.split('/')[1]!) ?? inbound);
     }
-    if (path === 'forwarding-rules') return reply([]);
+    if (path === 'forwarding-rules') return reply([...forwardingRules.values()]);
     if (path === 'auth/logout') return reply({ success: true });
     if (path === 'environments')
       return reply(
@@ -793,6 +899,7 @@ const server = createServer(async (req, res) => {
       return reply(domain);
     }
     if (path === 'sending-policy') return reply(operatorPolicy);
+    if (path === 'email-capabilities') return reply(emailCapabilities);
     if (path === 'emails' && method === 'POST') {
       const domain = [...domains.values()].find((d) => String(body.from).endsWith(`@${d.name}`));
       if (domain?.status !== 'verified')

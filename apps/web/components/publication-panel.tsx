@@ -21,7 +21,15 @@ type Diff = {
   layouts: DiffItem[];
   translations: DiffItem[];
 };
-export function PublicationPanel({ open, close }: { open: boolean; close: () => void }) {
+export function PublicationPanel({
+  open,
+  close,
+  onCloseAutoFocus,
+}: {
+  open: boolean;
+  close: () => void;
+  onCloseAutoFocus?: (event: Event) => void;
+}) {
   const diff = useApi<Diff>('publish/diff'),
     recent = useApi<{ id: string; status: string; created_at: string }[]>('publications', 5000);
   const [selected, setSelected] = useState<Record<string, string[]>>({
@@ -38,6 +46,7 @@ export function PublicationPanel({ open, close }: { open: boolean; close: () => 
     <Modal
       open={open}
       onOpenChange={(v) => !v && close()}
+      onCloseAutoFocus={onCloseAutoFocus}
       title="Publish to Production"
       description="Review selected resources and their required content. Subscribers, integrations and topics stay in their environment."
       wide

@@ -4,7 +4,7 @@ async function login(page: Page) {
   await page.getByLabel('Work email').fill('tester@example.test');
   await page.getByLabel('Password', { exact: true }).fill('browser-test-password');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
 }
 test.beforeEach(async ({ request }) => {
   await request.post('http://127.0.0.1:4311/reset');

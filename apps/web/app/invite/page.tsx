@@ -35,7 +35,7 @@ export default function Invite() {
               token,
             })
               .then(() => {
-                router.replace('/workflows');
+                router.replace('/overview');
                 router.refresh();
               })
               .catch(setError)

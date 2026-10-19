@@ -16,7 +16,7 @@ test('live native progress exposes delayed work and confirms cancellation', asyn
     throw new Error('Could not fill the acceptance password');
   }
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
   await page.getByLabel('Environment', { exact: true }).selectOption({ label: 'Development' });
   const headers = { Origin: new URL(page.url()).origin };
   try {

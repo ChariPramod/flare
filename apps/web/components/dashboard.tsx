@@ -1,9 +1,10 @@
 'use client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Menu from '@radix-ui/react-dropdown-menu';
+import * as Dialog from '@radix-ui/react-dialog';
 import {
   Flame,
   Send,
@@ -32,6 +33,9 @@ import {
   PanelLeft,
   Box,
   Code2,
+  LayoutDashboard,
+  Menu as MenuIcon,
+  X,
 } from 'lucide-react';
 import { api, useApi } from '../lib/api';
 import type { Session } from '../lib/api';
@@ -55,10 +59,12 @@ import { LayoutsPage, TranslationsPage } from './content-pages';
 import { InboundPage } from './inbound-pages';
 import { AutomationsPage } from './automation-pages';
 import { WorkflowEditor } from './workflow-editor';
+import { OverviewPage } from './overview-page';
 const groups: { name: string; items: [string, string, typeof Workflow][] }[] = [
   {
     name: 'WORKSPACE',
     items: [
+      ['overview', 'Overview', LayoutDashboard],
       ['workflows', 'Workflows', Workflow],
       ['subscribers', 'Subscribers', Users],
       ['topics', 'Topics', Layers],
@@ -77,7 +83,7 @@ const groups: { name: string; items: [string, string, typeof Workflow][] }[] = [
       ['broadcasts', 'Broadcasts', Send],
       ['automations', 'Automations', Workflow],
       ['templates', 'Templates', Code2],
-      ['inbound', 'Inbound', Mail],
+      ['inbound', 'Received email', Mail],
       ['suppressions', 'Suppressions', ShieldBan],
       ['webhooks', 'Webhooks', Webhook],
       ['logs', 'Logs', FileText],
@@ -109,7 +115,11 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
     [publishing, setPublishing] = useState(false),
     [theme, setTheme] = useState('light'),
     [collapsed, setCollapsed] = useState(false),
+    [navigationOpen, setNavigationOpen] = useState(false),
     [error, setError] = useState<unknown>();
+  const navigationTrigger = useRef<HTMLButtonElement>(null);
+  const publishFromNavigation = useRef(false);
+  const publicationReturnTarget = useRef<HTMLElement | null>(null);
   const sessionRejected = Boolean(
     session.error && 'status' in session.error && session.error.status === 401,
   );
@@ -166,7 +176,14 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
   };
   const title = groups.flatMap((g) => g.items).find((v) => v[0] === section)?.[1] ?? 'Workspace';
   let content: React.ReactNode;
-  if (section === 'workflows')
+  if (section === 'overview')
+    content = (
+      <OverviewPage
+        session={data}
+        environmentName={environment?.name ?? 'Environment unavailable'}
+      />
+    );
+  else if (section === 'workflows')
     content = id ? (
       <WorkflowEditor
         key={`${data.principal.environmentId}/${id}`}
@@ -205,89 +222,165 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
   else if (section === 'metrics' || section === 'analytics') content = <MetricsPage />;
   else if (section === 'suppressions') content = <Suppressions writable={writable} />;
   else content = <SettingsPages section={section} session={data} />;
+  const navigation = (
+    <>
+      <Link
+        href="/overview"
+        className="brand"
+        aria-label="Flare overview"
+        onClick={() => setNavigationOpen(false)}
+      >
+        <span className="brand-mark">
+          <Flame size={23} />
+        </span>
+        <span>flare</span>
+        <span className="brand-version">BETA</span>
+      </Link>
+      <div className="workspace-selectors">
+        <label className="organization-select">
+          <span className="org-avatar">{organization?.name.slice(0, 1)}</span>
+          <select
+            aria-label="Organization"
+            value={organization?.id}
+            onChange={(e) => {
+              const next = data.organizations.find((v) => v.id === e.target.value);
+              if (next?.environments[0]) void change(next.id, next.environments[0].id);
+            }}
+          >
+            {data.organizations.map((org) => (
+              <option key={org.id} value={org.id}>
+                {org.name}
+              </option>
+            ))}
+          </select>
+          <ChevronsUpDown size={13} />
+        </label>
+        <label className="environment-select">
+          <span
+            className={`status-dot ${data.principal.production ? 'production' : 'development'}`}
+          />
+          <select
+            aria-label="Environment"
+            value={environment?.id}
+            onChange={(e) => void change(data.principal.orgId, e.target.value)}
+          >
+            {organization?.environments.map((env) => (
+              <option key={env.id} value={env.id}>
+                {env.name}
+              </option>
+            ))}
+          </select>
+          <ChevronsUpDown size={12} />
+        </label>
+      </div>
+      <nav aria-label="Workspace pages">
+        {groups.map((group) => (
+          <div className="nav-group" key={group.name}>
+            <div className="nav-label">{group.name}</div>
+            {group.items.map(([href, label, Icon]) => (
+              <Link
+                key={href}
+                aria-label={label}
+                title={collapsed ? label : undefined}
+                onClick={() => setNavigationOpen(false)}
+                href={`/${href}`}
+                className={`nav-link ${section === href ? 'active' : ''}`}
+                aria-current={section === href ? 'page' : undefined}
+              >
+                <Icon size={17} />
+                <span>{label}</span>
+                {section === href && <span className="nav-active-dot" />}
+              </Link>
+            ))}
+          </div>
+        ))}
+      </nav>
+      {canPublish && (
+        <Button
+          className="drawer-publication primary"
+          onClick={() => {
+            publishFromNavigation.current = true;
+            publicationReturnTarget.current = navigationTrigger.current;
+            setNavigationOpen(false);
+          }}
+        >
+          Publish changes <ArrowUpRight size={15} aria-hidden="true" />
+        </Button>
+      )}
+      <div className="sidebar-bottom">
+        <span className="small muted">PARETO LABS</span>
+        <span className="small muted">Notification workspace</span>
+      </div>
+    </>
+  );
   return (
     <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
-      <aside className="sidebar">
-        <Link href="/workflows" className="brand">
-          <span className="brand-mark">
-            <Flame size={23} />
-          </span>
-          <span>flare</span>
-          <span className="brand-version">BETA</span>
-        </Link>
-        <div className="workspace-selectors">
-          <label className="organization-select">
-            <span className="org-avatar">{organization?.name.slice(0, 1)}</span>
-            <select
-              aria-label="Organization"
-              value={organization?.id}
-              onChange={(e) => {
-                const next = data.organizations.find((v) => v.id === e.target.value);
-                if (next?.environments[0]) void change(next.id, next.environments[0].id);
-              }}
-            >
-              {data.organizations.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name}
-                </option>
-              ))}
-            </select>
-            <ChevronsUpDown size={13} />
-          </label>
-          <label className="environment-select">
-            <span
-              className={`status-dot ${data.principal.production ? 'production' : 'development'}`}
-            />
-            <select
-              aria-label="Environment"
-              value={environment?.id}
-              onChange={(e) => void change(data.principal.orgId, e.target.value)}
-            >
-              {organization?.environments.map((env) => (
-                <option key={env.id} value={env.id}>
-                  {env.name}
-                </option>
-              ))}
-            </select>
-            <ChevronsUpDown size={12} />
-          </label>
-        </div>
-        <nav>
-          {groups.map((group) => (
-            <div className="nav-group" key={group.name}>
-              <div className="nav-label">{group.name}</div>
-              {group.items.map(([href, label, Icon]) => (
-                <Link
-                  key={href}
-                  aria-label={label}
-                  href={`/${href}`}
-                  className={`nav-link ${section === href ? 'active' : ''}`}
-                  aria-current={section === href ? 'page' : undefined}
-                >
-                  <Icon size={17} />
-                  <span>{label}</span>
-                  {href === 'workflows' && section === href && <span className="nav-active-dot" />}
-                </Link>
-              ))}
-            </div>
-          ))}
-        </nav>
-        <div className="sidebar-bottom">
-          <span className="small muted">PARETO LABS</span>
-          <span className="small muted">
-            Self-hosted <span className="status-dot development" />
-          </span>
-        </div>
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
+      <aside id="workspace-navigation" className="sidebar" aria-label="Workspace navigation">
+        {navigation}
       </aside>
       <div className="main-shell">
         <header className="topbar">
           <button
-            className="icon-button"
+            className="icon-button desktop-sidebar-toggle"
             aria-label="Toggle sidebar"
+            aria-controls="workspace-navigation"
+            aria-expanded={!collapsed}
             onClick={() => setCollapsed(!collapsed)}
           >
             {collapsed ? <PanelLeft size={17} /> : <PanelLeftClose size={17} />}
           </button>
+          <Dialog.Root open={navigationOpen} onOpenChange={setNavigationOpen}>
+            <Dialog.Trigger asChild>
+              <button
+                ref={navigationTrigger}
+                className="icon-button mobile-navigation-toggle"
+                aria-label="Open navigation"
+              >
+                <MenuIcon size={20} />
+              </button>
+            </Dialog.Trigger>
+            <Dialog.Portal>
+              <Dialog.Overlay className="navigation-overlay" />
+              <Dialog.Content
+                className="navigation-drawer"
+                onCloseAutoFocus={(event) => {
+                  if (!publishFromNavigation.current) return;
+                  event.preventDefault();
+                  publishFromNavigation.current = false;
+                  // Let the closing scope leave Radix’s stack before opening the next dialog.
+                  queueMicrotask(() => {
+                    if (!navigationTrigger.current?.isConnected) return;
+                    navigationTrigger.current.focus();
+                    setPublishing(true);
+                  });
+                }}
+              >
+                <Dialog.Title className="visually-hidden">Workspace navigation</Dialog.Title>
+                <Dialog.Description className="visually-hidden">
+                  Choose your organization, environment or workspace page.
+                </Dialog.Description>
+                <Dialog.Close
+                  className="icon-button navigation-close"
+                  aria-label="Close navigation"
+                >
+                  <X size={20} />
+                </Dialog.Close>
+                {navigation}
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+          <div className="mobile-workspace-context">
+            <strong>{title}</strong>
+            <span>
+              <i
+                className={`status-dot ${data.principal.production ? 'production' : 'development'}`}
+              />
+              {environment?.name ?? 'Environment unavailable'}
+            </span>
+          </div>
           <div className="compact-context">
             <select
               aria-label="Organization on tablet"
@@ -328,7 +421,7 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
           <div className="top-actions">
             <button className="command-search" onClick={() => setSearch(true)}>
               <Search size={14} />
-              <span>Search anything</span>
+              <span>Search pages</span>
               <kbd>⌘ K</kbd>
             </button>
             <span className="bridge-status">
@@ -338,7 +431,13 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
               {activeEnvironment?.bridge_url ? 'Bridge configured' : 'No bridge'}
             </span>
             {canPublish && (
-              <Button className="compact" onClick={() => setPublishing(true)}>
+              <Button
+                className="compact"
+                onClick={(event) => {
+                  publicationReturnTarget.current = event.currentTarget;
+                  setPublishing(true);
+                }}
+              >
                 Publish changes
                 <ArrowUpRight size={14} />
               </Button>
@@ -380,6 +479,8 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
         </header>
         <ErrorBox error={error} />
         <main
+          id="main-content"
+          tabIndex={-1}
           className={id && section === 'workflows' ? 'editor-main' : 'page'}
           key={`${data.principal.environmentId}/${section}/${id ?? ''}`}
         >
@@ -422,7 +523,16 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
             ))}
         </div>
       </Modal>
-      {publishing && <PublicationPanel open={publishing} close={() => setPublishing(false)} />}
+      {publishing && (
+        <PublicationPanel
+          open={publishing}
+          close={() => setPublishing(false)}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            publicationReturnTarget.current?.focus();
+          }}
+        />
+      )}
     </div>
   );
 }

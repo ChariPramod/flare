@@ -55,6 +55,14 @@ export class MailExceptionFilter implements ExceptionFilter {
 }
 @Controller('v1')
 export class MailController {
+  @Get('email-capabilities') capabilities() {
+    const limits = mailLimits();
+    return {
+      attachment_max_bytes: limits.attachments,
+      attachment_max_count: 50,
+      mime_max_bytes: limits.mime,
+    };
+  }
   @Get('sending-policy') async sendingPolicy(@Req() req: AuthRequest) {
     return getSendingPolicy(sql, req.principal.orgId);
   }

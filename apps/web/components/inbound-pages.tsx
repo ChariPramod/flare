@@ -1,9 +1,9 @@
 'use client';
 import Link from 'next/link';
 import { emailPreview } from '../lib/email-preview';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, useApi, useAction, date, pretty } from '../lib/api';
-import { PageHeader, DataTable, Button, Badge, Field, Modal, ErrorBox, Loading } from './ui';
+import { PageHeader, DataTable, Button, Badge, Field, Modal, ErrorBox, Loading, Empty } from './ui';
 type InboundRow = {
   id: string;
   domain_id: string;
@@ -44,6 +44,22 @@ export function InboundPage({ id, writable }: { id?: string; writable: boolean }
 function InboundList({ writable }: { writable: boolean }) {
   const [page, setPage] = useState(1),
     [open, setOpen] = useState(false);
+  useEffect(() => {
+    const read = () => {
+      const value = Number(new URLSearchParams(location.search).get('page') ?? 1);
+      setPage(Number.isSafeInteger(value) && value > 0 ? value : 1);
+    };
+    read();
+    window.addEventListener('popstate', read);
+    return () => window.removeEventListener('popstate', read);
+  }, []);
+  const goToPage = (value: number) => {
+    const url = new URL(location.href);
+    if (value > 1) url.searchParams.set('page', String(value));
+    else url.searchParams.delete('page');
+    history.pushState(null, '', url);
+    setPage(value);
+  };
   const query = useApi<{ data: InboundRow[] }>(`inbound?page=${page}`, 5000),
     rules = useApi<Rule[]>('forwarding-rules'),
     domains = useApi<{ id: string; name: string; receiving: boolean }[]>('domains'),
@@ -52,27 +68,39 @@ function InboundList({ writable }: { writable: boolean }) {
   return (
     <>
       <PageHeader
-        title="Inbound"
-        description="Received messages, original source and forwarding history."
+        title="Received email"
+        description="Mail received by your domains. Inspect its contents, envelope and forwarding history."
         actions={
           <Button disabled={!writable} onClick={() => setOpen(true)}>
             Add forwarding rule
           </Button>
         }
       />
-      <ErrorBox error={query.error ?? rules.error ?? error} />
+      <ErrorBox error={query.error ?? rules.error ?? domains.error ?? error} />
+      <p className="muted section-description">
+        Looking for notifications inside your product? Open a subscriber’s In-app Inbox instead.
+      </p>
       {query.isPending ? (
         <Loading />
       ) : (
         <DataTable
+          key={page}
           data={query.data?.data ?? []}
+          paginate={false}
+          label="Received email"
+          searchPlaceholder="Search this page…"
           columns={[
             {
               accessorKey: 'subject',
               header: 'Subject',
               cell: ({ row }) => (
                 <Link href={`/inbound/${row.original.id}`}>
-                  {row.original.subject || 'Awaiting parsing'}
+                  {row.original.subject ||
+                    (row.original.status === 'parsed'
+                      ? '(No subject)'
+                      : row.original.status === 'failed'
+                        ? '(Unparsed message)'
+                        : 'Awaiting parsing')}
                 </Link>
               ),
             },
@@ -91,18 +119,35 @@ function InboundList({ writable }: { writable: boolean }) {
           ]}
         />
       )}
-      <div className="actions">
-        <Button disabled={page === 1} onClick={() => setPage(page - 1)}>
+      <nav className="table-pagination" aria-label="Received email pages">
+        <Button
+          aria-label="Previous received messages"
+          disabled={page === 1 || query.isFetching}
+          onClick={() => goToPage(page - 1)}
+        >
           Previous
         </Button>
-        <span>Page {page}</span>
-        <Button disabled={(query.data?.data.length ?? 0) < 50} onClick={() => setPage(page + 1)}>
+        <span aria-live="polite">Page {page} · Up to 50 messages per page</span>
+        <Button
+          aria-label="Next received messages"
+          disabled={query.isFetching || Boolean(query.error) || (query.data?.data.length ?? 0) < 50}
+          onClick={() => goToPage(page + 1)}
+        >
           Next
         </Button>
+      </nav>
+      <div className="panel-heading">
+        <div>
+          <h2>Forwarding rules</h2>
+          <p>Choose which received addresses forward through a verified sender.</p>
+        </div>
       </div>
-      <h2>Forwarding rules</h2>
       <DataTable
         data={rules.data ?? []}
+        loading={rules.isPending}
+        urlStateKey="forwarding"
+        label="Forwarding rules"
+        searchPlaceholder="Search forwarding rules…"
         columns={[
           {
             accessorKey: 'recipient',
@@ -169,7 +214,7 @@ function InboundList({ writable }: { writable: boolean }) {
             }
           }}
         >
-          <Field label="Receiving domain">
+          <Field label="Receiving domain" hint="Enable receiving on a domain before adding a rule.">
             <select name="domain_id" required>
               {domains.data
                 ?.filter((v) => v.receiving)
@@ -190,7 +235,10 @@ function InboundList({ writable }: { writable: boolean }) {
             <input name="destinations" required />
           </Field>
           <ErrorBox error={create.error} />
-          <Button className="primary" disabled={create.isPending}>
+          <Button
+            className="primary"
+            disabled={create.isPending || !domains.data?.some((domain) => domain.receiving)}
+          >
             Create rule
           </Button>
         </form>
@@ -207,6 +255,9 @@ function InboundDetail({ id }: { id: string }) {
   if (!row) return <ErrorBox error={query.error} />;
   return (
     <>
+      <Link href="/inbound" className="back-link">
+        ← Received email
+      </Link>
       <PageHeader
         title={row.subject || 'Inbound message'}
         description={`${row.mail_from || 'Empty envelope sender'} → ${row.rcpt_to}`}
@@ -216,24 +267,42 @@ function InboundDetail({ id }: { id: string }) {
           </Button>
         }
       />
-      <ErrorBox error={error ?? row.error} />
+      <ErrorBox error={error ?? query.error ?? row.error} />
       <Badge>{row.status}</Badge>
       <p>
         Received {date(row.created_at)} · {row.size.toLocaleString()} bytes
       </p>
-      <div className="actions">
+      <div className="section-tabs" role="group" aria-label="Received email content">
         {['text', 'html', 'headers', 'attempts'].map((v) => (
-          <Button key={v} onClick={() => setTab(v)}>
-            {v}
+          <Button key={v} aria-pressed={tab === v} onClick={() => setTab(v)}>
+            {
+              {
+                text: 'Plain text',
+                html: 'HTML preview',
+                headers: 'Headers',
+                attempts: 'Parsing attempts',
+              }[v]
+            }
           </Button>
         ))}
       </div>
-      {row.status === 'parsed' && ['text', 'html'].includes(tab) ? (
-        <InboundBody id={id} html={tab === 'html'} />
+      {['text', 'html'].includes(tab) ? (
+        row.status === 'parsed' ? (
+          <InboundBody id={id} html={tab === 'html'} />
+        ) : (
+          <Empty
+            title={
+              row.status === 'failed' ? 'Message could not be parsed' : 'Message is being processed'
+            }
+          >
+            The original MIME remains available. Check parsing attempts for processing details.
+          </Empty>
+        )
       ) : (
         <pre className="code-preview">{pretty(tab === 'headers' ? row.headers : row.attempts)}</pre>
       )}
       <h2>Attachments</h2>
+      {!row.attachments.length && <p className="muted">No attachments.</p>}
       {row.attachments.map((file) => (
         <p key={file.id}>
           <Button
@@ -244,6 +313,7 @@ function InboundDetail({ id }: { id: string }) {
         </p>
       ))}
       <h2>Forwarding history</h2>
+      {!row.forwards.length && <p className="muted">No forwarding attempts for this message.</p>}
       {row.forwards.map((v) => (
         <p key={v.id}>
           <Badge>{v.status}</Badge>{' '}

@@ -15,8 +15,11 @@ export function SubscriberInbox({ id }: { id: string }) {
   return (
     <section className="panel inbox-panel">
       <div>
-        <h2>In-app inbox</h2>
-        <p className="muted">Preview this subscriber’s live notifications and read state.</p>
+        <h2>In-app Inbox</h2>
+        <p className="muted">
+          This subscriber’s live product notifications. Opening or updating a notification changes
+          their read state. Email received by your domains is available under Received email.
+        </p>
       </div>
       <ErrorBox error={query.error} />
       {query.isPending ? (
@@ -29,7 +32,7 @@ export function SubscriberInbox({ id }: { id: string }) {
           backendUrl={query.data.backendUrl}
           socketUrl={query.data.socketUrl}
         />
-      ) : (
+      ) : query.error ? null : (
         <p className="small muted">
           Configure the Novu application identifier in Environments to connect the inbox.
         </p>

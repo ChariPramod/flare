@@ -64,7 +64,7 @@ async function login(page: Page, email: string, password: string, code = '', acc
   // The dashboard intentionally strips the bearer token from this response.
   expect((await response).status(), 'Browser login HTTP status').toBe(accepted ? 200 : 401);
   if (accepted)
-    await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
   else await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
 }
 
@@ -137,7 +137,8 @@ test('live browser MFA enrollment, recovery replay, session revocation and viewe
     await page.getByLabel('Your name').fill('Browser MFA acceptance');
     await fillPrivate(page.getByLabel('Create password'), password);
     await page.getByRole('button', { name: 'Accept invitation', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
+    await page.getByRole('link', { name: 'Workflows', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Create workflow', exact: true })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Publish changes', exact: true })).toBeHidden();
     const write = await page.request.post('/api/workflows', {
@@ -158,7 +159,7 @@ test('live browser MFA enrollment, recovery replay, session revocation and viewe
     expect((await older.request.get('/api/session')).status()).toBe(401);
     await older.reload();
     await expect(older.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
-    await expect(older.getByRole('heading', { name: 'Workflows', exact: true })).toBeHidden();
+    await expect(older.getByRole('heading', { name: 'Overview', exact: true })).toBeHidden();
 
     const preLogout = await page.context().cookies();
     expect(preLogout.find((cookie) => cookie.name === 'flare_session')?.httpOnly).toBe(true);

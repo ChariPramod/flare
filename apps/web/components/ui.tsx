@@ -11,7 +11,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import type { ColumnDef } from '@tanstack/react-table';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 export function Button({
   children,
   className = '',
@@ -35,8 +35,8 @@ export function ErrorBox({ error }: { error: unknown }) {
 }
 export function Loading() {
   return (
-    <div className="empty">
-      <LoaderCircle className="spin" size={22} />
+    <div className="empty" role="status" aria-live="polite">
+      <LoaderCircle className="spin" size={22} aria-hidden="true" />
       <div className="skeleton-lines" aria-hidden="true">
         <i />
         <i />
@@ -81,6 +81,7 @@ export function Modal({
   description,
   children,
   wide = false,
+  onCloseAutoFocus,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -88,12 +89,16 @@ export function Modal({
   description?: string;
   children: ReactNode;
   wide?: boolean;
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className={`dialog ${wide ? 'wide' : ''}`}>
+        <Dialog.Content
+          className={`dialog ${wide ? 'wide' : ''}`}
+          onCloseAutoFocus={onCloseAutoFocus}
+        >
           <div className="dialog-header">
             <div>
               <Dialog.Title>{title}</Dialog.Title>
@@ -133,20 +138,31 @@ export function DataTable<T>({
   columns,
   searchPlaceholder = 'Search…',
   paginate = true,
+  urlStateKey = '',
+  label,
+  loading,
 }: {
   data: T[];
   columns: ColumnDef<T>[];
   searchPlaceholder?: string;
   paginate?: boolean;
+  /** Independent search/page state for screens with more than one table. */
+  urlStateKey?: string;
+  label?: string;
+  /** Keep persisted page state while an asynchronous data set is loading. */
+  loading?: boolean;
 }) {
   const [filter, setFilter] = useState('');
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
+  const hasLoadedData = useRef(false);
+  const filterKey = urlStateKey ? `${urlStateKey}_q` : 'q';
+  const pageKey = urlStateKey ? `${urlStateKey}_page` : 'page';
   useEffect(() => {
     if (!paginate) return;
     const read = () => {
       const params = new URLSearchParams(location.search);
-      setFilter(params.get('q') ?? '');
-      const page = Number(params.get('page') ?? 1);
+      setFilter(params.get(filterKey) ?? '');
+      const page = Number(params.get(pageKey) ?? 1);
       setPagination({
         pageIndex: Number.isSafeInteger(page) && page > 0 ? page - 1 : 0,
         pageSize: 25,
@@ -155,15 +171,16 @@ export function DataTable<T>({
     read();
     window.addEventListener('popstate', read);
     return () => window.removeEventListener('popstate', read);
-  }, []);
-  const syncUrl = (q: string, page: number) => {
+  }, [paginate, filterKey, pageKey]);
+  const syncUrl = (q: string, page: number, push = false) => {
     if (!paginate) return;
     const url = new URL(location.href);
-    if (q) url.searchParams.set('q', q);
-    else url.searchParams.delete('q');
-    if (page > 0) url.searchParams.set('page', String(page + 1));
-    else url.searchParams.delete('page');
-    history.replaceState(null, '', url);
+    if (q) url.searchParams.set(filterKey, q);
+    else url.searchParams.delete(filterKey);
+    if (page > 0) url.searchParams.set(pageKey, String(page + 1));
+    else url.searchParams.delete(pageKey);
+    if (push) history.pushState(null, '', url);
+    else history.replaceState(null, '', url);
   };
   const table = useReactTable({
     data,
@@ -175,12 +192,36 @@ export function DataTable<T>({
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: paginate ? getPaginationRowModel() : undefined,
+    autoResetPageIndex: false,
   });
+  const filteredCount = table.getFilteredRowModel().rows.length;
+  useEffect(() => {
+    if (!paginate || loading) return;
+    if (loading === false || data.length > 0) hasLoadedData.current = true;
+    // A disappearing last page should reveal the remaining rows. Do not clamp
+    // initial URL restoration against an empty, not-yet-loaded data set.
+    const lastPage = Math.max(0, Math.ceil(filteredCount / pagination.pageSize) - 1);
+    if (hasLoadedData.current && pagination.pageIndex > lastPage) {
+      setPagination((current) => ({ ...current, pageIndex: lastPage }));
+      const url = new URL(location.href);
+      if (lastPage > 0) url.searchParams.set(pageKey, String(lastPage + 1));
+      else url.searchParams.delete(pageKey);
+      history.replaceState(null, '', url);
+    }
+  }, [
+    paginate,
+    loading,
+    data.length,
+    filteredCount,
+    pagination.pageIndex,
+    pagination.pageSize,
+    pageKey,
+  ]);
   return (
     <div className="table-panel">
       <div className="table-toolbar">
         <div className="search-field">
-          <Search size={15} />
+          <Search size={15} aria-hidden="true" />
           <input
             aria-label={searchPlaceholder}
             placeholder={searchPlaceholder}
@@ -192,24 +233,37 @@ export function DataTable<T>({
             }}
           />
         </div>
-        <span className="muted small">
-          {table.getFilteredRowModel().rows.length} loaded results
+        <span className="muted small" role="status" aria-live="polite">
+          {loading ? 'Loading results…' : `${filteredCount} loaded results`}
         </span>
       </div>
       <div className="table-scroll">
-        <table>
+        <table aria-label={label}>
           <thead>
             {table.getHeaderGroups().map((group) => (
               <tr key={group.id}>
                 {group.headers.map((header) => (
-                  <th key={header.id}>
-                    <button
-                      onClick={header.column.getToggleSortingHandler()}
-                      disabled={!header.column.getCanSort()}
-                    >
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                      {header.column.getCanSort() && <ArrowUpDown size={11} />}
-                    </button>
+                  <th
+                    key={header.id}
+                    scope="col"
+                    aria-sort={
+                      !header.column.getCanSort()
+                        ? undefined
+                        : header.column.getIsSorted() === 'asc'
+                          ? 'ascending'
+                          : header.column.getIsSorted() === 'desc'
+                            ? 'descending'
+                            : 'none'
+                    }
+                  >
+                    {header.column.getCanSort() ? (
+                      <button type="button" onClick={header.column.getToggleSortingHandler()}>
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        <ArrowUpDown size={11} aria-hidden="true" />
+                      </button>
+                    ) : (
+                      flexRender(header.column.columnDef.header, header.getContext())
+                    )}
                   </th>
                 ))}
               </tr>
@@ -226,30 +280,33 @@ export function DataTable<T>({
           </tbody>
         </table>
       </div>
-      {!table.getRowModel().rows.length && (
+      {loading && <Loading />}
+      {!loading && !table.getRowModel().rows.length && (
         <Empty title="Nothing here yet">Create your first item or adjust your search.</Empty>
       )}
       {paginate && (
         <div className="table-pagination">
           <span className="small muted">
-            Page {pagination.pageIndex + 1} of {Math.max(1, table.getPageCount())}
+            {loading
+              ? 'Loading page…'
+              : `Page ${pagination.pageIndex + 1} of ${Math.max(1, table.getPageCount())}`}
           </span>
           <Button
             className="compact"
-            disabled={!table.getCanPreviousPage()}
+            disabled={loading || !table.getCanPreviousPage()}
             onClick={() => {
               table.previousPage();
-              syncUrl(filter, pagination.pageIndex - 1);
+              syncUrl(filter, pagination.pageIndex - 1, true);
             }}
           >
             Previous
           </Button>
           <Button
             className="compact"
-            disabled={!table.getCanNextPage()}
+            disabled={loading || !table.getCanNextPage()}
             onClick={() => {
               table.nextPage();
-              syncUrl(filter, pagination.pageIndex + 1);
+              syncUrl(filter, pagination.pageIndex + 1, true);
             }}
           >
             Next

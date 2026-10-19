@@ -1,8 +1,18 @@
 # Flare progress
 
-Updated: 2026-10-16, America/Los_Angeles.
+Updated: 2026-10-19, America/Los_Angeles.
 
-## Resume point — deployment recovery and alerting
+## Resume point — dashboard polish and Vercel readiness
+
+- The approved [dashboard/Vercel plan](docs/dashboard-vercel-plan.md) is saved. Keep the existing monorepo, PostgreSQL and password/MFA authentication; polish the product dashboard and prepare split hosting. Supabase migration, a marketing site and synthetic demo are deferred. Real Vercel connectivity requires the owner's backend host and account access.
+- Baseline `177fa50` is pushed. [CI 38997935030](https://github.com/ChariPramod/flare/actions/runs/38997935030) completed successfully; its status was rechecked through GitHub before starting this checkpoint. This closes the previous Buffer-assertion follow-up.
+- Checkpoint 1 is implemented and locally verified: Overview/responsive navigation, mobile publication access and focus restoration, Email/Inbound improvements, independent pagination, runtime attachment limits, retained drafts/idempotency and explicit uncertain outcomes. Specialists implemented and independently reviewed the UI; the primary integrated the API/OpenAPI/SDK contract and verification. Split-host Vercel support is not implemented yet; the next independent CI run is triggered by this checkpoint's push.
+- Final checks passed: lint/typecheck/OpenAPI/build/gitleaks, **565 unit/database tests**, **25 evals**, **66 real-service integration tests** (183.36s), **37 Chrome contracts** (53.6s), **nine live Chrome flows** (36.6s), installable SDK/CLI/MCP packages, and Python/Ruff (**45 passed, four external skips**). Full local Compose acceptance exited 0 with the final UI and launcher: clean startup, populated upgrades and repeated seed, HTTP MFA/OIDC, native Postal callbacks, SMTP/Inbox, publication, native restart/cancellation, read-only queue-loss inspection, dispatcher quarantine, a **26-second logical restore** and **34-second encrypted cold restore**. Disposable containers, volumes and private snapshots were removed.
+- The 180-second mixed load completed **1,907 requests** (1,804 successes/103 expected throttles; none skipped), **180 emails**, **18 inbound messages** and **nine Inbox deliveries** with no observed loss/duplication. Successful-request p95 **26.70ms**; peak sampled API/worker RSS **214,470,656/205,017,088 bytes**; peak backlog **23**/oldest **20.22s**; final drain **65.71ms**. The short Redis-loss workload recovered all **54 sends** with **30 expected throttles**. These remain sandbox measurements, not real-provider, off-host recovery or capacity guarantees.
+- An earlier full-stack attempt is excluded: browser tests reached an unrelated IPv6 server through `localhost:3000`; the run was stopped and its disposable resources removed. Generated dashboard/Inbox origins and the launcher now use exact IPv4 loopback destinations, reject conflicting overrides, and require prepared disposable fixtures. Five regressions and the clean full rerun above passed. Ordinary live-deployment tests retain explicit external URL support.
+- Next after the UI checkpoint: authenticated Vercel proxying, restricted Inbox access and scoped direct transfers for payloads above Vercel's function limit, then split-host configuration and acceptance. The existing staging plan's infrastructure/provider gates remain pending.
+
+## Previous checkpoint — deployment recovery and alerting
 
 - Prior implementation `0872285` is pushed and all five jobs in [CI 38992070561](https://github.com/ChariPramod/flare/actions/runs/38992070561) passed, including full-stack acceptance.
 - Implemented checkpoint C's hosting-independent work from [the staging plan](docs/staging-execution-plan.md). Three specialists covered deployment backup/isolated restore, metric-backed alerts and independent safety review; the primary integrated the real Docker rehearsal, reviewed the boundary checks and ran full verification. See [backup/recovery](docs/backup-recovery.md) and [alerting](docs/alerting.md).

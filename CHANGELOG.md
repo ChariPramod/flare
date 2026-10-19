@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add a live API-backed Overview landing page, responsive keyboard-accessible navigation and mobile publication access. Separate received email from the in-app Inbox, fix independent Inbound/forwarding pagination and shrinking table pages, and preserve drafts and idempotency after send failures. Expose authenticated runtime email limits for bounded attachment prechecks; keep approval/limits unavailable after refresh failures and uncertain acceptance visible after partial recipient feedback. Save the Vercel implementation plan while retaining PostgreSQL and the existing deployment. Verification is recorded in `PROGRESS.md`; split-host Vercel support is a subsequent checkpoint.
+
+- Pin disposable acceptance browsers and their generated dashboard/Inbox origins to IPv4 loopback, matching Compose port bindings. Reject conflicting browser targets and incomplete fixtures before launching, so a separate IPv6 localhost app cannot receive test credentials. Preserve explicit external targets for ordinary live-deployment tests.
+
 - Compare the encrypted backup roundtrip's full 1 MiB result using native exact byte equality, avoiding a costly per-property assertion that exceeded the CI deadline. Preserve the fixture and cryptographic checks; no production behavior changes.
 
 - Add maintenance-only encrypted cold deployment backups and fresh, isolated store recovery with exact image identities, runtime/configuration drift checks, authenticated manifests, strict archive validation and owner-held keys. Preserve source volumes and keep delivery stopped for review. Add a real disposable encrypted recovery rehearsal, bounded worker operational metrics, ten alert rules with firing/recovery fixtures, and recovery/alert runbooks. Keep off-host custody, real notifications and provider reconciliation as explicit staging gates; verification details are recorded in `PROGRESS.md`.

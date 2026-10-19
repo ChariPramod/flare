@@ -4554,6 +4554,25 @@
     }
   },
   {
+    "id": "MailController_capabilities",
+    "method": "GET",
+    "path": "/v1/email-capabilities",
+    "access": "read",
+    "public": false,
+    "sessionOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
     "id": "MailController_sendingPolicy",
     "method": "GET",
     "path": "/v1/sending-policy",

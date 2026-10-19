@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Globe, ArrowUpRight, Send, Copy, RefreshCw, Trash2 } from 'lucide-react';
+import { Plus, Globe, ArrowUpRight, Send, Copy, RefreshCw, Trash2, X } from 'lucide-react';
 import { useApi, useAction, date, pretty, api } from '../lib/api';
 import {
   PageHeader,
@@ -264,7 +264,8 @@ function DomainDetail({ id, writable }: { id: string; writable: boolean }) {
   const query = useApi<Domain>(`domains/${id}`, 5000),
     verify = useAction(`domains/${id}/verify`),
     update = useAction(`domains/${id}`, 'PATCH');
-  const [copied, setCopied] = useState('');
+  const [copied, setCopied] = useState(''),
+    [copyError, setCopyError] = useState<unknown>();
   if (query.isPending) return <Loading />;
   const domain = query.data;
   return (
@@ -285,7 +286,7 @@ function DomainDetail({ id, writable }: { id: string; writable: boolean }) {
           </>
         }
       />
-      <ErrorBox error={query.error || verify.error || update.error} />
+      <ErrorBox error={query.error || verify.error || update.error || copyError} />
       {domain && (
         <>
           <DomainReadiness domain={domain} />
@@ -331,10 +332,19 @@ function DomainDetail({ id, writable }: { id: string; writable: boolean }) {
                           className="icon-button"
                           aria-label={`Copy ${record.purpose} record`}
                           onClick={() => {
-                            void navigator.clipboard.writeText(record.value).then(() => {
-                              setCopied(record.purpose);
-                              setTimeout(() => setCopied(''), 2000);
-                            });
+                            setCopyError(undefined);
+                            void navigator.clipboard.writeText(record.value).then(
+                              () => {
+                                setCopied(record.purpose);
+                                setTimeout(() => setCopied(''), 2000);
+                              },
+                              () =>
+                                setCopyError(
+                                  new Error(
+                                    'The record could not be copied. Select and copy the DNS value manually.',
+                                  ),
+                                ),
+                            );
                           }}
                         >
                           {copied === record.purpose ? '✓' : <Copy size={15} />}
@@ -472,9 +482,32 @@ type SendingPolicy = {
     unknown?: number;
   };
 };
+function deliveryLabel(status: string) {
+  return (
+    {
+      queued: 'Accepted',
+      sent: 'Provider accepted',
+      delivered: 'Delivered',
+      held: 'On hold',
+      delivery_delayed: 'Delivery delayed',
+    }[status] ?? status.replaceAll('_', ' ')
+  );
+}
+function fileSize(bytes: number) {
+  if (bytes >= 1024 * 1024)
+    return `${(bytes / (1024 * 1024)).toLocaleString(undefined, { maximumFractionDigits: 2 })} MiB`;
+  if (bytes >= 1024)
+    return `${(bytes / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 })} KiB`;
+  return `${bytes.toLocaleString()} bytes`;
+}
+type EmailCapabilities = {
+  attachment_max_bytes: number;
+  attachment_max_count: number;
+  mime_max_bytes: number;
+};
 function SendingPolicySummary() {
   const query = useApi<SendingPolicy>('sending-policy', 15000);
-  const policy = query.data;
+  const policy = query.error ? undefined : query.data;
   return (
     <section className="panel" aria-label="Organization sending access">
       <div className="panel-heading">
@@ -512,7 +545,18 @@ function SendingPolicySummary() {
         </>
       ) : query.isPending ? (
         <p className="muted">Loading sending access…</p>
-      ) : null}
+      ) : (
+        <div>
+          <p className="muted">Sending access is unavailable. Retry to check the current policy.</p>
+          <Button
+            className="compact"
+            disabled={query.isFetching}
+            onClick={() => void query.refetch()}
+          >
+            Retry sending access
+          </Button>
+        </div>
+      )}
     </section>
   );
 }
@@ -524,7 +568,7 @@ export function Emails({ id, writable }: { id?: string; writable: boolean }) {
     <>
       <PageHeader
         title="Emails"
-        description="Every message, from accepted to delivered."
+        description="Follow each accepted message through scheduling, provider submission and delivery feedback."
         actions={
           <Button className="primary" disabled={!writable} onClick={() => setOpen(true)}>
             <Send size={15} />
@@ -554,7 +598,16 @@ export function Emails({ id, writable }: { id?: string; writable: boolean }) {
             {
               accessorKey: 'status',
               header: 'Status',
-              cell: ({ getValue }) => <Badge>{String(getValue())}</Badge>,
+              cell: ({ row }) => (
+                <div>
+                  <Badge tone={row.original.status}>{deliveryLabel(row.original.status)}</Badge>
+                  {row.original.hold_reason && (
+                    <small className="muted block">
+                      {row.original.hold_reason.replaceAll('_', ' ')}
+                    </small>
+                  )}
+                </div>
+              ),
             },
             {
               accessorKey: 'created_at',
@@ -575,16 +628,28 @@ export function Emails({ id, writable }: { id?: string; writable: boolean }) {
 }
 function Compose({ close }: { close: () => void }) {
   const domains = useApi<Domain[]>('domains'),
+    capabilities = useApi<EmailCapabilities>('email-capabilities'),
     send = useAction<{ id: string }>('emails', 'POST', true),
     router = useRouter();
   const [html, setHtml] = useState(false),
     [files, setFiles] = useState<File[]>([]),
     [error, setError] = useState<unknown>(),
     [busy, setBusy] = useState(false);
+  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+  const limits = capabilities.error ? undefined : capabilities.data;
+  const attachmentLimitsUnavailable = files.length > 0 && !limits;
+  const attachmentLimit = limits?.attachment_max_bytes;
+  const countLimit = limits?.attachment_max_count ?? 50;
+  const attachmentError =
+    files.length > countLimit
+      ? `Select at most ${countLimit} attachments. Remove files before sending.`
+      : attachmentLimit !== undefined && totalBytes > attachmentLimit
+        ? `Combined attachments exceed the ${fileSize(attachmentLimit)} limit. Remove files before sending.`
+        : null;
   return (
     <Modal
       open
-      onOpenChange={(v) => !v && close()}
+      onOpenChange={(v) => !v && !busy && !send.isPending && close()}
       title="Send an email"
       description="Send now or schedule for later. Your sender domain must be verified."
       wide
@@ -592,7 +657,10 @@ function Compose({ close }: { close: () => void }) {
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          if (busy || send.isPending || attachmentError || attachmentLimitsUnavailable) return;
           const form = Object.fromEntries(new FormData(e.currentTarget));
+          setError(undefined);
+          send.reset();
           setBusy(true);
           void Promise.all(
             files.map(async (file) => ({
@@ -601,7 +669,12 @@ function Compose({ close }: { close: () => void }) {
               content: await new Promise<string>((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onload = () => resolve(String(reader.result).split(',')[1]!);
-                reader.onerror = reject;
+                reader.onerror = () =>
+                  reject(new Error(`Could not read ${file.name}. Try selecting the file again.`));
+                reader.onabort = () =>
+                  reject(
+                    new Error(`Reading ${file.name} was interrupted. Your message is still here.`),
+                  );
                 reader.readAsDataURL(file);
               }),
             })),
@@ -646,83 +719,151 @@ function Compose({ close }: { close: () => void }) {
           );
         }}
       >
-        <div className="form-grid">
-          <Field label="From">
-            <input
-              name="from"
-              required
-              type="email"
-              placeholder="hello@yourdomain.com"
-              list="sender-domains"
-            />
-            <datalist id="sender-domains">
-              {domains.data
-                ?.filter((d) => d.status === 'verified')
-                .map((d) => (
-                  <option key={d.id} value={`hello@${d.name}`} />
+        <fieldset className="form-fields" disabled={busy || send.isPending}>
+          <ErrorBox error={domains.error} />
+          <p className="muted section-description">
+            Sender verification and organization approval are checked again before delivery.
+            Accepted messages may be held when a sending restriction applies.
+          </p>
+          <div className="form-grid">
+            <Field label="From">
+              <input
+                name="from"
+                required
+                type="email"
+                placeholder="hello@yourdomain.com"
+                list="sender-domains"
+              />
+              <datalist id="sender-domains">
+                {domains.data
+                  ?.filter((d) => d.status === 'verified')
+                  .map((d) => (
+                    <option key={d.id} value={`hello@${d.name}`} />
+                  ))}
+              </datalist>
+            </Field>
+            <Field label="To" hint="Separate multiple recipients with commas.">
+              <input name="to" required placeholder="recipient@example.com" />
+            </Field>
+            <Field label="Cc">
+              <input name="cc" />
+            </Field>
+            <Field label="Bcc">
+              <input name="bcc" />
+            </Field>
+          </div>
+          <Field
+            label="Traffic classification"
+            hint="Marketing requires platform approval and recipient unsubscribe support."
+          >
+            <select name="traffic_class">
+              <option value="">Use approved organization default</option>
+              <option value="transactional">Transactional</option>
+              <option value="marketing">Marketing</option>
+            </select>
+          </Field>
+          <Field label="Subject">
+            <input name="subject" required placeholder="A little update from us" />
+          </Field>
+          <div className="field-label">
+            Message{' '}
+            <label className="inline-check">
+              <input type="checkbox" checked={html} onChange={(e) => setHtml(e.target.checked)} />
+              HTML
+            </label>
+          </div>
+          <textarea
+            name="body"
+            aria-label="Message body"
+            required
+            className="message-body mono"
+            rows={8}
+            placeholder={html ? '<h1>Hello there</h1>' : 'Hello there,'}
+          />
+          <div className="form-grid">
+            <Field label="Schedule" hint="Leave empty to send now. Natural language uses UTC.">
+              <input name="scheduled_at" placeholder="in 2 hours" />
+            </Field>
+            <Field
+              label="Attachments"
+              hint={
+                limits
+                  ? `${fileSize(limits.attachment_max_bytes)} combined, up to ${limits.attachment_max_count} files. Final MIME limit: ${fileSize(limits.mime_max_bytes)}.`
+                  : capabilities.isPending
+                    ? 'Loading configured attachment limits…'
+                    : 'Attachment limits are unavailable. Retry before sending attachments, or remove them to send without attachments.'
+              }
+            >
+              <input
+                type="file"
+                multiple
+                onChange={(e) => {
+                  const selected = Array.from(e.target.files ?? []);
+                  setFiles((current) => [...current, ...selected]);
+                  e.currentTarget.value = '';
+                }}
+              />
+            </Field>
+          </div>
+          {!limits && !capabilities.isPending && (
+            <Button
+              type="button"
+              className="compact"
+              disabled={capabilities.isFetching}
+              onClick={() => void capabilities.refetch()}
+            >
+              Retry attachment limits
+            </Button>
+          )}
+          {files.length > 0 && (
+            <div className="attachment-summary">
+              <p className="small muted" role="status" aria-live="polite">
+                {files.length} {files.length === 1 ? 'attachment' : 'attachments'} ·{' '}
+                {fileSize(totalBytes)} selected
+              </p>
+              <ul className="attachment-list" aria-label="Selected attachments">
+                {files.map((file, index) => (
+                  <li key={`${file.name}/${index}`}>
+                    <span>
+                      {file.name} <small className="muted">{fileSize(file.size)}</small>
+                    </span>
+                    <Button
+                      type="button"
+                      className="compact"
+                      aria-label={`Remove ${file.name}`}
+                      onClick={() =>
+                        setFiles((current) => current.filter((_, position) => position !== index))
+                      }
+                    >
+                      <X size={15} aria-hidden="true" />
+                      Remove
+                    </Button>
+                  </li>
                 ))}
-            </datalist>
-          </Field>
-          <Field label="To" hint="Separate multiple recipients with commas.">
-            <input name="to" required placeholder="recipient@example.com" />
-          </Field>
-          <Field label="Cc">
-            <input name="cc" />
-          </Field>
-          <Field label="Bcc">
-            <input name="bcc" />
-          </Field>
-        </div>
-        <Field
-          label="Traffic classification"
-          hint="Marketing requires platform approval and recipient unsubscribe support."
-        >
-          <select name="traffic_class">
-            <option value="">Use approved organization default</option>
-            <option value="transactional">Transactional</option>
-            <option value="marketing">Marketing</option>
-          </select>
-        </Field>
-        <Field label="Subject">
-          <input name="subject" required placeholder="A little update from us" />
-        </Field>
-        <div className="field-label">
-          Message{' '}
-          <label className="inline-check">
-            <input type="checkbox" checked={html} onChange={(e) => setHtml(e.target.checked)} />
-            HTML
-          </label>
-        </div>
-        <textarea
-          name="body"
-          aria-label="Message body"
-          required
-          className="message-body mono"
-          rows={8}
-          placeholder={html ? '<h1>Hello there</h1>' : 'Hello there,'}
-        />
-        <div className="form-grid">
-          <Field label="Schedule" hint="Leave empty to send now. Natural language uses UTC.">
-            <input name="scheduled_at" placeholder="in 2 hours" />
-          </Field>
-          <Field label="Attachments" hint="10 MiB combined by default.">
-            <input
-              type="file"
-              multiple
-              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-            />
-          </Field>
-        </div>
-        <ErrorBox error={send.error || error} />
-        <div className="dialog-actions">
-          <Button type="button" onClick={close}>
-            Cancel
-          </Button>
-          <Button className="primary" disabled={busy || send.isPending}>
-            <Send size={15} />
-            {busy ? 'Submitting…' : 'Send email'}
-          </Button>
-        </div>
+              </ul>
+            </div>
+          )}
+          <ErrorBox error={attachmentError ?? send.error ?? error} />
+          {(busy || send.isPending) && (
+            <p className="small muted" role="status" aria-live="polite">
+              {send.isPending ? 'Submitting your message…' : 'Reading attachments…'}
+            </p>
+          )}
+          <div className="dialog-actions">
+            <Button type="button" onClick={close} disabled={busy || send.isPending}>
+              Cancel
+            </Button>
+            <Button
+              className="primary"
+              disabled={
+                busy || send.isPending || Boolean(attachmentError) || attachmentLimitsUnavailable
+              }
+            >
+              <Send size={15} />
+              {busy ? 'Submitting…' : 'Send email'}
+            </Button>
+          </div>
+        </fieldset>
       </form>
     </Modal>
   );
@@ -734,8 +875,13 @@ function EmailDetail({ id, writable }: { id: string; writable: boolean }) {
   const [schedule, setSchedule] = useState(''),
     [tab, setTab] = useState('preview');
   const [source, setSource] = useState(''),
-    [sourceError, setSourceError] = useState<unknown>();
+    [sourceError, setSourceError] = useState<unknown>(),
+    [sourceLoading, setSourceLoading] = useState(false);
   const message = query.data;
+  const uncertain = message?.attempts.some((attempt) => attempt.status === 'ambiguous');
+  const failedRecipients =
+    message?.recipients.filter((recipient) => recipient.status === 'failed') ?? [];
+  if (query.isPending) return <Loading />;
   return (
     <>
       <Link href="/emails" className="back-link">
@@ -744,10 +890,67 @@ function EmailDetail({ id, writable }: { id: string; writable: boolean }) {
       <PageHeader
         title={message?.request.subject ?? 'Email details'}
         description={id}
-        actions={<Badge>{message?.status ?? 'loading'}</Badge>}
+        actions={
+          message && (
+            <Badge tone={uncertain && message.status === 'failed' ? 'ambiguous' : message.status}>
+              {uncertain && message.status === 'failed'
+                ? 'Acceptance uncertain'
+                : deliveryLabel(message.status)}
+            </Badge>
+          )
+        }
       />
       <ErrorBox error={query.error || cancel.error || reschedule.error || sourceError} />
       <SendingPolicySummary />
+      {uncertain && (
+        <section className="info-banner" aria-label="Uncertain email acceptance">
+          <div>
+            <strong>
+              {failedRecipients.length
+                ? 'Provider acceptance is uncertain'
+                : 'An earlier attempt had uncertain acceptance'}
+            </strong>
+            <p>
+              A recorded transport attempt ended without a confirmed acceptance result. The provider
+              may have received the message. Automatic retries and failover do not replay ambiguous
+              attempts.
+            </p>
+            <p>
+              {failedRecipients.length
+                ? `${failedRecipients.length} ${failedRecipients.length === 1 ? 'recipient currently has' : 'recipients currently have'} failed status. Provider acceptance for these recipients may still be uncertain; review their individual events before sending again.`
+                : 'Current recipient statuses are shown below. The earlier ambiguous attempt remains in the history; its outcome is not inferred from the message’s overall status.'}
+            </p>
+            <p>
+              Ask your platform operator to reconcile the attempt with provider evidence before
+              sending again.
+            </p>
+          </div>
+        </section>
+      )}
+      {message &&
+        ['queued', 'scheduled', 'sent', 'delivered', 'delivery_delayed'].includes(
+          message.status,
+        ) && (
+          <section className="info-banner" aria-label="Email delivery status">
+            <div>
+              <strong>{deliveryLabel(message.status)}</strong>
+              <p>
+                {message.status === 'sent'
+                  ? 'The sending provider accepted this message. Delivery feedback from the receiving server is still pending.'
+                  : message.status === 'delivered'
+                    ? 'Provider feedback confirms delivery to the receiving server. Inbox placement is not measured here.'
+                    : message.status === 'delivery_delayed'
+                      ? 'The provider reports a delivery delay. Recipient feedback will appear in the timeline when it arrives.'
+                      : message.status === 'scheduled'
+                        ? 'Flare has saved this message for its scheduled time. Sending policy and quota are checked when it becomes due.'
+                        : 'Flare has saved this message for processing. Provider acceptance and delivery feedback will appear separately.'}
+              </p>
+              {message.next_attempt_at && (
+                <p>Next attempt eligibility: {date(message.next_attempt_at)}.</p>
+              )}
+            </div>
+          </section>
+        )}
       {message?.status === 'held' && (
         <section className="info-banner" aria-label="Email on hold">
           <div>
@@ -807,7 +1010,7 @@ function EmailDetail({ id, writable }: { id: string; writable: boolean }) {
                   {r.address}
                   <small>{r.kind}</small>
                 </span>
-                <Badge>{r.status}</Badge>
+                <Badge tone={r.status}>{deliveryLabel(r.status)}</Badge>
               </div>
             ))}
             <ErrorBox error={message.error} />
@@ -872,32 +1075,41 @@ function EmailDetail({ id, writable }: { id: string; writable: boolean }) {
             </div>
           </section>
           <section className="panel">
-            <div className="section-tabs">
+            <div className="section-tabs" role="group" aria-label="Sent email content">
               <button
                 className={tab === 'preview' ? 'selected' : ''}
+                aria-pressed={tab === 'preview'}
                 onClick={() => setTab('preview')}
               >
                 Preview
               </button>
               <button
                 className={tab === 'source' ? 'selected' : ''}
+                aria-pressed={tab === 'source'}
                 onClick={() => setTab('source')}
               >
                 Request
               </button>
             </div>
             <div className="actions">
-              <Button className="compact" onClick={() => setTab('text')}>
+              <Button
+                className="compact"
+                aria-pressed={tab === 'text'}
+                onClick={() => setTab('text')}
+              >
                 Plain text
               </Button>
               <Button
                 className="compact"
+                aria-pressed={tab === 'raw'}
+                disabled={sourceLoading}
                 onClick={() => {
                   setTab('raw');
-                  void api<{ source: string }>(`emails/${id}/source`).then(
-                    (value) => setSource(value.source),
-                    setSourceError,
-                  );
+                  setSourceError(undefined);
+                  setSourceLoading(true);
+                  void api<{ source: string }>(`emails/${id}/source`)
+                    .then((value) => setSource(value.source), setSourceError)
+                    .finally(() => setSourceLoading(false));
                 }}
               >
                 Raw MIME
@@ -906,7 +1118,13 @@ function EmailDetail({ id, writable }: { id: string; writable: boolean }) {
             {tab === 'text' ? (
               <pre className="text-preview">{message.request.text || 'No plain-text part'}</pre>
             ) : tab === 'raw' ? (
-              <pre>{source || 'Loading MIME source…'}</pre>
+              sourceLoading ? (
+                <Loading />
+              ) : sourceError ? (
+                <p className="muted">MIME source could not be loaded. Select Raw MIME to retry.</p>
+              ) : (
+                <pre>{source || 'No MIME source available.'}</pre>
+              )
             ) : tab === 'source' ? (
               <pre>{pretty(message.request)}</pre>
             ) : message.request.html ? (
@@ -926,7 +1144,10 @@ function EmailDetail({ id, writable }: { id: string; writable: boolean }) {
   );
 }
 export function Suppressions({ writable }: { writable: boolean }) {
-  const query = useApi<{ email: string; reason: string; created_at: string }[]>('suppressions'),
+  const query =
+      useApi<{ email: string; reason: string; protected?: boolean; created_at: string }[]>(
+        'suppressions',
+      ),
     create = useAction('suppressions');
   const [open, setOpen] = useState(false);
   return (
@@ -944,6 +1165,7 @@ export function Suppressions({ writable }: { writable: boolean }) {
       <ErrorBox error={query.error} />
       <DataTable
         data={query.data ?? []}
+        loading={query.isPending}
         columns={[
           { accessorKey: 'email', header: 'Email' },
           {
@@ -957,10 +1179,10 @@ export function Suppressions({ writable }: { writable: boolean }) {
             cell: ({ row }) => (
               <ConfirmButton
                 className="compact danger"
-                disabled={!writable}
+                disabled={!writable || row.original.protected || row.original.reason !== 'manual'}
                 aria-label={`Remove suppression for ${row.original.email}`}
                 title="Remove suppression?"
-                description="This address will be eligible for email again. Only remove a suppression when the recipient expects mail."
+                description="Remove this manually added suppression only when the recipient expects mail. Provider restrictions require operator review."
                 onConfirm={async () => {
                   await api(`suppressions/${encodeURIComponent(row.original.email)}`, 'DELETE');
                   await query.refetch();

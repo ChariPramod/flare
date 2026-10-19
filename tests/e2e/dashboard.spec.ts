@@ -5,7 +5,7 @@ async function login(page: Page) {
   await page.getByLabel('Work email').fill('tester@example.test');
   await page.getByLabel('Password', { exact: true }).fill('browser-test-password');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
 }
 test.beforeEach(async ({ request }) => {
   await request.post('http://127.0.0.1:4311/reset');
@@ -46,10 +46,10 @@ test('enrolls MFA, shows recovery codes once, requires recovery on login and cle
   await page.getByLabel('Work email').fill('tester@example.test');
   await page.getByLabel('Password', { exact: true }).fill('browser-test-password');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toHaveCount(0);
   await page.getByLabel('Authenticator or recovery code').fill('browser-recovery-one');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
   await page.goto('/settings');
   await page.getByLabel('Current password').fill('browser-test-password');
   await page.getByLabel('Authenticator or recovery code').fill('browser-recovery-two');
@@ -78,6 +78,7 @@ test('sign in, create and edit a workflow, trigger it, and inspect activity', as
     await route.continue();
   });
   await page.getByLabel('Environment', { exact: true }).selectOption({ label: 'Development' });
+  await page.getByRole('link', { name: 'Workflows', exact: true }).click();
   await page.getByRole('button', { name: 'Create workflow', exact: true }).click();
   await page.getByLabel('Workflow name').fill('Welcome customers');
   await page.getByRole('dialog').getByRole('button', { name: 'Create workflow' }).click();
@@ -206,6 +207,10 @@ test('production guard, origin validation, tenant switch denial, responsive shel
   page,
 }) => {
   await login(page);
+  await page.getByRole('link', { name: 'Workflows', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Workflows', exact: true, level: 1 }),
+  ).toBeVisible();
   await page.getByLabel('Environment', { exact: true }).selectOption({ label: 'Production' });
   await expect(page.getByRole('button', { name: 'Create workflow', exact: true })).toBeDisabled();
   const forbidden = await page.request.post('/api/emails', {
@@ -393,7 +398,7 @@ test('automation sequence editor, test event, wait timeline and cancellation', a
 
 test('inbound envelope, sandboxed HTML and authenticated downloads', async ({ page }) => {
   await login(page);
-  await page.getByRole('link', { name: 'Inbound', exact: true }).click();
+  await page.getByRole('link', { name: 'Received email', exact: true }).click();
   await page.getByRole('link', { name: 'Support request', exact: true }).click();
   await expect(
     page.getByText('sender@example.test → support@example.test', { exact: true }),
@@ -403,7 +408,7 @@ test('inbound envelope, sandboxed HTML and authenticated downloads', async ({ pa
   page.on('request', (r) => {
     if (r.url().includes('remote-image.invalid')) outbound.push(r.url());
   });
-  await page.getByRole('button', { name: 'html', exact: true }).click();
+  await page.getByRole('button', { name: 'HTML preview', exact: true }).click();
   await expect(
     page
       .frameLocator('iframe[title="Received HTML preview"]')
@@ -471,6 +476,7 @@ test('layout versions and translation dictionary import/export', async ({ page }
 
 test('publication selection, durable status and completed resource timeline', async ({ page }) => {
   await login(page);
+  await page.getByRole('link', { name: 'Workflows', exact: true }).click();
   await page.getByRole('button', { name: 'Create workflow', exact: true }).click();
   await page.getByLabel('Workflow name').fill('Publish example');
   await page

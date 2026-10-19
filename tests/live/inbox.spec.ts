@@ -8,7 +8,7 @@ test('live subscriber Inbox renders native delivery and persists read state', as
   await page.getByLabel('Work email').fill(process.env.E2E_EMAIL!);
   await page.getByLabel('Password', { exact: true }).fill(process.env.E2E_PASSWORD!);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
   const initialized = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === '/novu/v1/inbox/session' &&

@@ -10,8 +10,9 @@ test('live login → workflow → Novu activity', async ({ page }) => {
   await page.getByLabel('Work email').fill(required('E2E_EMAIL'));
   await page.getByLabel('Password', { exact: true }).fill(required('E2E_PASSWORD'));
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
   await page.getByLabel('Environment', { exact: true }).selectOption({ label: 'Development' });
+  await page.getByRole('link', { name: 'Workflows', exact: true }).click();
   await page.getByRole('button', { name: 'Create workflow', exact: true }).click();
   await page.getByLabel('Workflow name').fill(`Acceptance ${suffix}`);
   const [created] = await Promise.all([
@@ -48,7 +49,7 @@ test('live domain DNS screen → email → provider acceptance', async ({ page }
   await page.getByLabel('Work email').fill(required('E2E_EMAIL'));
   await page.getByLabel('Password', { exact: true }).fill(required('E2E_PASSWORD'));
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Domains', exact: true }).click();
   await page.getByRole('button', { name: 'Add domain', exact: true }).click();
   await page.getByLabel('Domain name').fill(`acceptance-${Date.now()}.example.test`);
@@ -64,7 +65,7 @@ test('live domain DNS screen → email → provider acceptance', async ({ page }
   await page.locator('textarea[name="body"]').fill('Flare live acceptance test.');
   await page.getByRole('dialog').getByRole('button', { name: 'Send email', exact: true }).click();
   await expect(page.getByRole('heading', { name: subject })).toBeVisible();
-  await expect(page.locator('.page-heading .badge')).toHaveText(/^(sent|delivered)$/, {
+  await expect(page.locator('.page-heading .badge')).toHaveText(/^(Provider accepted|Delivered)$/, {
     timeout: 60000,
   });
   await page.getByRole('button', { name: 'Raw MIME' }).click();
@@ -79,7 +80,7 @@ test('live inbound retrieval preserves envelope recipients and blocks remote HTM
   await page.getByLabel('Work email').fill(required('E2E_EMAIL'));
   await page.getByLabel('Password', { exact: true }).fill(required('E2E_PASSWORD'));
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
   await page.goto(`/inbound/${required('E2E_INBOUND_ID')}`);
   await expect(
     page.getByText('incoming@example.net → hidden@acceptance.test', { exact: true }),
@@ -93,7 +94,7 @@ test('live inbound retrieval preserves envelope recipients and blocks remote HTM
     dialogs.push(dialog.message());
     await dialog.dismiss();
   });
-  await page.getByRole('button', { name: 'html', exact: true }).click();
+  await page.getByRole('button', { name: 'HTML preview', exact: true }).click();
   await expect(
     page.frameLocator('iframe[title="Received HTML preview"]').getByText('Safe incoming body'),
   ).toBeVisible();
@@ -111,7 +112,7 @@ test('live layout editing and selected publication reaches verified completion',
   await page.getByLabel('Work email').fill(required('E2E_EMAIL'));
   await page.getByLabel('Password', { exact: true }).fill(required('E2E_PASSWORD'));
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
   await page.goto('/layouts');
   const name = `Browser layout ${Date.now()}`;
   const identifier = `browser-layout-${Date.now()}`;
@@ -143,7 +144,7 @@ test('live dead-letter redrive preserves identity and reaches Novu', async ({ pa
   await page.getByLabel('Work email').fill(required('E2E_EMAIL'));
   await page.getByLabel('Password', { exact: true }).fill(required('E2E_PASSWORD'));
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
   await page.goto('/dead-letters');
   const label = `workflow · ${required('E2E_REDRIVE_ID').slice(0, 8)}`;
   await page.getByRole('button', { name: label, exact: true }).click();

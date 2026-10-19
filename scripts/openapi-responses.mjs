@@ -116,6 +116,11 @@ const publication = obj(
   ['id', 'status'],
 );
 const mappings = {
+  MailController_capabilities: obj({
+    attachment_max_bytes: int,
+    attachment_max_count: int,
+    mime_max_bytes: int,
+  }),
   MailController_sendingPolicy: sendingPolicy,
   OperatorController_policies: arr(sendingPolicy),
   OperatorController_policy: sendingPolicy,

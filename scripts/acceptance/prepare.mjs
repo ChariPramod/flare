@@ -42,6 +42,10 @@ const envPath = join(directory, '.env');
 const operatorId = randomUUID();
 let env = readFileSync(envPath, 'utf8');
 env = env
+  // Docker publishes IPv4 loopback ports. Avoid an unrelated IPv6 localhost listener.
+  .replace(/^WEB_ORIGIN=.*$/m, 'WEB_ORIGIN=http://127.0.0.1:3000')
+  .replace(/^NOVU_PUBLIC_API_URL=.*$/m, 'NOVU_PUBLIC_API_URL=http://127.0.0.1:3000/novu')
+  .replace(/^NOVU_PUBLIC_WS_URL=.*$/m, 'NOVU_PUBLIC_WS_URL=http://127.0.0.1:3002')
   .replace(/^SEED_DOMAIN=.*$/m, 'SEED_DOMAIN=acceptance.test')
   .replace(/^AUTH_RATE_BURST=.*$/m, 'AUTH_RATE_BURST=100')
   .replace(/^FLARE_OPERATOR_USER_IDS=.*\n?/gm, '')

@@ -17,7 +17,7 @@ export default function Login() {
   const config = useApi<{ oidc_url: string | null }>('auth/config');
   const [exchange, setExchange] = useState('');
   const [mfa, setMfa] = useState('');
-  const [next, setNext] = useState('/workflows');
+  const [next, setNext] = useState('/overview');
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     setExchange(params.get('code') ?? '');

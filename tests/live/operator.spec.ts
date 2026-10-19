@@ -161,7 +161,7 @@ test('live operator-only MFA session governs sending policy and loses access on 
 
     const tenant = await owner.newPage();
     await login(tenant, required('E2E_EMAIL'), required('E2E_PASSWORD'));
-    await expect(tenant.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+    await expect(tenant.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
     expect(
       (await tenant.request.get('/api/operator/session')).status(),
       'Tenant ownership is not platform authorization',

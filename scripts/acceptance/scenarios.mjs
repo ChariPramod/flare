@@ -8,6 +8,17 @@ const requireMail = createRequire(new URL('../../packages/mail/package.json', im
 const nodemailer = requireMail('nodemailer');
 try {
   const { api, org, env, headers } = await session();
+  const capabilities = await api('/email-capabilities');
+  assert.deepEqual(capabilities, {
+    attachment_max_bytes: Number(process.env.MAIL_ATTACHMENT_MAX_BYTES ?? 10 * 1024 * 1024),
+    attachment_max_count: 50,
+    mime_max_bytes: Number(process.env.MAIL_MIME_MAX_BYTES ?? 25 * 1024 * 1024),
+  });
+  assert.equal(
+    (await fetch('http://localhost:4000/v1/email-capabilities')).status,
+    401,
+    'Dashboard capabilities still require authentication',
+  );
   const [domain] = (await api('/domains')).filter((d) => d.name === 'acceptance.test');
   assert.equal(domain.status, 'verified');
   const welcome = await api('/workflows/welcome');
