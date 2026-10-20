@@ -17,6 +17,8 @@
     "test:e2e": "playwright test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "docs:check": "node scripts/docs.mjs --check",
+    "docs:generate": "node scripts/docs.mjs --write",
     "db:migrate": "pnpm --filter @flare/db migrate",
     "seed": "pnpm --filter @flare/db seed && pnpm --filter @flare/mail seed",
     "checkpoint": "bash scripts/checkpoint.sh",

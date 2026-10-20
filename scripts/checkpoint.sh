@@ -3,6 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 if [[ -x .tools/node/bin/node ]]; then export PATH="$PWD/.tools/node/bin:$PWD/.tools/pnpm/node_modules/.bin:$PWD/.tools/bin:$PATH"; fi
 command -v gitleaks >/dev/null || { echo 'Install gitleaks before a checkpoint (see README).'; exit 1; }
+pnpm docs:check
 pnpm lint
 pnpm typecheck
 pnpm openapi:check

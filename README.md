@@ -2,6 +2,8 @@
 
 Pareto Labs' self-hosted notification control plane. TypeScript, NestJS, Next.js, PostgreSQL, Redis and unmodified Novu community 3.19.0. Postal is the default email transport.
 
+Use the [documentation index](docs/README.md) to choose a reading path. Start with the [website navigation and backend guide](docs/product/website-and-backend-guide.md) for a tour of every dashboard section, implemented features, backend services, source locations and tests.
+
 ## Development
 
 Use Node **22**, pnpm **10.32.1**, Docker Engine with Compose v2 or newer, OpenSSL and gitleaks **8.30.1**. Allocate at least 12 GB RAM to the full stack. The current implementation and verification status is recorded in [PROGRESS.md](PROGRESS.md); this repository is under active construction.
@@ -14,13 +16,14 @@ make up
 make seed
 ```
 
-For Postal transport omit `--dev`. Real sending also requires operator approval, named transport routes and sender readiness; follow the [sender reputation operating guide](docs/sender-reputation.md). `.env` and generated keys are gitignored. Setup refuses to replace an existing `.env`. Development credentials are generated into `.env`, never embedded in source. Dashboard: http://localhost:3000. API/OpenAPI: http://localhost:4000/docs. Mailpit: http://localhost:8025. MinIO console: http://localhost:9001. Postal admin: http://localhost:5000.
+For Postal transport omit `--dev`. Real sending also requires operator approval, named transport routes and sender readiness; follow the [sender reputation operating guide](docs/product/sender-reputation.md). `.env` and generated keys are gitignored. Setup refuses to replace an existing `.env`. Development credentials are generated into `.env`, never embedded in source. Dashboard: http://localhost:3000. API/OpenAPI: http://localhost:4000/docs. Mailpit: http://localhost:8025. MinIO console: http://localhost:9001. Postal admin: http://localhost:5000.
 
 The stock Novu dashboard is internal-only. Novu bootstrap credentials must be provisioned and the Development/Production service keys configured separately; Flare never exposes them to API-key callers. All published Compose ports bind loopback. Use a TLS reverse proxy and authenticated administrative access in deployment. STARTTLS certificates created by setup are for development only.
 
 ## Checks and checkpoints
 
 ```sh
+pnpm docs:check
 pnpm lint
 pnpm typecheck
 pnpm test
@@ -29,7 +32,7 @@ pnpm build
 bash scripts/checkpoint.sh scaffold
 ```
 
-See [where to write tests, lint rules and evals](docs/testing.md), including the optional [pytest harness](docs/testing-python.md) and editable [product eval cases](docs/evals.md). Start with the [staging owner checklist](docs/staging-owner-checklist.md) if you have no hosting/domain setup. The [staging guide](docs/staging.md) covers the first Postal + Inbox pilot, required infrastructure/access, HTTPS ingress and offline preflight.
+See [where to write tests, lint rules and evals](docs/development/testing.md), including the optional [pytest harness](docs/development/testing-python.md) and editable [product eval cases](docs/development/evals.md). Start with the [staging owner checklist](docs/operations/staging/staging-owner-checklist.md) if you have no hosting/domain setup. The [staging guide](docs/operations/staging/staging.md) covers the first Postal + Inbox pilot, required infrastructure/access, HTTPS ingress and offline preflight.
 
 The checkpoint script fails when gitleaks is missing. Update PROGRESS.md and CHANGELOG.md after each coherent phase, run the checkpoint, commit once with a Conventional Commit scope, and push main. Never force push. `scripts/autopush.sh` only pushes an existing clean main branch and never creates commits. An optional developer-owned cron entry is `0 * * * * cd /absolute/path/to/flare && bash scripts/autopush.sh`; no cron is installed by this repository.
 
@@ -37,40 +40,40 @@ The checkpoint script fails when gitleaks is missing. Update PROGRESS.md and CHA
 
 `apps/api` serves the Flare control plane; `apps/worker` handles queued work; `apps/smtp-relay` accepts authenticated workflow mail; `apps/web` is the single dashboard. Shared contracts live in `packages/shared`, with Drizzle and committed SQL migrations in `packages/db`. Migration checksums detect edited history and an advisory lock serializes migration runners.
 
-See [the architecture decision](docs/adr/0001-wrap-novu.md) and [Novu compatibility notes](docs/novu-gaps.md). PostgreSQL and Redis ports are private to the Compose network. Redis AOF is enabled for Flare and Novu. Postal runs its web, worker and SMTP processes with MariaDB; MinIO stores attachments and inbound MIME. Each service has a health endpoint and dependency readiness checks where available.
+See [the architecture decision](docs/architecture/adr/0001-wrap-novu.md) and [Novu compatibility notes](docs/architecture/novu-gaps.md). PostgreSQL and Redis ports are private to the Compose network. Redis AOF is enabled for Flare and Novu. Postal runs its web, worker and SMTP processes with MariaDB; MinIO stores attachments and inbound MIME. Each service has a health endpoint and dependency readiness checks where available.
 
 ## Postal and SES
 
-Create a Postal admin with `docker compose run --rm postal postal make-user`, then create the organization/server, sender domain and API credential. For legacy provider bootstrap put that credential in `POSTAL_API_KEY`; approved real routes use `MAIL_TRANSPORTS` with private environment-variable credential references, as described in the [sender reputation operating guide](docs/sender-reputation.md). Configure the sending IP's PTR/rDNS, SPF include, DKIM TXT, return-path CNAME and receiving MX; follow [Postal DNS configuration](https://docs.postalserver.io/getting-started/dns-configuration/). Outbound port 25 and IP reputation are deployment prerequisites. DNS verification and an approved provider sender are separate requirements.
+Create a Postal admin with `docker compose run --rm postal postal make-user`, then create the organization/server, sender domain and API credential. For legacy provider bootstrap put that credential in `POSTAL_API_KEY`; approved real routes use `MAIL_TRANSPORTS` with private environment-variable credential references, as described in the [sender reputation operating guide](docs/product/sender-reputation.md). Configure the sending IP's PTR/rDNS, SPF include, DKIM TXT, return-path CNAME and receiving MX; follow [Postal DNS configuration](https://docs.postalserver.io/getting-started/dns-configuration/). Outbound port 25 and IP reputation are deployment prerequisites. DNS verification and an approved provider sender are separate requirements.
 
 For SES, configure `AWS_REGION`, credentials with minimal send permissions, and an SES configuration set with event publishing. Verify identities in that region and obtain production access if the account is sandboxed. SES remains optional. Never expose Postal/SNS ingestion without authenticating the provider event source.
 
-See [operator approval, sending limits, route isolation and sender readiness](docs/sender-reputation.md) before enabling real traffic. Domain ownership and provider acceptance alone do not establish Production readiness.
+See [operator approval, sending limits, route isolation and sender readiness](docs/product/sender-reputation.md) before enabling real traffic. Domain ownership and provider acceptance alone do not establish Production readiness.
 
-See [email pipeline operations and API behavior](docs/email-pipeline.md) for transport priority, TLS enforcement, DNS, attachments, native provider signatures, and ambiguous delivery outcomes. Run `bash scripts/integration.sh` for the disposable PostgreSQL/Redis/MinIO/Mailpit acceptance suite. Compose now runs migrations before starting Flare services.
+See [email pipeline operations and API behavior](docs/product/email-pipeline.md) for transport priority, TLS enforcement, DNS, attachments, native provider signatures, and ambiguous delivery outcomes. Run `bash scripts/integration.sh` for the disposable PostgreSQL/Redis/MinIO/Mailpit acceptance suite. Compose now runs migrations before starting Flare services.
 
 ### Dashboard
 
-See [dashboard setup and browser tests](docs/dashboard.md) for authentication, Inbox endpoints, the workflow canvas and live acceptance configuration. Local browser contract tests run with `pnpm test:e2e`; `pnpm test:e2e:live` requires the real stack and a verified sender.
+See [dashboard setup and browser tests](docs/product/dashboard.md) for authentication, Inbox endpoints, the workflow canvas and live acceptance configuration. Local browser contract tests run with `pnpm test:e2e`; `pnpm test:e2e:live` requires the real stack and a verified sender.
 
-The [dashboard/Vercel plan](docs/dashboard-vercel-plan.md) preserves the monorepo, PostgreSQL and password/MFA authentication. [Vercel configuration](docs/vercel.md) documents the signed-proxy foundation and the remaining direct-transfer, private Inbox gateway and split-host deployment gates. Complete Vercel hosting is not yet verified.
+The [dashboard/Vercel plan](docs/planning/dashboard-vercel-plan.md) preserves the monorepo, PostgreSQL and password/MFA authentication. [Vercel configuration](docs/operations/staging/vercel.md) documents signed forwarding, direct transfers, the private Inbox gateway and split-host ingress/recovery profiles. These foundations pass local checks; actual Vercel and public backend deployment remains unverified.
 
-See [webhooks, logs and metrics operations](docs/operations.md) for receiver signatures, retries and replay, internal destination policy, request-log retention and metric definitions.
+See [webhooks, logs and metrics operations](docs/product/operations.md) for receiver signatures, retries and replay, internal destination policy, request-log retention and metric definitions.
 
-See [audience, templates and broadcasts](docs/audience.md) for CSV mapping, preferences, immutable template versions, throttling and cancellation semantics.
+See [audience, templates and broadcasts](docs/product/audience.md) for CSV mapping, preferences, immutable template versions, throttling and cancellation semantics.
 
-See [contact automations](docs/automations.md) for durable sequence definitions, event correlation, waits and recovery.
+See [contact automations](docs/product/automations.md) for durable sequence definitions, event correlation, waits and recovery.
 
-See [inbound receiving and forwarding](docs/inbound.md) for Postal routing, signature verification, MIME limits and retrieval.
+See [inbound receiving and forwarding](docs/product/inbound.md) for Postal routing, signature verification, MIME limits and retrieval.
 
-See [layouts and translations](docs/content.md) for version pinning, locale fallback, preview and workflow source compatibility.
+See [layouts and translations](docs/product/content.md) for version pinning, locale fallback, preview and workflow source compatibility.
 
-See [durable publication](docs/publication.md) for content dependencies, Production promotion and interrupted-operation recovery.
+See [durable publication](docs/product/publication.md) for content dependencies, Production promotion and interrupted-operation recovery.
 
-Operational rate limits, recovery, tracing and dashboards: [reliability guide](docs/reliability.md).
+Operational rate limits, recovery, tracing and dashboards: [reliability guide](docs/operations/reliability.md).
 
-Developer packages and the generated API contract: [SDK, CLI and MCP guide](docs/developer-tools.md).
+Developer packages and the generated API contract: [SDK, CLI and MCP guide](docs/development/developer-tools.md).
 
-Full-stack verification and release operations: [acceptance evidence](docs/acceptance.md) and [deployment, backup/restore, upgrades and troubleshooting](docs/deployment.md). Run `bash scripts/acceptance.sh` on a Docker host; it creates and destroys only its own disposable project.
+Full-stack verification and release operations: [acceptance evidence](docs/development/acceptance.md) and [deployment, backup/restore, upgrades and troubleshooting](docs/operations/deployment.md). Run `bash scripts/acceptance.sh` on a Docker host; it creates and destroys only its own disposable project.
 
-Staging and the first controlled Email + Inbox pilot: [ordered execution plan](docs/staging-execution-plan.md), [owner handoff](docs/staging-owner-checklist.md), and [bootstrap/public verification runbook](docs/staging.md). Hosting and real-provider evidence remain separate from local Docker acceptance.
+Staging and the first controlled Email + Inbox pilot: [ordered execution plan](docs/planning/staging-execution-plan.md), [owner handoff](docs/operations/staging/staging-owner-checklist.md), and [bootstrap/public verification runbook](docs/operations/staging/staging.md). Hosting and real-provider evidence remain separate from local Docker acceptance.

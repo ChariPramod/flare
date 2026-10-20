@@ -1,0 +1,233 @@
+{
+  "PROGRESS.md": [
+    "flare-progress",
+    "current-checkpoint--split-host-ingress-recovery-and-inbox-websocket-safety-2c",
+    "previous-checkpoint--direct-transfers-and-private-inbox-2b",
+    "previous-checkpoints--dashboard-polish-and-signed-forwarding",
+    "previous-checkpoint--deployment-recovery-and-alerting",
+    "previous-checkpoint--2026-10-16-staging-execution-and-broadcast-recovery",
+    "previous-checkpoint--2026-10-16-publication-pacing-and-operator-expiry-audit",
+    "previous-checkpoint--2026-10-16-wait-entry-timing-and-staging-purchase-proposal",
+    "previous-verified-checkpoint--2026-10-16-atomic-automation-recovery",
+    "previous-verified-checkpoint--2026-10-16-audit-hardening",
+    "previous-verified-checkpoint--2026-10-16",
+    "previous-checkpoint--2026-10-15",
+    "phase-status",
+    "checkpoint-log",
+    "known-issues-and-verification-limits",
+    "github-delivery",
+    "next",
+    "completed-acceptance-checkpoint--2026-10-14",
+    "next-work-that-does-not-require-hosting",
+    "larger-roadmap--deployment-validation-and-internal-pilot",
+    "acceptance-execution-history"
+  ],
+  "docs/acceptance.md": [
+    "acceptance-and-evidence",
+    "completion-ledger",
+    "p0-sender-safety-evidence-map"
+  ],
+  "docs/adr/0001-wrap-novu.md": ["0001--keep-novu-unmodified"],
+  "docs/alerting.md": [
+    "staging-alerts-and-operational-evidence",
+    "validate-without-hosting",
+    "private-deployment",
+    "respond-to-alerts",
+    "required-external-monitoring-gates",
+    "live-notification-and-recovery-drill"
+  ],
+  "docs/audience.md": [
+    "audience-templates-and-broadcasts",
+    "contacts-and-preferences",
+    "versioned-templates",
+    "broadcast-delivery",
+    "verification",
+    "broadcast-recovery-boundary"
+  ],
+  "docs/automations.md": [
+    "durable-contact-automations",
+    "definition",
+    "events-and-recovery",
+    "verification-limits"
+  ],
+  "docs/backup-recovery.md": [
+    "encrypted-deployment-backups-and-isolated-recovery",
+    "scope-and-prerequisites",
+    "key-custody-and-preparation",
+    "off-host-transfer-and-retention",
+    "restore-without-delivery",
+    "executed-evidence"
+  ],
+  "docs/build-spec.md": [
+    "flare-codex-build-prompt-for-pareto-labs-in-house-notification-platform",
+    "tldr",
+    "key-findings-that-shaped-the-prompt",
+    "the-codex-prompt",
+    "caveats",
+    "research-basis"
+  ],
+  "docs/content.md": ["layouts-and-translations", "locale-dictionaries", "verification"],
+  "docs/dashboard-vercel-plan.md": [
+    "flare-dashboard-polish-and-vercel-readiness",
+    "summary",
+    "checkpoint-1--polish-the-product-dashboard",
+    "checkpoint-2--make-split-hosting-safe",
+    "vercel-configuration-and-authentication",
+    "large-email-transfers",
+    "deployment-compatibility",
+    "checkpoint-3--verification-and-delivery"
+  ],
+  "docs/dashboard.md": ["dashboard", "deployment-direction", "verification"],
+  "docs/deployment.md": [
+    "deployment-upgrades-and-recovery",
+    "installation",
+    "upgrade-procedure",
+    "populated-upgrade-and-snapshot-fallback-acceptance",
+    "backup-and-restore",
+    "disposable-restore-acceptance",
+    "journaled-uploads-and-orphan-cleanup",
+    "troubleshooting"
+  ],
+  "docs/developer-tools.md": ["sdk-cli-and-local-mcp", "container-source-builds"],
+  "docs/email-pipeline.md": [
+    "email-pipeline",
+    "api",
+    "mime-storage-and-transport",
+    "provider-setup",
+    "domains-tracking-and-smtp",
+    "verification"
+  ],
+  "docs/evals.md": ["product-behavior-evals"],
+  "docs/inbound.md": [
+    "inbound-email",
+    "durability-and-limits",
+    "retrieval-and-forwarding",
+    "verification-status"
+  ],
+  "docs/novu-gaps.md": [
+    "novu-community-compatibility",
+    "flare-implementations",
+    "runtime-evidence",
+    "retry-ownership-and-failure-semantics",
+    "native-job-inspection-and-destructive-acceptance"
+  ],
+  "docs/operations.md": [
+    "webhooks-request-logs-and-metrics",
+    "delivery-and-verification",
+    "engine-events",
+    "request-logs",
+    "metrics",
+    "verification"
+  ],
+  "docs/publication.md": ["durable-publication", "dependencies-and-recovery", "verification"],
+  "docs/reliability.md": [
+    "reliability-and-operations",
+    "limits",
+    "workflow-recovery",
+    "automation-recovery",
+    "dead-letters",
+    "observability-and-shutdown",
+    "verification-boundaries"
+  ],
+  "docs/sender-reputation.md": [
+    "sender-reputation-operating-guide",
+    "pilot-defaults-and-scope",
+    "bootstrap-a-platform-operator",
+    "configure-named-transport-instances",
+    "register-and-bind-routes",
+    "ownership-and-production-readiness",
+    "approval-feedback-and-restoration",
+    "inspection-cli-and-recovery",
+    "upgrade-and-verification-boundary",
+    "provider-feedback-capability-boundary"
+  ],
+  "docs/staging-execution-plan.md": [
+    "from-reliability-hardening-to-the-first-staging-pilot",
+    "current-position",
+    "ordered-checkpoints",
+    "ab-implementation-and-verification-now",
+    "c-operations-tooling-acceptance-contract",
+    "d-owner-handoff-and-private-bootstrap",
+    "e-real-dns-postal-and-browser-evidence",
+    "fg-recovery-and-pilot-release",
+    "where-to-add-tests-and-evidence"
+  ],
+  "docs/staging-owner-checklist.md": [
+    "flare-staging-what-the-owner-needs-to-do",
+    "1-choose-the-budget-location-and-pilot-scope",
+    "2-confirm-a-mail-capable-host-before-buying-it",
+    "3-own-a-domain-and-arrange-dns-access",
+    "4-prepare-safe-administrator-access",
+    "5-choose-secret-custody-and-an-off-host-backup-destination",
+    "6-prepare-pilot-mailboxes-and-operator-mfa",
+    "7-send-this-handoff-form-without-secrets",
+    "8-let-codex-deploy-then-check-the-evidence-together"
+  ],
+  "docs/staging-shopping-list.md": [
+    "staging-shopping-list-and-cost-estimate",
+    "recommendation",
+    "buy-these-items",
+    "confirm-postal-support-before-paying-for-the-server",
+    "owner-purchase-and-handoff-order"
+  ],
+  "docs/staging.md": [
+    "staging-pilot-email-inbox-and-passwordmfa",
+    "provisioning-checklist",
+    "hostnames-and-routing",
+    "choose-the-canonical-compose-profile",
+    "secrets-and-internal-relay-trust",
+    "offline-preflight-and-deployment",
+    "pilot-acceptance-and-recovery",
+    "public-dns-and-https-verification",
+    "real-pilot-and-recovery-gates"
+  ],
+  "docs/testing-python.md": [
+    "optional-python-tests",
+    "public-staging-checks",
+    "internal-health-and-readiness-through-an-ssh-tunnel",
+    "add-your-own-test"
+  ],
+  "docs/testing.md": [
+    "where-to-write-tests-lint-rules-and-evals",
+    "a-useful-test-writing-loop",
+    "local-commands",
+    "sustained-load-and-populated-upgrade-rehearsals",
+    "ci-and-staging-gates"
+  ],
+  "docs/vercel.md": [
+    "vercel-dashboard-deployment",
+    "current-boundary",
+    "project-import-settings",
+    "runtime-configuration",
+    "forwarding-and-client-addresses",
+    "large-content-transfers",
+    "private-inbox-gateway",
+    "split-backend-profile-and-public-checks",
+    "backup-recovery-and-rollback",
+    "remaining-deployment-gates"
+  ],
+  "docs/website-and-backend-guide.md": [
+    "flare-website-navigation-and-backend-guide",
+    "reading-paths",
+    "opening-flare",
+    "getting-oriented",
+    "sidebar-map",
+    "workspace",
+    "email",
+    "developer",
+    "guided-journeys",
+    "1-build-a-notification-and-inspect-its-inbox",
+    "2-send-email-and-understand-its-result",
+    "3-read-incoming-mail-or-configure-forwarding",
+    "4-reuse-content-and-publish-it",
+    "5-use-audiences-broadcasts-and-automations",
+    "6-investigate-a-problem",
+    "what-is-built-and-what-is-verified",
+    "what-runs-on-the-backend",
+    "following-the-data",
+    "vercel-and-supabase",
+    "where-to-change-things",
+    "where-to-write-tests-pytest-lint-and-evals",
+    "what-remains-before-the-first-pilot"
+  ]
+}
