@@ -1,10 +1,10 @@
 # Flare: website navigation and backend guide
 
-Updated: **19 October 2026**. Based on implementation checkpoint **`db4f0a4`**.
+Updated: **21 October 2026**. Architecture baseline: **`db4f0a4`**, with the editorial UI refinement described below. Current verification evidence is recorded in [PROGRESS.md](../../PROGRESS.md).
 
 Flare is Pareto Labs' notification control plane. The dashboard manages notifications, outgoing and incoming email, audiences, reusable content and operations. Behind it, Flare owns access control, durable records and sending policy; the unmodified Novu engine executes notification workflows, and Postal is the default real email transport.
 
-The main feature modules and the Vercel split-host foundation are built. Local Docker acceptance and [all five CI jobs for this checkpoint](https://github.com/ChariPramod/flare/actions/runs/39343365896) passed. **A public Vercel/backend deployment and real Postal deliverability have not been verified.** This guide describes the implemented product, not a live hosted service.
+The main feature modules and the Vercel split-host foundation are built. Local Docker acceptance and [all five CI jobs for the architecture baseline](https://github.com/ChariPramod/flare/actions/runs/39343365896) passed. **A public Vercel/backend deployment and real Postal deliverability have not been verified.** This guide describes the implemented product, not a live hosted service.
 
 ## Reading paths
 
@@ -38,6 +38,12 @@ These are local administrative tools, not extra dashboard pages. Published Compo
 2. Open **Overview** for sending approval, recipient allowance, sender readiness and recent held/failed emails.
 3. Use the sidebar to enter a feature. **Cmd/Ctrl+K searches page names**, not every record in the database.
 4. Use the account menu for **Settings** or sign-out. The sidebar can collapse; small screens use an **Open navigation** drawer. The theme control switches light/dark appearance.
+
+The editorial refinement keeps the same sidebar order. Light/dark preference also applies to sign-in, invitation and public preference screens. On Overview, check **Sending access** first, then sender readiness and the recommended next action. A provider accepting a message is distinct from confirmed delivery.
+
+Content editors keep unfinished work in memory in the current tab. **Save changes**, **Save layout version**, **Save dictionary version** or the template save action persists it; **Discard changes** restores saved content. You can return to a draft after navigating within the tab, including invalid JSON. Reloading or closing the tab can lose drafts, so heed the browser warning. Switching workspace or signing out asks before clearing retained drafts. In Translations, enter a locale and choose **Load locale** before editing that dictionary.
+
+Table errors offer **Retry** instead of an empty-result message. During a failed refresh, previously loaded rows remain visible with a warning. Search applies either to the named server filter or the loaded rows as described by that table; Contacts uses its single server search.
 
 Owner/admin/developer roles are generally writable; viewers have read-only controls. Team management and dashboard publication require owner/admin. The API checks permissions independently of what the UI displays.
 

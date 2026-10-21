@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { writeFile } from 'node:fs/promises';
 
 // Native credentials must never be retained in traces or DOM/image artifacts.
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
@@ -47,11 +48,14 @@ test.beforeEach(async ({ page }) => {
   });
 });
 test.afterEach(async ({ page }, info) => {
-  if (info.status !== info.expectedStatus)
+  if (info.status !== info.expectedStatus) {
+    const path = info.outputPath('inbox-operation-metadata.json');
+    await writeFile(path, JSON.stringify(diagnostics.get(page)), { mode: 0o600 });
     await info.attach('inbox-operation-metadata', {
-      body: JSON.stringify(diagnostics.get(page)),
+      path,
       contentType: 'application/json',
     });
+  }
 });
 
 test('live subscriber Inbox renders native delivery and persists read state', async ({ page }) => {
@@ -94,6 +98,9 @@ test('live subscriber Inbox renders native delivery and persists read state', as
     .getByRole('button', { name: 'Open notifications', exact: true })
     .click();
   await expect(page.getByText(body, { exact: true })).toBeVisible();
+  // The SDK/recovery acceptance tests can add newer notifications for this
+  // subscriber. Reach the original delivery through the Inbox's scroll list.
+  await page.getByText(body, { exact: true }).scrollIntoViewIfNeeded();
   await expect(page.getByText(body, { exact: true })).toBeInViewport();
   const [marked] = await Promise.all([
     page.waitForResponse(

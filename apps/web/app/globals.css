@@ -1222,22 +1222,30 @@ dd {
   height: 32px;
 }
 .react-flow {
-  --xy-background-color-default: var(--bg);
-  --xy-node-background-color-default: var(--panel);
-  --xy-node-color-default: var(--text);
-  --xy-node-border-default: 1px solid var(--border);
-  --xy-edge-stroke-default: var(--muted);
-  --xy-controls-button-background-color-default: var(--panel);
-  --xy-controls-button-background-color-hover-default: var(--hover);
-  --xy-controls-button-color-default: var(--text);
-  --xy-controls-button-color-hover-default: var(--text);
-  --xy-controls-button-border-color-default: var(--border);
-  --xy-controls-box-shadow-default: none;
+  --xy-background-color: var(--bg);
+  --xy-node-background-color: var(--panel);
+  --xy-node-color: var(--text);
+  --xy-node-border: 1px solid var(--border);
+  --xy-edge-stroke: var(--muted);
+  --xy-controls-button-background-color: var(--panel);
+  --xy-controls-button-background-color-hover: var(--hover);
+  --xy-controls-button-color: var(--text);
+  --xy-controls-button-color-hover: var(--text);
+  --xy-controls-button-border-color: var(--border);
+  --xy-controls-box-shadow: none;
 }
 .react-flow__controls {
   border: 1px solid var(--border);
   border-radius: 3px;
   overflow: hidden;
+}
+.react-flow .react-flow__attribution {
+  padding: 4px 8px;
+  background: var(--panel);
+  font-size: 12px;
+}
+.react-flow .react-flow__attribution a {
+  color: var(--muted);
 }
 .react-flow__handle {
   width: 6px !important;

@@ -11,7 +11,7 @@ async function login(page: Page) {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
 }
-async function inboxFixture(page: Page, viewer = true) {
+async function inboxFixture(page: Page, viewer = true, precedingNotifications = 0) {
   const state = {
     viewer,
     revoked: false,
@@ -97,7 +97,10 @@ async function inboxFixture(page: Page, viewer = true) {
         json: {
           data: {
             token: 'fixture.native.token',
-            unreadCount: { total: 1, severity: { high: 0, medium: 0, low: 0, none: 1 } },
+            unreadCount: {
+              total: precedingNotifications + 1,
+              severity: { high: 0, medium: 0, low: 0, none: precedingNotifications + 1 },
+            },
           },
         },
       });
@@ -116,7 +119,12 @@ async function inboxFixture(page: Page, viewer = true) {
     if (url.pathname.endsWith('/count')) {
       const filters = JSON.parse(url.searchParams.get('filters') ?? '[{}]');
       return route.fulfill({
-        json: { data: filters.map((filter: Record<string, unknown>) => ({ count: 1, filter })) },
+        json: {
+          data: filters.map((filter: Record<string, unknown>) => ({
+            count: precedingNotifications + 1,
+            filter,
+          })),
+        },
       });
     }
     if (url.pathname.endsWith('/notifications')) {
@@ -128,7 +136,20 @@ async function inboxFixture(page: Page, viewer = true) {
         return route.fulfill({ status: 401, json: { message: 'Retired fixture response' } });
       }
       return route.fulfill({
-        json: { data: [notification], hasMore: false, filter: { archived: false, snoozed: false } },
+        json: {
+          data: [
+            ...Array.from({ length: precedingNotifications }, (_, index) => ({
+              ...notification,
+              id: `newer-${index}`,
+              subject: 'Newer fixture notification',
+              body: `A newer update ${index + 1}`,
+              isRead: false,
+            })),
+            notification,
+          ],
+          hasMore: false,
+          filter: { archived: false, snoozed: false },
+        },
       });
     }
     return route.fulfill({ json: { data: [] } });
@@ -159,7 +180,7 @@ for (const viewport of [
     page,
   }) => {
     await page.setViewportSize(viewport);
-    const fixture = await inboxFixture(page, false);
+    const fixture = await inboxFixture(page, false, 6);
     await login(page);
     await page.goto(fixture.path);
     await page.getByRole('button', { name: 'Open notifications', exact: true }).click();
@@ -178,6 +199,7 @@ for (const viewport of [
       })
       .toBe(true);
     const body = popup.getByText(/This stays text\./);
+    await body.scrollIntoViewIfNeeded();
     await expect(body).toBeInViewport();
     await body.click();
     await expect.poll(() => fixture.state.readWrites).toBe(1);

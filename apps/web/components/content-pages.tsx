@@ -100,6 +100,7 @@ function LayoutDetail({ id, editable }: { id: string; editable: boolean }) {
           translations: query.data.versions[0]!.translations,
         }
       : undefined,
+    query.isError,
   );
   const { html = '', translations = false } = draft.value ?? {};
   const pending = save.isPending || draft.pending;
@@ -238,6 +239,7 @@ function DictionaryEditor({ workflow, editable }: { workflow: string; editable: 
     query.data
       ? pretty(query.data.find((item) => item.locale === locale)?.entries ?? {})
       : undefined,
+    query.isError,
   );
   const text = draft.value ?? '{}';
   const pending = save.isPending || draft.pending;

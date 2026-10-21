@@ -327,6 +327,94 @@ test('accepted layout saves stay visible if the follow-up read fails', async ({ 
   await expect(page.getByRole('button', { name: 'Discard changes', exact: true })).toHaveCount(0);
 });
 
+test('an accepted save survives a failed refresh after an intervening server read', async ({
+  page,
+}) => {
+  await login(page);
+  await layout(page);
+  const submitted = '<main>My accepted edit {{{body}}}</main>';
+  let release!: () => void;
+  const delayed = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let started = false;
+  let failReads = false;
+  await page.route('**/api/layouts/draft-layout', async (route) => {
+    if (route.request().method() === 'PUT') {
+      started = true;
+      await delayed;
+      const response = await route.fetch();
+      failReads = true;
+      return route.fulfill({ response });
+    }
+    return failReads
+      ? route.fulfill({ status: 503, json: { message: 'Accepted version refresh unavailable' } })
+      : route.continue();
+  });
+  await page.getByLabel('Layout HTML', { exact: true }).fill(submitted);
+  await page.getByRole('button', { name: 'Save layout version', exact: true }).click();
+  await expect.poll(() => started).toBe(true);
+  expect(
+    (
+      await page.request.put('/api/layouts/draft-layout', {
+        headers,
+        data: {
+          identifier: 'draft-layout',
+          name: 'Draft layout',
+          html: '<main>Intervening server version {{{body}}}</main>',
+          translations: false,
+        },
+      })
+    ).ok(),
+  ).toBe(true);
+  await page.clock.install();
+  await page.clock.fastForward(11_000);
+  acceptNextDialog(page);
+  await page.getByRole('link', { name: 'Emails', exact: true }).click();
+  await expect(page).toHaveURL(/\/emails$/);
+  await page.goBack();
+  await expect(page.getByText('Version 2 · draft-layout', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Layout HTML', { exact: true })).toBeDisabled();
+  release();
+  await expect(page.locator('.error-box[role="alert"]')).toContainText(
+    'Accepted version refresh unavailable',
+  );
+  await expect(page.getByLabel('Layout HTML', { exact: true })).toBeEnabled();
+  await expect(page.getByLabel('Layout HTML', { exact: true })).toHaveValue(submitted);
+  await expect(page.getByRole('button', { name: 'Discard changes', exact: true })).toHaveCount(0);
+});
+
+test('a successful newer server read supersedes the just-accepted editor snapshot', async ({
+  page,
+}) => {
+  await login(page);
+  await layout(page);
+  const newer = '<main>Newer server edit {{{body}}}</main>';
+  await page.route('**/api/layouts/draft-layout', async (route) => {
+    if (route.request().method() !== 'PUT') return route.continue();
+    const response = await route.fetch();
+    expect(
+      (
+        await page.request.put('/api/layouts/draft-layout', {
+          headers,
+          data: {
+            identifier: 'draft-layout',
+            name: 'Draft layout',
+            html: newer,
+            translations: false,
+          },
+        })
+      ).ok(),
+    ).toBe(true);
+    return route.fulfill({ response });
+  });
+  await page.getByLabel('Layout HTML', { exact: true }).fill('<main>My edit {{{body}}}</main>');
+  await page.getByRole('button', { name: 'Save layout version', exact: true }).click();
+  await expect(page.getByText('Version 3 · draft-layout', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Discard changes', exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Layout HTML', { exact: true })).toHaveValue(newer);
+});
+
 test('duplicate step identifiers cannot overwrite another step’s invalid JSON draft', async ({
   page,
 }) => {

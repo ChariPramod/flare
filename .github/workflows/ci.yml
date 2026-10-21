@@ -7,7 +7,8 @@ permissions:
   contents: read
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # Keep visual references on the Noble base used by Dockerfile.browser-tests.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,6 +31,16 @@ jobs:
       - run: pnpm test:packages
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
+      - name: Browser contract diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-contract-diagnostics
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
       - name: Secret scan
         run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1 dir /repo --redact --config /repo/.gitleaks.toml
   python:
@@ -95,3 +106,17 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - name: Pinned full-stack Compose acceptance and load recovery
         run: bash scripts/acceptance.sh
+      - name: Live browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-browser-diagnostics
+          # Native session tokens must never be uploaded in network traces. MFA and
+          # credential-bearing scenarios disable screenshots in their test suites.
+          # Inbox JSON contains only bounded operation names, HTTP methods/statuses
+          # and aggregate error counts, never URLs, bodies or credentials.
+          path: |
+            test-results/**/*.png
+            test-results/**/inbox-operation-metadata.json
+          retention-days: 7
+          if-no-files-found: ignore

@@ -83,6 +83,7 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
           raw: {} as Record<string, string>,
         }
       : undefined,
+    query.isError,
   );
   const workflow = draft.value?.workflow;
   const saving = save.isPending || draft.pending;
@@ -313,7 +314,7 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
               onClick={() => setInsertAt(0)}
             >
               <Plus size={14} />
-              Add first step
+              {workflow.steps.length ? 'Add step at start' : 'Add first step'}
             </Button>
           </div>
           <ReactFlow

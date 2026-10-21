@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Complete the editorial UI review with Linux x64 visual references for both themes, responsive and interaction regressions, themed canvas controls and clearer insertion labels. Preserve accepted editor saves when a later refresh fails after an intervening server read. Keep native Inbox read-persistence checks usable with longer notification feeds, and retain bounded, credential-free failure diagnostics in CI. Update the navigation and testing guides.
+
 - Preserve raw workflow, layout, translation and template drafts in memory through failed saves and navigation, protect concurrent saves and environment switches, and preserve historical versions. Make table search/loading/error states explicit, use one server-backed Contacts search, distinguish delivery outcomes, and improve linked validation, authentication/preferences recovery and pending dialog feedback.
 
 - Align shared page/section typography and panel spacing, restore saved themes before paint, simplify Overview, and keep navigation and editor actions reachable on narrow/short screens. Bound the native Inbox popup to the available viewport without restarting its session; preserve actual read-state persistence checks.

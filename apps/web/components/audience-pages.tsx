@@ -736,7 +736,7 @@ function TemplateEditor({ id, editable }: { id: string; editable: boolean }) {
         }),
       }
     : undefined;
-  const draft = useEditorDraft(`template:${id}:${version || 'latest'}`, initial);
+  const draft = useEditorDraft(`template:${id}:${version || 'latest'}`, initial, query.isError);
   const fields = draft.value;
   const pending = busy || draft.pending;
   if (query.isPending) return <Loading />;

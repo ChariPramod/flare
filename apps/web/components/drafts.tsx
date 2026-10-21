@@ -164,7 +164,7 @@ export function useDrafts() {
   return store;
 }
 
-export function useEditorDraft<T>(resource: string, initial: T | undefined) {
+export function useEditorDraft<T>(resource: string, initial: T | undefined, readFailed = false) {
   const store = useDrafts();
   const session = useApi<Session>('session');
   const identity = session.data;
@@ -194,12 +194,16 @@ export function useEditorDraft<T>(resource: string, initial: T | undefined) {
     // Once a read moves beyond the pre-save value, the fallback has served its
     // purpose. Retaining it would resurrect old content if the server later
     // legitimately returns to that value. Identity protects a newer save.
-    if (accepted && initialValue !== undefined && initialValue !== accepted.previous)
+    if (accepted && !readFailed && initialValue !== undefined && initialValue !== accepted.previous)
       store.retireCommitted(key, accepted);
-  }, [store, key, accepted, initialValue]);
+  }, [store, key, accepted, initialValue, readFailed]);
   // Accepted writes stay visible when their follow-up read fails. They are clean,
-  // memory-only snapshots, and a newer server value supersedes them.
-  const baseline = accepted && initialValue === accepted.previous ? (accepted.value as T) : initial;
+  // memory-only snapshots. A failed read may retain an intervening pre-save
+  // value, so it cannot supersede the accepted write. A successful read can.
+  const baseline =
+    accepted && (readFailed || initialValue === accepted.previous)
+      ? (accepted.value as T)
+      : initial;
   return {
     value: (entry ? entry.value : baseline) as T | undefined,
     pending: store.pending.has(key),
