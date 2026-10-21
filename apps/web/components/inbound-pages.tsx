@@ -82,7 +82,9 @@ function InboundList({ writable }: { writable: boolean }) {
   const query = useApi<{ data: InboundRow[] }>(`inbound?page=${page}`, 5000),
     rules = useApi<Rule[]>('forwarding-rules'),
     domains = useApi<{ id: string; name: string; receiving: boolean }[]>('domains'),
-    create = useAction('forwarding-rules');
+    create = useAction('forwarding-rules', 'POST', false, {
+      successMessage: 'Forwarding rule created',
+    });
   const [error, setError] = useState<unknown>();
   return (
     <>
@@ -95,7 +97,7 @@ function InboundList({ writable }: { writable: boolean }) {
           </Button>
         }
       />
-      <ErrorBox error={query.error ?? rules.error ?? domains.error ?? error} />
+      <ErrorBox error={domains.error ?? error} />
       <p className="muted section-description">
         Looking for notifications inside your product? Open a subscriber’s In-app Inbox instead.
       </p>
@@ -103,6 +105,12 @@ function InboundList({ writable }: { writable: boolean }) {
         <Loading />
       ) : (
         <DataTable
+          searchMode="local"
+          loading={query.isPending}
+          refreshing={query.isFetching && !query.isPending}
+          error={query.error}
+          onRetry={() => void query.refetch()}
+          onRefresh={() => void query.refetch()}
           key={page}
           data={query.data?.data ?? []}
           paginate={false}
@@ -162,6 +170,11 @@ function InboundList({ writable }: { writable: boolean }) {
         </div>
       </div>
       <DataTable
+        searchMode="local"
+        refreshing={rules.isFetching && !rules.isPending}
+        error={rules.error}
+        onRetry={() => void rules.refetch()}
+        onRefresh={() => void rules.refetch()}
         data={rules.data ?? []}
         loading={rules.isPending}
         urlStateKey="forwarding"
@@ -210,6 +223,7 @@ function InboundList({ writable }: { writable: boolean }) {
       <Modal
         open={open}
         onOpenChange={setOpen}
+        pending={create.isPending}
         title="Add forwarding rule"
         description="Forward through a verified sender. Automatic messages and forwarding loops are skipped."
       >

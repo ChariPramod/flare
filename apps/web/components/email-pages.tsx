@@ -1,5 +1,5 @@
 'use client';
-import { deliveryLabel } from '../lib/email-status';
+import { deliveryLabel, deliveryTone } from '../lib/email-status';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -54,7 +54,7 @@ type Domain = {
 };
 export function Domains({ id, writable }: { id?: string; writable: boolean }) {
   const query = useApi<Domain[]>('domains', 10000),
-    create = useAction<Domain>('domains'),
+    create = useAction<Domain>('domains', 'POST', false, { successMessage: 'Domain added' }),
     router = useRouter();
   const [open, setOpen] = useState(false);
   if (id) return <DomainDetail id={id} writable={writable} />;
@@ -70,11 +70,17 @@ export function Domains({ id, writable }: { id?: string; writable: boolean }) {
           </Button>
         }
       />
-      <ErrorBox error={query.error} />
       {query.isPending ? (
         <Loading />
       ) : (
         <DataTable
+          label="Domains"
+          searchMode="local"
+          loading={query.isPending}
+          refreshing={query.isFetching && !query.isPending}
+          error={query.error}
+          onRetry={() => void query.refetch()}
+          onRefresh={() => void query.refetch()}
           data={query.data ?? []}
           searchPlaceholder="Search domains…"
           columns={[
@@ -138,6 +144,7 @@ export function Domains({ id, writable }: { id?: string; writable: boolean }) {
       <Modal
         open={open}
         onOpenChange={setOpen}
+        pending={create.isPending}
         title="Add a sending domain"
         description="Use a domain or subdomain you own. We’ll generate the DNS records you need."
       >
@@ -161,7 +168,7 @@ export function Domains({ id, writable }: { id?: string; writable: boolean }) {
           </Field>
           <ErrorBox error={create.error} />
           <div className="dialog-actions">
-            <Button type="button" onClick={() => setOpen(false)}>
+            <Button type="button" disabled={create.isPending} onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button className="primary" disabled={create.isPending}>
@@ -263,7 +270,9 @@ function DomainReadiness({ domain }: { domain: Domain }) {
 }
 function DomainDetail({ id, writable }: { id: string; writable: boolean }) {
   const query = useApi<Domain>(`domains/${id}`, 5000),
-    verify = useAction(`domains/${id}/verify`),
+    verify = useAction(`domains/${id}/verify`, 'POST', false, {
+      successMessage: 'Domain verification checked',
+    }),
     update = useAction(`domains/${id}`, 'PATCH');
   const [copied, setCopied] = useState(''),
     [copyError, setCopyError] = useState<unknown>();
@@ -566,12 +575,18 @@ export function Emails({ id, writable }: { id?: string; writable: boolean }) {
           </Button>
         }
       />
-      <ErrorBox error={query.error} />
       <SendingPolicySummary />
       {query.isPending ? (
         <Loading />
       ) : (
         <DataTable
+          label="Emails"
+          searchMode="local"
+          loading={query.isPending}
+          refreshing={query.isFetching && !query.isPending}
+          error={query.error}
+          onRetry={() => void query.refetch()}
+          onRefresh={() => void query.refetch()}
           data={query.data ?? []}
           searchPlaceholder="Search emails…"
           columns={[
@@ -590,7 +605,9 @@ export function Emails({ id, writable }: { id?: string; writable: boolean }) {
               header: 'Status',
               cell: ({ row }) => (
                 <div>
-                  <Badge tone={row.original.status}>{deliveryLabel(row.original.status)}</Badge>
+                  <Badge tone={deliveryTone(row.original.status)}>
+                    {deliveryLabel(row.original.status)}
+                  </Badge>
                   {row.original.hold_reason && (
                     <small className="muted block">
                       {row.original.hold_reason.replaceAll('_', ' ')}
@@ -619,7 +636,9 @@ export function Emails({ id, writable }: { id?: string; writable: boolean }) {
 function Compose({ close }: { close: () => void }) {
   const domains = useApi<Domain[]>('domains'),
     capabilities = useApi<EmailCapabilities>('email-capabilities'),
-    send = useAction<{ id: string }>('emails', 'POST', true),
+    send = useAction<{ id: string }>('emails', 'POST', true, {
+      successMessage: 'Email accepted for processing',
+    }),
     router = useRouter();
   const [html, setHtml] = useState(false),
     [files, setFiles] = useState<File[]>([]),
@@ -640,6 +659,7 @@ function Compose({ close }: { close: () => void }) {
     <Modal
       open
       onOpenChange={(v) => !v && !busy && !send.isPending && close()}
+      pending={busy || send.isPending}
       title="Send an email"
       description="Send now or schedule for later. Your sender domain must be verified."
       wide
@@ -860,7 +880,9 @@ function Compose({ close }: { close: () => void }) {
 }
 function EmailDetail({ id, writable }: { id: string; writable: boolean }) {
   const query = useApi<Email>(`emails/${id}`, 5000),
-    cancel = useAction(`emails/${id}/cancel`),
+    cancel = useAction(`emails/${id}/cancel`, 'POST', false, {
+      successMessage: 'Email cancellation requested',
+    }),
     reschedule = useAction(`emails/${id}`, 'PATCH');
   const [schedule, setSchedule] = useState(''),
     [tab, setTab] = useState('preview');
@@ -882,7 +904,13 @@ function EmailDetail({ id, writable }: { id: string; writable: boolean }) {
         description={id}
         actions={
           message && (
-            <Badge tone={uncertain && message.status === 'failed' ? 'ambiguous' : message.status}>
+            <Badge
+              tone={
+                uncertain && message.status === 'failed'
+                  ? 'ambiguous'
+                  : deliveryTone(message.status)
+              }
+            >
               {uncertain && message.status === 'failed'
                 ? 'Acceptance uncertain'
                 : deliveryLabel(message.status)}
@@ -1000,7 +1028,7 @@ function EmailDetail({ id, writable }: { id: string; writable: boolean }) {
                   {r.address}
                   <small>{r.kind}</small>
                 </span>
-                <Badge tone={r.status}>{deliveryLabel(r.status)}</Badge>
+                <Badge tone={deliveryTone(r.status)}>{deliveryLabel(r.status)}</Badge>
               </div>
             ))}
             <ErrorBox error={message.error} />
@@ -1138,7 +1166,7 @@ export function Suppressions({ writable }: { writable: boolean }) {
       useApi<{ email: string; reason: string; protected?: boolean; created_at: string }[]>(
         'suppressions',
       ),
-    create = useAction('suppressions');
+    create = useAction('suppressions', 'POST', false, { successMessage: 'Address suppressed' });
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -1152,8 +1180,13 @@ export function Suppressions({ writable }: { writable: boolean }) {
           </Button>
         }
       />
-      <ErrorBox error={query.error} />
       <DataTable
+        label="Suppressions"
+        searchMode="local"
+        refreshing={query.isFetching && !query.isPending}
+        error={query.error}
+        onRetry={() => void query.refetch()}
+        onRefresh={() => void query.refetch()}
         data={query.data ?? []}
         loading={query.isPending}
         columns={[
@@ -1187,6 +1220,7 @@ export function Suppressions({ writable }: { writable: boolean }) {
       <Modal
         open={open}
         onOpenChange={setOpen}
+        pending={create.isPending}
         title="Suppress an address"
         description="Messages to this address will be skipped across your organization."
       >

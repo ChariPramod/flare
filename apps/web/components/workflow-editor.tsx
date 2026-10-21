@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { ReactFlow, Background, Controls, Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -24,6 +24,7 @@ import type { Workflow, WorkflowRow } from '../lib/api';
 import { Button, Badge, Modal, Field, ErrorBox, Loading, Empty } from './ui';
 import { ChannelIcon } from './workflow-pages';
 import { JsonEditor } from './json-editor';
+import { useEditorDraft } from './drafts';
 type Step = Workflow['steps'][number];
 type StepNodeData = {
   label: string;
@@ -74,35 +75,44 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
     useApi<{ identifier: string; name: string; current_version: number }[]>('layouts');
   const query = useApi<WorkflowRow>(`workflows/${encodeURIComponent(id)}`),
     save = useAction<WorkflowRow>(`workflows/${encodeURIComponent(id)}`, 'PUT');
-  const [workflow, setWorkflow] = useState<Workflow | null>(null),
-    [selected, setSelected] = useState(0),
+  const draft = useEditorDraft(
+    `workflow:${id}`,
+    query.data
+      ? {
+          workflow: query.data.source_definition ?? query.data.definition,
+          raw: {} as Record<string, string>,
+        }
+      : undefined,
+  );
+  const workflow = draft.value?.workflow;
+  const saving = save.isPending || draft.pending;
+  const setWorkflow = (next: Workflow) =>
+    draft.setValue((current) => ({
+      workflow: next,
+      raw: Object.fromEntries(
+        Object.entries(current.raw).filter(
+          ([key]) =>
+            key === 'schema' ||
+            next.steps.some(
+              (step) => key === `content:${step.stepId}` || key === `condition:${step.stepId}`,
+            ),
+        ),
+      ),
+    }));
+  const setRaw = (key: string, text: string) =>
+    draft.setValue((current) => ({ ...current, raw: { ...current.raw, [key]: text } }));
+  const [selected, setSelected] = useState(0),
     [insertAt, setInsertAt] = useState<number | null>(null),
     [testing, setTesting] = useState(false),
     [settings, setSettings] = useState(false),
     [error, setError] = useState<unknown>(),
     [preview, setPreview] = useState(false),
     [previewLocale, setPreviewLocale] = useState('en_US'),
-    [compiledPreview, setCompiledPreview] = useState<Workflow | null>(null),
-    [invalidEditors, setInvalidEditors] = useState<Record<string, boolean>>({});
-  const valid = (editor: string, ok: boolean) =>
-    setInvalidEditors((previous) => ({ ...previous, [editor]: !ok }));
-  const invalidJson = Object.values(invalidEditors).some(Boolean);
-  useEffect(() => {
-    if (query.data && !workflow) setWorkflow(query.data.source_definition ?? query.data.definition);
-  }, [query.data, workflow]);
-  const dirty = Boolean(
-    workflow &&
-    query.data &&
-    JSON.stringify(workflow) !==
-      JSON.stringify(query.data.source_definition ?? query.data.definition),
+    [compiledPreview, setCompiledPreview] = useState<Workflow | null>(null);
+  const invalidJson = Object.values(draft.value?.raw ?? {}).some((text) =>
+    Boolean(jsonError(text)),
   );
-  useEffect(() => {
-    const handler = (e: BeforeUnloadEvent) => {
-      if (dirty) e.preventDefault();
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [dirty]);
+  const dirty = draft.dirty;
   const nodes = useMemo(
     () => [
       {
@@ -129,12 +139,15 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
         id: step.stepId,
         type: 'step',
         position: { x: 100, y: 130 + index * 165 },
+        // ReactFlow disables pointer events on non-draggable, non-selectable
+        // nodes. Our custom step and insertion buttons still need to work.
+        style: { pointerEvents: 'all' as const },
         data: {
           label: step.name,
           kind: step.type,
           index,
           active: index === selected,
-          editable,
+          editable: editable && !saving,
           select: () => setSelected(index),
           add: () => setInsertAt(index + 1),
         },
@@ -154,7 +167,7 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
         },
       },
     ],
-    [workflow, selected, editable],
+    [workflow, selected, editable, saving],
   );
   const edges = nodes.slice(1).map((node, index) => ({
     id: `edge-${node.id}`,
@@ -171,12 +184,45 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
       </>
     );
   const step = workflow.steps[selected];
-  const change = (value: Partial<Step>) =>
-    setWorkflow({
-      ...workflow,
-      steps: workflow.steps.map((item, index) =>
-        index === selected ? { ...item, ...value } : item,
-      ),
+  const change = (value: Partial<Step>, preserveRaw: false | 'content' | 'condition' = false) =>
+    draft.setValue((current) => {
+      const previousId = current.workflow.steps[selected]?.stepId;
+      if (
+        value.stepId !== undefined &&
+        current.workflow.steps.some(
+          (item, index) => index !== selected && item.stepId === value.stepId,
+        )
+      ) {
+        setError(new Error('Each step needs a unique identifier. Your draft was kept.'));
+        return current;
+      }
+      const raw = { ...current.raw };
+      if (value.controlValues) {
+        for (const kind of ['content', 'condition']) {
+          const key = `${kind}:${previousId}`;
+          // A structured edit may replace a valid projection, never an invalid raw draft.
+          if (kind !== preserveRaw && raw[key] !== undefined && !jsonError(raw[key]))
+            delete raw[key];
+        }
+      }
+      if (value.stepId !== undefined && value.stepId !== previousId) {
+        for (const kind of ['content', 'condition']) {
+          const oldKey = `${kind}:${previousId}`;
+          if (raw[oldKey] !== undefined) {
+            raw[`${kind}:${value.stepId}`] = raw[oldKey];
+            delete raw[oldKey];
+          }
+        }
+      }
+      return {
+        raw,
+        workflow: {
+          ...current.workflow,
+          steps: current.workflow.steps.map((item, index) =>
+            index === selected ? { ...item, ...value } : item,
+          ),
+        },
+      };
     });
   const move = (direction: number) => {
     const steps = [...workflow.steps];
@@ -213,17 +259,38 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
             <Play size={14} />
             Test workflow
           </Button>
+          {dirty && (
+            <Button
+              className="compact"
+              disabled={saving}
+              onClick={() => {
+                if (window.confirm('Discard this draft and restore the saved workflow?'))
+                  draft.discard();
+              }}
+            >
+              Discard changes
+            </Button>
+          )}
           <Button
             className="primary compact"
-            disabled={!editable || !dirty || save.isPending || invalidJson}
-            onClick={() =>
-              save.mutate(workflow, {
-                onSuccess: (row) => setWorkflow(row.source_definition ?? row.definition),
-              })
-            }
+            disabled={!editable || !dirty || saving || invalidJson}
+            onClick={async () => {
+              const finish = draft.startSaving();
+              try {
+                const saved = await save.mutateAsync(workflow);
+                draft.saved(draft.value!, {
+                  workflow: saved.source_definition ?? saved.definition,
+                  raw: {},
+                });
+              } catch {
+                /* The mutation error is shown above the editor. */
+              } finally {
+                finish();
+              }
+            }}
           >
             <Save size={14} />
-            {save.isPending ? 'Saving…' : 'Save changes'}
+            {saving ? 'Saving…' : 'Save changes'}
           </Button>
         </div>
       </div>
@@ -240,7 +307,11 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
               <span className="status-dot development" />
               Workflow canvas
             </span>
-            <Button className="compact" disabled={!editable} onClick={() => setInsertAt(0)}>
+            <Button
+              className="compact"
+              disabled={!editable || saving}
+              onClick={() => setInsertAt(0)}
+            >
               <Plus size={14} />
               Add first step
             </Button>
@@ -284,7 +355,7 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
                   <button
                     className="icon-button"
                     aria-label="Move step up"
-                    disabled={!editable || selected === 0}
+                    disabled={!editable || saving || selected === 0}
                     onClick={() => move(-1)}
                   >
                     <ChevronUp size={14} />
@@ -292,7 +363,7 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
                   <button
                     className="icon-button"
                     aria-label="Move step down"
-                    disabled={!editable || selected === workflow.steps.length - 1}
+                    disabled={!editable || saving || selected === workflow.steps.length - 1}
                     onClick={() => move(1)}
                   >
                     <ChevronDown size={14} />
@@ -309,7 +380,7 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
                   <Field label="Step name">
                     <input
                       value={step.name}
-                      disabled={!editable}
+                      disabled={!editable || saving}
                       onChange={(e) => change({ name: e.target.value })}
                     />
                   </Field>
@@ -317,7 +388,7 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
                     <input
                       className="mono"
                       value={step.stepId}
-                      disabled={!editable}
+                      disabled={!editable || saving}
                       onChange={(e) => change({ stepId: e.target.value })}
                     />
                   </Field>
@@ -336,7 +407,9 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
                   <Field label="Channel enabled">
                     <select
                       disabled={
-                        !editable || !['email', 'in_app', 'sms', 'push', 'chat'].includes(step.type)
+                        !editable ||
+                        saving ||
+                        !['email', 'in_app', 'sms', 'push', 'chat'].includes(step.type)
                       }
                       value={String(workflow.preferences[step.type] ?? true)}
                       onChange={(e) =>
@@ -355,7 +428,7 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
                   </Field>
                   <Button
                     className="danger compact"
-                    disabled={!editable}
+                    disabled={!editable || saving}
                     onClick={() => {
                       setWorkflow({
                         ...workflow,
@@ -376,7 +449,7 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
                   {step.type === 'email' && (
                     <Field label="Email layout">
                       <select
-                        disabled={!editable}
+                        disabled={!editable || saving}
                         value={String(step.controlValues.layoutIdentifier ?? '')}
                         onChange={(e) => {
                           const {
@@ -410,7 +483,7 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
                       <input
                         type="number"
                         min="1"
-                        disabled={!editable}
+                        disabled={!editable || saving}
                         value={Number(step.controlValues.layoutVersion ?? 1)}
                         onChange={(e) =>
                           change({
@@ -426,9 +499,10 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
                   <ControlEditor
                     key={step.stepId}
                     value={step.controlValues}
-                    disabled={!editable}
-                    onValidity={(ok) => valid('content', ok)}
-                    onChange={(controlValues) => change({ controlValues })}
+                    disabled={!editable || saving}
+                    raw={draft.value?.raw[`content:${step.stepId}`]}
+                    onRawChange={(text) => setRaw(`content:${step.stepId}`, text)}
+                    onChange={(controlValues) => change({ controlValues }, 'content')}
                   />
                   <Field label="Preview locale">
                     <input
@@ -438,6 +512,7 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
                   </Field>
                   <Button
                     className="compact"
+                    disabled={invalidJson}
                     onClick={async () => {
                       try {
                         const result = await api<{
@@ -464,10 +539,13 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
                 </Tabs.Content>
                 <Tabs.Content value="conditions" className="step-content">
                   <ConditionEditor
-                    onValidity={(ok) => valid('condition', ok)}
-                    disabled={!editable}
+                    raw={draft.value?.raw[`condition:${step.stepId}`]}
+                    onRawChange={(text) => setRaw(`condition:${step.stepId}`, text)}
+                    disabled={!editable || saving}
                     value={step.controlValues}
-                    onChange={(controlValues) => change({ controlValues })}
+                    onChange={(controlValues, preserveRaw) =>
+                      change({ controlValues }, preserveRaw ? 'condition' : false)
+                    }
                   />
                 </Tabs.Content>
               </Tabs.Root>
@@ -481,6 +559,7 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
       </div>
       <Modal
         open={insertAt !== null}
+        pending={saving}
         onOpenChange={(v) => !v && setInsertAt(null)}
         title="Add a step"
         description="Choose how the workflow reaches your subscribers."
@@ -521,18 +600,24 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
           ))}
         </div>
       </Modal>
-      <Modal open={settings} onOpenChange={setSettings} title="Workflow settings" wide>
+      <Modal
+        open={settings}
+        onOpenChange={setSettings}
+        title="Workflow settings"
+        pending={saving}
+        wide
+      >
         <div className="form-grid">
           <Field label="Name">
             <input
-              disabled={!editable}
+              disabled={!editable || saving}
               value={workflow.name}
               onChange={(e) => setWorkflow({ ...workflow, name: e.target.value })}
             />
           </Field>
           <Field label="Severity">
             <select
-              disabled={!editable}
+              disabled={!editable || saving}
               value={workflow.severity}
               onChange={(e) => setWorkflow({ ...workflow, severity: e.target.value })}
             >
@@ -544,14 +629,14 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
         </div>
         <Field label="Description">
           <textarea
-            disabled={!editable}
+            disabled={!editable || saving}
             value={workflow.description}
             onChange={(e) => setWorkflow({ ...workflow, description: e.target.value })}
           />
         </Field>
         <Field label="Tags" hint="Separate tags with commas.">
           <input
-            disabled={!editable}
+            disabled={!editable || saving}
             value={workflow.tags.join(', ')}
             onChange={(e) =>
               setWorkflow({
@@ -572,7 +657,7 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
           <input
             className="switch"
             type="checkbox"
-            disabled={!editable}
+            disabled={!editable || saving}
             checked={workflow.active}
             onChange={(e) => setWorkflow({ ...workflow, active: e.target.checked })}
           />
@@ -585,7 +670,7 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
           <input
             className="switch"
             type="checkbox"
-            disabled={!editable}
+            disabled={!editable || saving}
             checked={workflow.critical}
             onChange={(e) => setWorkflow({ ...workflow, critical: e.target.checked })}
           />
@@ -593,12 +678,15 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
         <h3>Payload JSON Schema</h3>
         <ControlEditor
           value={workflow.payloadSchema}
-          onValidity={(ok) => valid('schema', ok)}
-          disabled={!editable}
+          raw={draft.value?.raw.schema}
+          onRawChange={(text) => setRaw('schema', text)}
+          disabled={!editable || saving}
           onChange={(payloadSchema) => setWorkflow({ ...workflow, payloadSchema })}
         />
         <div className="dialog-actions">
-          <Button onClick={() => setSettings(false)}>Done</Button>
+          <Button disabled={saving} onClick={() => setSettings(false)}>
+            Done
+          </Button>
         </div>
       </Modal>
       <Modal open={preview} onOpenChange={setPreview} title="Content preview">
@@ -633,51 +721,38 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
     </>
   );
 }
+function jsonError(text: string) {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') return 'Use a JSON object';
+    return '';
+  } catch (error) {
+    return error instanceof Error ? error.message : 'Invalid JSON';
+  }
+}
 function ControlEditor({
   value,
+  raw,
+  onRawChange,
   onChange,
   disabled,
-  onValidity,
 }: {
   value: Record<string, unknown>;
+  raw?: string;
+  onRawChange: (text: string) => void;
   onChange: (value: Record<string, unknown>) => void;
   disabled: boolean;
-  onValidity?: (valid: boolean) => void;
 }) {
-  const [text, setText] = useState(pretty(value)),
-    [error, setError] = useState('');
-  useEffect(() => {
-    onValidity?.(true);
-    return () => onValidity?.(true);
-  }, []);
-  useEffect(() => {
-    try {
-      if (JSON.stringify(JSON.parse(text)) === JSON.stringify(value)) return;
-    } catch {
-      // A new external value replaces an invalid draft.
-    }
-    setText(pretty(value));
-    setError('');
-    onValidity?.(true);
-  }, [value]);
+  const text = raw ?? pretty(value);
+  const error = jsonError(text);
   return (
     <>
       <JsonEditor
         value={text}
         readOnly={disabled}
         onChange={(text) => {
-          setText(text);
-          try {
-            const parsed: unknown = JSON.parse(text);
-            if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object')
-              throw new Error('Use a JSON object');
-            onChange(parsed as Record<string, unknown>);
-            setError('');
-            onValidity?.(true);
-          } catch (e) {
-            setError(e instanceof Error ? e.message : 'Invalid JSON');
-            onValidity?.(false);
-          }
+          onRawChange(text);
+          if (!jsonError(text)) onChange(JSON.parse(text) as Record<string, unknown>);
         }}
       />
       <ErrorBox error={error} />
@@ -688,12 +763,14 @@ function ConditionEditor({
   value,
   onChange,
   disabled,
-  onValidity,
+  raw,
+  onRawChange,
 }: {
   value: Record<string, unknown>;
-  onChange: (value: Record<string, unknown>) => void;
+  onChange: (value: Record<string, unknown>, preserveRaw?: boolean) => void;
   disabled: boolean;
-  onValidity?: (valid: boolean) => void;
+  raw?: string;
+  onRawChange: (text: string) => void;
 }) {
   const [path, setPath] = useState('payload.plan'),
     [expected, setExpected] = useState('premium');
@@ -723,10 +800,11 @@ function ConditionEditor({
       </Button>
       <h3>JSON Logic</h3>
       <ControlEditor
-        onValidity={onValidity}
+        raw={raw}
+        onRawChange={onRawChange}
         value={(value.skip as Record<string, unknown>) ?? {}}
         disabled={disabled}
-        onChange={(skip) => onChange({ ...value, skip })}
+        onChange={(skip) => onChange({ ...value, skip }, true)}
       />
     </>
   );
@@ -754,6 +832,7 @@ function TestWorkflow({
   return (
     <Modal
       open
+      pending={busy}
       onOpenChange={(v) => !v && close()}
       title="Test workflow"
       description="Trigger the saved workflow for a subscriber and follow its activity."
@@ -763,16 +842,18 @@ function TestWorkflow({
         <div className="info-banner">Save your changes first to test the latest version.</div>
       )}
       <Field label="Subscriber ID">
-        <input value={subscriber} onChange={(e) => setSubscriber(e.target.value)} />
+        <input disabled={busy} value={subscriber} onChange={(e) => setSubscriber(e.target.value)} />
       </Field>
       <h3>
         <Braces size={14} />
         Payload
       </h3>
-      <JsonEditor value={payload} onChange={setPayload} />
+      <JsonEditor value={payload} onChange={setPayload} readOnly={busy} />
       <ErrorBox error={error} />
       <div className="dialog-actions">
-        <Button onClick={close}>Close</Button>
+        <Button onClick={close} disabled={busy}>
+          Close
+        </Button>
         <Button
           className="primary"
           disabled={!subscriber || busy || dirty}

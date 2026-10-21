@@ -62,10 +62,24 @@ export function useApi<T>(path: string, interval?: number) {
     retry: false,
   });
 }
-export function useAction<T = unknown>(path: string, method = 'POST', idempotent = false) {
+export function useAction<T = unknown>(
+  path: string,
+  method = 'POST',
+  idempotent = false,
+  options: { successMessage?: string | false } = {},
+) {
   const client = useQueryClient();
   const submission = useRef<{ body: string; key: string } | null>(null);
   return useMutation({
+    meta: {
+      successMessage:
+        options.successMessage ??
+        (method === 'DELETE'
+          ? 'Deleted'
+          : method === 'PUT' || method === 'PATCH'
+            ? 'Changes saved'
+            : 'Request completed'),
+    },
     mutationFn: (body: unknown) => {
       const serialized = JSON.stringify(body);
       if (idempotent) {

@@ -48,7 +48,7 @@ async function compose(page: Page) {
   await page.goto('/emails');
   await page.getByRole('button', { name: 'Send email', exact: true }).click();
   await page.getByLabel('From', { exact: true }).fill('sender@attachments.example.test');
-  await page.getByRole('textbox', { name: /^To / }).fill('reader@example.test');
+  await page.getByRole('textbox', { name: 'To', exact: true }).fill('reader@example.test');
   await page.getByLabel('Subject', { exact: true }).fill('Retained draft');
   await page.getByLabel('Message body').fill('Preserve this draft while the API recovers.');
   return page.getByRole('dialog');

@@ -37,11 +37,17 @@ export function DeadLettersPage({ writable }: { writable: boolean }) {
         title="Dead letters"
         description="Inspect failed work and retry eligible operations with their original identity. Ambiguous acceptance requires investigation."
       />
-      <ErrorBox error={rows.error} />
       {rows.isLoading ? (
         <Loading />
       ) : (
         <DataTable
+          label="Dead letters"
+          searchMode="local"
+          loading={rows.isPending}
+          refreshing={rows.isFetching && !rows.isPending}
+          error={rows.error}
+          onRetry={() => void rows.refetch()}
+          onRefresh={() => void rows.refetch()}
           paginate={false}
           data={rows.data?.data ?? []}
           columns={[
@@ -84,6 +90,7 @@ export function DeadLettersPage({ writable }: { writable: boolean }) {
           setSelected(null);
           setError(undefined);
         }}
+        pending={busy}
         title="Inspect failed operation"
         description="Redrive is audited and keeps the original operation ID. Fix the underlying configuration before retrying."
       >

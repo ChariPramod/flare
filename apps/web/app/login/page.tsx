@@ -108,9 +108,12 @@ export default function Login() {
           )}
           {exchange ? (
             <form
+              aria-busy={busy || undefined}
               onSubmit={(e) => {
                 e.preventDefault();
+                if (busy) return;
                 setBusy(true);
+                setError(undefined);
                 void api<{ operator_only?: boolean }>('auth/exchange', 'POST', {
                   code: exchange,
                   ...(mfa ? { mfa_code: mfa } : {}),
@@ -129,6 +132,7 @@ export default function Login() {
               >
                 <input
                   autoComplete="one-time-code"
+                  disabled={busy}
                   value={mfa}
                   onChange={(e) => setMfa(e.target.value)}
                 />
@@ -143,21 +147,25 @@ export default function Login() {
               </p>
             </form>
           ) : (
-            <form onSubmit={submit}>
-              <Field label="Work email">
+            <form onSubmit={submit} noValidate aria-busy={busy || undefined}>
+              <Field
+                label="Work email"
+                error={errors.email ? 'Enter a valid email address.' : undefined}
+              >
                 <input
                   type="email"
                   autoComplete="username"
                   placeholder="you@paretolabs.com"
+                  disabled={busy}
                   {...register('email')}
                 />
-                {errors.email && <small className="danger">Enter a valid email address.</small>}
               </Field>
-              <Field label="Password">
+              <Field label="Password" error={errors.password ? 'Enter your password.' : undefined}>
                 <input
                   type="password"
                   autoComplete="current-password"
                   placeholder="Enter your password"
+                  disabled={busy}
                   {...register('password')}
                 />
               </Field>
@@ -168,6 +176,7 @@ export default function Login() {
                 <input
                   autoComplete="one-time-code"
                   placeholder="6-digit code"
+                  disabled={busy}
                   {...register('code')}
                 />
               </Field>
@@ -177,6 +186,21 @@ export default function Login() {
                 <ArrowRight size={16} />
               </Button>
             </form>
+          )}
+          {config.error && (
+            <div className={styles.configError}>
+              <p role="status">
+                Single sign-on options could not be loaded. You can retry or use your password.
+              </p>
+              <Button
+                type="button"
+                className="compact"
+                onClick={() => void config.refetch()}
+                disabled={config.isFetching}
+              >
+                {config.isFetching ? 'Retrying…' : 'Retry sign-in options'}
+              </Button>
+            </div>
           )}
           {config.data?.oidc_url && (
             <a className={`button full ${styles.sso}`} href={config.data.oidc_url}>

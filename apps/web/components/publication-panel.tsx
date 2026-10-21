@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, useApi, pretty, date } from '../lib/api';
 import { Modal, Button, ErrorBox, Badge } from './ui';
@@ -41,20 +41,24 @@ export function PublicationPanel({
     [operation, setOperation] = useState<string | null>(null),
     [error, setError] = useState<unknown>(),
     [busy, setBusy] = useState(false);
+  const accepting = useRef(false);
   const count = Object.values(selected).reduce((n, v) => n + v.length, 0);
   return (
     <Modal
       open={open}
+      pending={busy}
       onOpenChange={(v) => !v && close()}
       onCloseAutoFocus={onCloseAutoFocus}
       title="Publish to Production"
       description="Review selected resources and their required content. Subscribers, integrations and topics stay in their environment."
       wide
     >
-      <ErrorBox error={error ?? diff.error} />
+      <ErrorBox error={!operation && (error ?? diff.error)} />
       {operation ? (
         <PublicationStatus
+          key={operation}
           id={operation}
+          onPendingChange={setBusy}
           review={() => {
             setOperation(null);
             void diff.refetch();
@@ -75,6 +79,7 @@ export function PublicationPanel({
                     <label className="selection-row" key={item.identifier}>
                       <input
                         type="checkbox"
+                        disabled={busy}
                         checked={selected[kind]!.includes(item.identifier)}
                         onChange={(e) =>
                           setSelected({
@@ -117,22 +122,30 @@ export function PublicationPanel({
             ))}
           </div>
           <div className="dialog-actions">
-            <Button onClick={close}>Close</Button>
+            <Button disabled={busy} onClick={close}>
+              Close
+            </Button>
             <Button
               className="primary"
               disabled={!count || busy}
               onClick={async () => {
+                if (accepting.current) return;
+                accepting.current = true;
                 setBusy(true);
+                setError(undefined);
                 try {
                   const result = await api<{ id: string }>('publish', 'POST', {
                     ...selected,
                     diff_token: diff.data?.diff_token,
                   });
                   setOperation(result.id);
-                  await recent.refetch();
+                  // Acceptance is complete once the durable ID is known. A history
+                  // refresh must not trap this dialog or turn acceptance into an error.
+                  void recent.refetch();
                 } catch (e) {
                   setError(e);
                 } finally {
+                  accepting.current = false;
                   setBusy(false);
                 }
               }}
@@ -143,9 +156,19 @@ export function PublicationPanel({
         </>
       )}
       <h3>Recent publications</h3>
+      <ErrorBox error={recent.error} />
+      {recent.error && (
+        <Button
+          className="compact"
+          disabled={busy || recent.isFetching}
+          onClick={() => void recent.refetch()}
+        >
+          Retry publication history
+        </Button>
+      )}
       {recent.data?.slice(0, 5).map((item) => (
         <p key={item.id}>
-          <Button className="compact" onClick={() => setOperation(item.id)}>
+          <Button className="compact" disabled={busy} onClick={() => setOperation(item.id)}>
             {item.status} · {date(item.created_at)}
           </Button>
         </p>
@@ -153,7 +176,15 @@ export function PublicationPanel({
     </Modal>
   );
 }
-function PublicationStatus({ id, review }: { id: string; review: () => void }) {
+function PublicationStatus({
+  id,
+  review,
+  onPendingChange,
+}: {
+  id: string;
+  review: () => void;
+  onPendingChange: (pending: boolean) => void;
+}) {
   const query = useApi<{
       status: string;
       error: string | null;
@@ -167,14 +198,31 @@ function PublicationStatus({ id, review }: { id: string; review: () => void }) {
       }[];
     }>(`publications/${id}`, 2000),
     client = useQueryClient(),
-    [error, setError] = useState<unknown>();
+    [error, setError] = useState<unknown>(),
+    [retrying, setRetrying] = useState(false),
+    [retryAccepted, setRetryAccepted] = useState(false);
+  const accepting = useRef(false);
   return (
     <div className="stack">
       <p>
         Publication <code>{id}</code>
       </p>
       <Badge>{query.data?.status ?? 'Loading'}</Badge>
-      <ErrorBox error={query.error ?? error ?? query.data?.error} />
+      <ErrorBox error={error} />
+      <ErrorBox error={query.error} />
+      <ErrorBox error={query.data?.error} />
+      {query.error && (
+        <Button
+          className="compact"
+          disabled={retrying || query.isFetching}
+          onClick={() => void query.refetch()}
+        >
+          Refresh publication status
+        </Button>
+      )}
+      {retryAccepted && (
+        <p role="status">Retry accepted. Closing this dialog does not cancel the operation.</p>
+      )}
       {query.data?.items.map((item) => (
         <div className="selection-row" key={item.id}>
           <strong>
@@ -189,20 +237,34 @@ function PublicationStatus({ id, review }: { id: string; review: () => void }) {
         <p>All selected resources and engine updates are verified.</p>
       )}
       {query.data?.status === 'failed' && (
-        <Button onClick={review}>Review corrected resources for replacement</Button>
+        <Button disabled={retrying} onClick={review}>
+          Review corrected resources for replacement
+        </Button>
       )}
       {query.data?.status === 'failed' && (
         <Button
+          disabled={retrying || query.isFetching || Boolean(query.error)}
           onClick={async () => {
+            if (accepting.current) return;
+            accepting.current = true;
+            setRetrying(true);
+            onPendingChange(true);
+            setError(undefined);
+            setRetryAccepted(false);
             try {
               await api(`publications/${id}/retry`, 'POST', {});
-              await client.invalidateQueries();
+              setRetryAccepted(true);
+              void client.invalidateQueries();
             } catch (e) {
               setError(e);
+            } finally {
+              accepting.current = false;
+              setRetrying(false);
+              onPendingChange(false);
             }
           }}
         >
-          Retry publication
+          {retrying ? 'Accepting retry…' : 'Retry publication'}
         </Button>
       )}
     </div>

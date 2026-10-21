@@ -81,7 +81,9 @@ export function AutomationsPage({
   const query = useApi<Automation[]>('automations');
   const [creating, setCreating] = useState(false),
     [error, setError] = useState<unknown>();
-  const create = useAction<Automation>('automations'),
+  const create = useAction<Automation>('automations', 'POST', false, {
+      successMessage: 'Automation created',
+    }),
     router = useRouter();
   if (id?.startsWith('runs/')) return <RunDetail id={id.slice(5)} writable={writable} />;
   if (id) return <AutomationDetail key={id} id={id} editable={editable} writable={writable} />;
@@ -97,8 +99,15 @@ export function AutomationsPage({
           </Button>
         }
       />
-      <ErrorBox error={query.error || error} />
+      <ErrorBox error={error} />
       <DataTable
+        label="Automations"
+        searchMode="local"
+        loading={query.isPending}
+        refreshing={query.isFetching && !query.isPending}
+        error={query.error}
+        onRetry={() => void query.refetch()}
+        onRefresh={() => void query.refetch()}
         data={query.data ?? []}
         columns={[
           {
@@ -122,6 +131,7 @@ export function AutomationsPage({
       <Modal
         open={creating}
         onOpenChange={setCreating}
+        pending={create.isPending}
         title="Create automation"
         description="Start paused, configure the sequence, then enable it for new events."
       >
@@ -174,8 +184,13 @@ function AutomationDetail({
       )}
       <section className="panel">
         <h2>Recent runs</h2>
-        <ErrorBox error={runs.error} />
-        <RunTable runs={runs.data ?? []} />
+        <RunTable
+          runs={runs.data ?? []}
+          loading={runs.isPending}
+          refreshing={runs.isFetching && !runs.isPending}
+          error={runs.error}
+          onRefresh={() => void runs.refetch()}
+        />
       </section>
     </>
   );
@@ -196,7 +211,9 @@ function SequenceEditor({
     [error, setError] = useState<unknown>(),
     [testing, setTesting] = useState(false);
   const save = useAction(`automations/${value.id}`, 'PUT'),
-    event = useAction('automation-events');
+    event = useAction('automation-events', 'POST', false, {
+      successMessage: 'Automation event accepted',
+    });
   const templates = useApi<{ id: string; name: string; current_version: number }[]>('templates');
   const step = definition.steps.find((s) => s.id === selected);
   const update = (patch: Partial<Step>) =>
@@ -508,6 +525,7 @@ function SequenceEditor({
       <Modal
         open={testing}
         onOpenChange={setTesting}
+        pending={event.isPending}
         title="Send a real test event"
         description="This starts every enabled automation matching the event in this environment and can send email."
       >
@@ -581,9 +599,28 @@ function ConditionInput({
     </Field>
   );
 }
-function RunTable({ runs }: { runs: Run[] }) {
+function RunTable({
+  runs,
+  loading,
+  refreshing,
+  error,
+  onRefresh,
+}: {
+  runs: Run[];
+  loading: boolean;
+  refreshing: boolean;
+  error: unknown;
+  onRefresh: () => void;
+}) {
   return (
     <DataTable
+      label="Automation runs"
+      searchMode="local"
+      loading={loading}
+      refreshing={refreshing}
+      error={error}
+      onRetry={onRefresh}
+      onRefresh={onRefresh}
       data={runs}
       columns={[
         {
@@ -613,7 +650,9 @@ function RunTable({ runs }: { runs: Run[] }) {
 }
 function RunDetail({ id, writable }: { id: string; writable: boolean }) {
   const query = useApi<Run>(`automation-runs/${id}`, 2000),
-    cancel = useAction(`automation-runs/${id}/cancel`),
+    cancel = useAction(`automation-runs/${id}/cancel`, 'POST', false, {
+      successMessage: 'Automation cancellation requested',
+    }),
     run = query.data;
   return (
     <>
@@ -621,7 +660,8 @@ function RunDetail({ id, writable }: { id: string; writable: boolean }) {
         ← Automation
       </Link>
       <PageHeader title="Automation run" description={id} />
-      <ErrorBox error={query.error || run?.error || cancel.error} />
+      <ErrorBox error={(!run && query.error) || run?.error || cancel.error} />
+      {query.isPending && <Loading />}
       {run && (
         <>
           <div className="inline-tags">
@@ -631,6 +671,13 @@ function RunDetail({ id, writable }: { id: string; writable: boolean }) {
           </div>
           <section className="panel">
             <DataTable
+              label="Automation run steps"
+              searchMode="none"
+              loading={query.isPending}
+              refreshing={query.isFetching && !query.isPending}
+              error={query.error}
+              onRetry={() => void query.refetch()}
+              onRefresh={() => void query.refetch()}
               paginate={false}
               data={run.steps ?? []}
               columns={[

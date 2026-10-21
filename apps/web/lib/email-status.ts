@@ -9,3 +9,8 @@ export function deliveryLabel(status: string) {
     }[status] ?? status.replaceAll('_', ' ')
   );
 }
+
+/** Provider acceptance is an intermediate outcome, separate from delivery. */
+export function deliveryTone(status: string) {
+  return status === 'sent' ? 'accepted' : status;
+}

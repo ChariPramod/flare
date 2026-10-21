@@ -2,6 +2,37 @@
   flex-wrap: wrap;
 }
 
+.errorState {
+  padding: 0 18px 18px;
+}
+
+.dialogLayout:global(.dialog) {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.dialogHeader:global(.dialog-header) {
+  margin-bottom: 0;
+  padding-bottom: 22px;
+}
+
+.dialogBody {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 3px;
+  margin: -3px;
+}
+
+.dialogBody :global(.dialog-actions) {
+  position: sticky;
+  bottom: -3px;
+  z-index: 1;
+  padding-block: 16px 3px;
+  background: var(--panel);
+}
+
 .search {
   flex: 1 1 240px;
   min-width: 0;
@@ -83,6 +114,14 @@
 .noResults p {
   max-width: 360px;
   margin: 0 auto 18px;
+}
+
+@media (max-width: 900px), (pointer: coarse) {
+  .clear {
+    flex-basis: 44px;
+    width: 44px;
+    height: 44px;
+  }
 }
 
 @media (max-width: 600px) {

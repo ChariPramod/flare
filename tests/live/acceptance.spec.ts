@@ -59,7 +59,7 @@ test('live domain DNS screen → email → provider acceptance', async ({ page }
   await page.getByRole('link', { name: 'Emails', exact: true }).click();
   await page.getByRole('button', { name: 'Send email', exact: true }).click();
   await page.getByLabel('From', { exact: true }).fill(required('E2E_FROM'));
-  await page.getByRole('textbox', { name: /^To / }).fill(required('E2E_TO'));
+  await page.getByRole('textbox', { name: 'To', exact: true }).fill(required('E2E_TO'));
   const subject = `Live acceptance ${Date.now()}`;
   await page.getByLabel('Subject', { exact: true }).fill(subject);
   await page.locator('textarea[name="body"]').fill('Flare live acceptance test.');

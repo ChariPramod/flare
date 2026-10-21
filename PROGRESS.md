@@ -4,6 +4,8 @@ Updated: 2026-10-21, America/Los_Angeles.
 
 ## Current work — frontend refinement
 
+- **Checkpoint 2 — interaction safety:** in-memory drafts, serialized context changes, explicit table states, Contacts server search and form/authentication/preference recovery are implemented. All 13 focused editor cases and the complete 110-scenario Chrome suite pass, with Linux visual cases handled separately. The final full checkpoint and formatting checks pass after these changes.
+
 - **Checkpoint 1 — baseline and foundations:** shared typography/spacing, pre-paint themes, responsive shell/Overview and bounded native Inbox are ready. The full local checkpoint (904 tests, 25 evals), 79 integration tests and 110 Chrome browser scenarios pass; the two visual-reference scenarios run separately on Linux. Final Linux visual and disposable full-stack checks continue before the final checkpoint.
 
 - **UI refinement implemented; final verification underway:** [the refinement plan](docs/planning/ui-refinement.md) now has a shared 36/30px page-heading, 22px section-heading and 24/16px panel scale, pre-paint themes, responsive navigation and policy-first Overview. Explicit table states, server-backed Contacts search, linked field feedback and guarded pending dialogs are implemented. Workflow/layout/template/translation drafts stay in memory through navigation, failed saves and failed environment changes; successful switches, logout and confirmed expiry clear them. Independent review covered delayed saves, immutable version history and incomplete step identifiers. Preserve unrelated local documentation.

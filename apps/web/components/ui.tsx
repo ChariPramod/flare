@@ -9,6 +9,7 @@ import {
   SearchX,
   ChevronLeft,
   ChevronRight,
+  RefreshCw,
 } from 'lucide-react';
 import {
   flexRender,
@@ -19,7 +20,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import type { ColumnDef } from '@tanstack/react-table';
-import { useEffect, useRef, useState } from 'react';
+import { Children, cloneElement, isValidElement, useEffect, useId, useRef, useState } from 'react';
 import styles from './ui-table.module.css';
 
 const tablePageSizes = [10, 25, 50, 100];
@@ -93,6 +94,7 @@ export function Modal({
   children,
   wide = false,
   onCloseAutoFocus,
+  pending = false,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -101,27 +103,44 @@ export function Modal({
   children: ReactNode;
   wide?: boolean;
   onCloseAutoFocus?: (event: Event) => void;
+  pending?: boolean;
 }) {
+  const descriptionId = useId();
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <Dialog.Root
+      open={open}
+      onOpenChange={(value) => {
+        if (!pending) onOpenChange(value);
+      }}
+    >
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
         <Dialog.Content
-          className={`dialog ${wide ? 'wide' : ''}`}
+          className={`dialog ${styles.dialogLayout} ${wide ? 'wide' : ''}`}
           onCloseAutoFocus={onCloseAutoFocus}
+          onEscapeKeyDown={(event) => {
+            if (pending) event.preventDefault();
+          }}
+          onInteractOutside={(event) => {
+            if (pending) event.preventDefault();
+          }}
+          aria-busy={pending || undefined}
+          aria-describedby={description ? descriptionId : undefined}
         >
-          <div className="dialog-header">
+          <div className={`dialog-header ${styles.dialogHeader}`}>
             <div>
               <Dialog.Title>{title}</Dialog.Title>
-              <Dialog.Description>{description}</Dialog.Description>
+              {description && (
+                <Dialog.Description id={descriptionId}>{description}</Dialog.Description>
+              )}
             </div>
             <Dialog.Close asChild>
-              <button className="icon-button" aria-label="Close">
+              <button className="icon-button" aria-label="Close" disabled={pending}>
                 <X size={18} />
               </button>
             </Dialog.Close>
           </div>
-          {children}
+          <div className={styles.dialogBody}>{children}</div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -131,17 +150,78 @@ export function Field({
   label,
   children,
   hint,
+  error,
 }: {
   label: string;
   children: ReactNode;
   hint?: string;
+  error?: string;
 }) {
+  const generatedId = useId();
+  const controls = Children.toArray(children);
+  const control = controls.find(
+    (child) =>
+      isValidElement(child) && ['input', 'select', 'textarea'].includes(String(child.type)),
+  );
+  const existing = isValidElement<{ id?: string }>(control) ? control.props.id : undefined;
+  const id = existing ?? generatedId;
+  let linked = false;
+  const content = Children.map(children, (child) => {
+    if (
+      linked ||
+      !isValidElement<{ id?: string; 'aria-describedby'?: string; 'aria-invalid'?: boolean }>(
+        child,
+      ) ||
+      !['input', 'select', 'textarea'].includes(String(child.type))
+    )
+      return child;
+    linked = true;
+    const describedBy = [
+      child.props['aria-describedby'],
+      hint ? `${id}-hint` : '',
+      error ? `${id}-error` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    return cloneElement(child, {
+      id,
+      'aria-describedby': describedBy || undefined,
+      'aria-invalid': error ? true : child.props['aria-invalid'],
+    });
+  });
+  if (!control)
+    return (
+      <div
+        className="field"
+        role="group"
+        aria-labelledby={`${id}-label`}
+        aria-describedby={hint ? `${id}-hint` : undefined}
+      >
+        <span id={`${id}-label`} className="field-label">
+          {label}
+        </span>
+        {children}
+        {hint && <small id={`${id}-hint`}>{hint}</small>}
+        {error && (
+          <small className="danger" role="alert">
+            {error}
+          </small>
+        )}
+      </div>
+    );
   return (
-    <label className="field">
-      <span>{label}</span>
-      {children}
-      {hint && <small>{hint}</small>}
-    </label>
+    <div className="field">
+      <label className="field-label" htmlFor={id}>
+        {label}
+      </label>
+      {content}
+      {hint && <small id={`${id}-hint`}>{hint}</small>}
+      {error && (
+        <small className="danger" id={`${id}-error`} role="alert">
+          {error}
+        </small>
+      )}
+    </div>
   );
 }
 export function DataTable<T>({
@@ -152,6 +232,13 @@ export function DataTable<T>({
   urlStateKey = '',
   label,
   loading,
+  refreshing = false,
+  error,
+  onRetry,
+  onRefresh,
+  searchMode = 'local',
+  searchValue = '',
+  onSearchChange,
 }: {
   data: T[];
   columns: ColumnDef<T>[];
@@ -162,6 +249,13 @@ export function DataTable<T>({
   label?: string;
   /** Keep persisted page state while an asynchronous data set is loading. */
   loading?: boolean;
+  refreshing?: boolean;
+  error?: unknown;
+  onRetry?: () => void;
+  onRefresh?: () => void;
+  searchMode?: 'local' | 'external' | 'none';
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
 }) {
   const [filter, setFilter] = useState('');
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
@@ -174,7 +268,7 @@ export function DataTable<T>({
     if (!paginate) return;
     const read = () => {
       const params = new URLSearchParams(location.search);
-      setFilter(params.get(filterKey) ?? '');
+      if (searchMode === 'local') setFilter(params.get(filterKey) ?? '');
       const page = Number(params.get(pageKey) ?? 1);
       const pageSize = Number(params.get(pageSizeKey) ?? 25);
       setPagination({
@@ -185,12 +279,14 @@ export function DataTable<T>({
     read();
     window.addEventListener('popstate', read);
     return () => window.removeEventListener('popstate', read);
-  }, [paginate, filterKey, pageKey, pageSizeKey]);
+  }, [paginate, filterKey, pageKey, pageSizeKey, searchMode]);
   const syncUrl = (q: string, page: number, push = false, pageSize = pagination.pageSize) => {
     if (!paginate) return;
     const url = new URL(location.href);
-    if (q) url.searchParams.set(filterKey, q);
-    else url.searchParams.delete(filterKey);
+    if (searchMode === 'local') {
+      if (q) url.searchParams.set(filterKey, q);
+      else url.searchParams.delete(filterKey);
+    }
     if (page > 0) url.searchParams.set(pageKey, String(page + 1));
     else url.searchParams.delete(pageKey);
     if (pageSize !== 25) url.searchParams.set(pageSizeKey, String(pageSize));
@@ -207,6 +303,7 @@ export function DataTable<T>({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    manualFiltering: searchMode !== 'local',
     getPaginationRowModel: paginate ? getPaginationRowModel() : undefined,
     autoResetPageIndex: false,
   });
@@ -220,13 +317,14 @@ export function DataTable<T>({
     ? Math.min((pagination.pageIndex + 1) * pagination.pageSize, filteredCount)
     : filteredCount;
   const clearSearch = () => {
+    if (searchMode === 'external') onSearchChange?.('');
     setFilter('');
     setPagination((current) => ({ ...current, pageIndex: 0 }));
     syncUrl('', 0);
     searchInput.current?.focus();
   };
   useEffect(() => {
-    if (!paginate || loading) return;
+    if (!paginate || loading || error) return;
     if (loading === false || data.length > 0) hasLoadedData.current = true;
     // A disappearing last page should reveal the remaining rows. Do not clamp
     // initial URL restoration against an empty, not-yet-loaded data set.
@@ -246,34 +344,45 @@ export function DataTable<T>({
     pagination.pageIndex,
     pagination.pageSize,
     pageKey,
+    error,
   ]);
+  const visibleFilter =
+    searchMode === 'external' ? searchValue : searchMode === 'local' ? filter : '';
   return (
-    <div className="table-panel" aria-busy={loading || undefined}>
+    <div className="table-panel" aria-busy={loading || refreshing || undefined}>
       <div className={`table-toolbar ${styles.toolbar}`}>
-        <div className={`search-field ${styles.search}`}>
-          <Search size={15} aria-hidden="true" />
-          <input
-            ref={searchInput}
-            aria-label={searchPlaceholder}
-            placeholder={searchPlaceholder}
-            value={filter}
-            onChange={(e) => {
-              setFilter(e.target.value);
-              setPagination({ ...pagination, pageIndex: 0 });
-              syncUrl(e.target.value, 0);
-            }}
-          />
-          {filter && (
-            <button
-              type="button"
-              className={styles.clear}
-              onClick={clearSearch}
-              aria-label="Clear search"
-            >
-              <X size={14} aria-hidden="true" />
-            </button>
-          )}
-        </div>
+        {searchMode !== 'none' && (
+          <div className={`search-field ${styles.search}`}>
+            <Search size={15} aria-hidden="true" />
+            <input
+              ref={searchInput}
+              aria-label={searchPlaceholder}
+              placeholder={searchPlaceholder}
+              value={visibleFilter}
+              disabled={loading && searchMode !== 'external'}
+              onChange={(e) => {
+                if (searchMode === 'external') {
+                  onSearchChange?.(e.target.value);
+                  setPagination((current) => ({ ...current, pageIndex: 0 }));
+                  return;
+                }
+                setFilter(e.target.value);
+                setPagination({ ...pagination, pageIndex: 0 });
+                syncUrl(e.target.value, 0);
+              }}
+            />
+            {visibleFilter && (
+              <button
+                type="button"
+                className={styles.clear}
+                onClick={clearSearch}
+                aria-label="Clear search"
+              >
+                <X size={14} aria-hidden="true" />
+              </button>
+            )}
+          </div>
+        )}
         <span
           className={`muted small ${styles.results}`}
           role="status"
@@ -282,12 +391,45 @@ export function DataTable<T>({
         >
           {loading
             ? 'Loading results…'
-            : filter
-              ? `${filteredCount} ${filteredCount === 1 ? 'match' : 'matches'} from ${data.length} loaded results`
-              : `${data.length} loaded ${data.length === 1 ? 'result' : 'results'}`}
+            : error
+              ? data.length
+                ? 'Refresh failed · showing previously loaded results'
+                : 'Results unavailable'
+              : refreshing
+                ? 'Refreshing results…'
+                : filter
+                  ? `${filteredCount} ${filteredCount === 1 ? 'match' : 'matches'} from ${data.length} loaded results`
+                  : `${data.length} loaded ${data.length === 1 ? 'result' : 'results'}`}
           {!paginate && !loading && ' on this page'}
         </span>
+        {onRefresh && (
+          <Button
+            type="button"
+            className="compact"
+            disabled={loading || refreshing}
+            onClick={onRefresh}
+            aria-label={`Refresh ${label ?? 'table'}`}
+          >
+            <RefreshCw size={14} aria-hidden="true" />
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </Button>
+        )}
       </div>
+      {error ? (
+        <div className={styles.errorState}>
+          <ErrorBox error={error} />
+          {onRetry && (
+            <Button
+              type="button"
+              className="compact"
+              onClick={onRetry}
+              disabled={loading || refreshing}
+            >
+              Retry
+            </Button>
+          )}
+        </div>
+      ) : null}
       <div className="table-scroll">
         <table aria-label={label}>
           <thead>
@@ -333,14 +475,19 @@ export function DataTable<T>({
       </div>
       {loading && <Loading />}
       {!loading &&
+        !error &&
         !table.getRowModel().rows.length &&
-        (data.length > 0 && filter ? (
+        (visibleFilter && (searchMode === 'external' || data.length > 0) ? (
           <div className={`empty ${styles.noResults}`}>
             <span className={styles.emptyIcon}>
               <SearchX size={24} aria-hidden="true" />
             </span>
             <h3>No matching results</h3>
-            <p>Try a different search, or clear it to see all loaded items.</p>
+            <p>
+              {searchMode === 'external'
+                ? 'Try a different search, or clear it to see all results.'
+                : 'Try a different search, or clear it to see all loaded items.'}
+            </p>
             <Button type="button" className="compact" onClick={clearSearch}>
               Clear search and show all
             </Button>
@@ -430,6 +577,7 @@ export function ConfirmButton({
         onOpenChange={(value) => !busy && setOpen(value)}
         title={title}
         description={description}
+        pending={busy}
       >
         <ErrorBox error={error} />
         <div className="dialog-actions">
