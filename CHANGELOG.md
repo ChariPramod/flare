@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Complete the editorial UI review with Linux x64 visual references for both themes, responsive and interaction regressions, themed canvas controls and clearer insertion labels. Preserve accepted editor saves when a later refresh fails after an intervening server read. Keep native Inbox read-persistence checks usable with longer notification feeds, and retain bounded, credential-free failure diagnostics in CI. Update the navigation and testing guides.
+
+- Preserve raw workflow, layout, translation and template drafts in memory through failed saves and navigation, protect concurrent saves and environment switches, and preserve historical versions. Make table search/loading/error states explicit, use one server-backed Contacts search, distinguish delivery outcomes, and improve linked validation, authentication/preferences recovery and pending dialog feedback.
+
+- Align shared page/section typography and panel spacing, restore saved themes before paint, simplify Overview, and keep navigation and editor actions reachable on narrow/short screens. Bound the native Inbox popup to the available viewport without restarting its session; preserve actual read-state persistence checks.
+
+- Redesign the frontend with locally served Source Serif 4 and DM Sans, an ivory/indigo palette, editorial page hierarchy and restrained panels. Apply the system to navigation, Overview, authentication, public preferences, shared module tables/forms, charts and workflow/automation editors; make Monaco follow live theme changes. Preserve API-backed behavior and add browser coverage for every sidebar route, font loading, narrow forms, responsive editors, contrast and reduced motion.
+
+- Refine the dashboard visual system, actionable Overview, grouped keyboard page search, responsive table search/pagination and expired-session recovery. Preserve honest delivery status, environment boundaries and remote pagination; add browser regressions for navigation, table history, overview recovery and confirmed session expiry. Verification is tracked in `PROGRESS.md`.
+
 - Organize documentation into architecture, product, development, operations, planning and archive groups with task-based indexes and the website/backend tour. Preserve legacy document paths and section links through generated compatibility pages, archive prior progress without losing evidence, and add local link/anchor validation. Application source, generated contracts and runtime configuration are unchanged.
 
 - Add an explicit Vercel/backend staging overlay with private-path guards, a live-session-bound Inbox WebSocket gateway, strict event/backpressure limits and bounded reconnects. Add exact split-web encrypted backup profiles and a populated nine-volume restore rehearsal. Support externally hosted dashboard DNS in the public verifier while pinning every checked TLS connection. Remove WebSocket credentials from ingress/runtime/request logs, preserve the dashboard Metrics route, and type Inbox socket options in OpenAPI/SDK. Verification and remaining deployment gates are recorded in `PROGRESS.md`.

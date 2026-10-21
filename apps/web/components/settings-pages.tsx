@@ -44,7 +44,9 @@ export function SettingsPages({ section, session }: { section: string; session: 
 function Keys({ canManage, canPublish }: { canManage: boolean; canPublish: boolean }) {
   const query = useApi<ApiKey[]>('api-keys'),
     domains = useApi<{ id: string; name: string }[]>('domains'),
-    create = useAction<ApiKey & { token: string }>('api-keys');
+    create = useAction<ApiKey & { token: string }>('api-keys', 'POST', false, {
+      successMessage: 'API key created',
+    });
   const [open, setOpen] = useState(false),
     [permission, setPermission] = useState('sending_access'),
     [secret, setSecret] = useState('');
@@ -60,8 +62,14 @@ function Keys({ canManage, canPublish }: { canManage: boolean; canPublish: boole
           </Button>
         }
       />
-      <ErrorBox error={query.error} />
       <DataTable
+        label="API keys"
+        searchMode="local"
+        loading={query.isPending}
+        refreshing={query.isFetching && !query.isPending}
+        error={query.error}
+        onRetry={() => void query.refetch()}
+        onRefresh={() => void query.refetch()}
         data={query.data ?? []}
         columns={[
           {
@@ -125,6 +133,7 @@ function Keys({ canManage, canPublish }: { canManage: boolean; canPublish: boole
       <Modal
         open={open}
         onOpenChange={setOpen}
+        pending={create.isPending}
         title="Create an API key"
         description="Permission and domain scope are fixed when the key is created."
       >
@@ -259,6 +268,7 @@ function Environments({ bridgeOnly, canManage }: { bridgeOnly: boolean; canManag
       <Modal
         open={Boolean(selected)}
         onOpenChange={(v) => !v && setSelected(null)}
+        pending={busy}
         title={`Configure ${selected?.name}`}
         description="Service credentials are encrypted. Leave an existing key blank to preserve it."
       >
@@ -326,7 +336,9 @@ function Environments({ bridgeOnly, canManage }: { bridgeOnly: boolean; canManag
 type Member = { id: string; name: string; email: string; role: string; created_at: string };
 function Team({ canManage }: { canManage: boolean }) {
   const query = useApi<Member[]>('team'),
-    invite = useAction<{ accept_url: string }>('team/invites');
+    invite = useAction<{ accept_url: string }>('team/invites', 'POST', false, {
+      successMessage: 'Invitation created',
+    });
   const [open, setOpen] = useState(false),
     [link, setLink] = useState(''),
     [error, setError] = useState<unknown>();
@@ -342,8 +354,15 @@ function Team({ canManage }: { canManage: boolean }) {
           </Button>
         }
       />
-      <ErrorBox error={query.error || error} />
+      <ErrorBox error={error} />
       <DataTable
+        label="Team"
+        searchMode="local"
+        loading={query.isPending}
+        refreshing={query.isFetching && !query.isPending}
+        error={query.error}
+        onRetry={() => void query.refetch()}
+        onRefresh={() => void query.refetch()}
         data={query.data ?? []}
         columns={[
           {
@@ -404,6 +423,7 @@ function Team({ canManage }: { canManage: boolean }) {
       <Modal
         open={open}
         onOpenChange={setOpen}
+        pending={invite.isPending}
         title="Invite a teammate"
         description="Create a secure invitation link to share with your teammate."
       >
@@ -458,8 +478,12 @@ function Team({ canManage }: { canManage: boolean }) {
 }
 function Account({ session }: { session: Session }) {
   const setup = useAction<{ secret: string; uri: string }>('auth/mfa/setup'),
-    enable = useAction<{ recovery_codes: string[] }>('auth/mfa/enable'),
-    disable = useAction('auth/mfa/disable');
+    enable = useAction<{ recovery_codes: string[] }>('auth/mfa/enable', 'POST', false, {
+      successMessage: 'Two-factor authentication enabled',
+    }),
+    disable = useAction('auth/mfa/disable', 'POST', false, {
+      successMessage: 'Two-factor authentication disabled',
+    });
   const [password, setPassword] = useState(''),
     [code, setCode] = useState('');
   const audit = useApi<{ id: string; action: string; created_at: string }[]>('audit-logs');

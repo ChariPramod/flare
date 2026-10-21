@@ -39,7 +39,9 @@ export function ChannelIcon({ type }: { type: string }) {
 }
 export function Workflows({ editable }: { editable: boolean }) {
   const query = useApi<{ data: WorkflowRow[] }>('workflows?limit=100'),
-    create = useAction<WorkflowRow>('workflows'),
+    create = useAction<WorkflowRow>('workflows', 'POST', false, {
+      successMessage: 'Workflow created',
+    }),
     router = useRouter();
   const [open, setOpen] = useState(false),
     [name, setName] = useState(''),
@@ -62,11 +64,17 @@ export function Workflows({ editable }: { editable: boolean }) {
         </span>
         <span className="muted small">Your product’s notification logic, in one place</span>
       </div>
-      <ErrorBox error={query.error} />
       {query.isPending ? (
         <Loading />
       ) : (
         <DataTable
+          label="Workflows"
+          searchMode="local"
+          loading={query.isPending}
+          refreshing={query.isFetching && !query.isPending}
+          error={query.error}
+          onRetry={() => void query.refetch()}
+          onRefresh={() => void query.refetch()}
           data={query.data?.data ?? []}
           searchPlaceholder="Search workflows…"
           columns={[
@@ -149,6 +157,7 @@ export function Workflows({ editable }: { editable: boolean }) {
       <Modal
         open={open}
         onOpenChange={setOpen}
+        pending={create.isPending}
         title="Create workflow"
         description="Start with a name. You can add channels and logic in the editor."
       >
@@ -191,7 +200,7 @@ export function Workflows({ editable }: { editable: boolean }) {
           </Field>
           <ErrorBox error={create.error} />
           <div className="dialog-actions">
-            <Button type="button" onClick={() => setOpen(false)}>
+            <Button type="button" disabled={create.isPending} onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button className="primary" disabled={create.isPending}>
@@ -227,7 +236,7 @@ type Preferences = {
 };
 export function Subscribers({ id, writable }: { id?: string; writable: boolean }) {
   const query = useApi<{ data: Subscriber[] }>('subscribers?limit=100'),
-    create = useAction('subscribers');
+    create = useAction('subscribers', 'POST', false, { successMessage: 'Subscriber added' });
   const [open, setOpen] = useState(false),
     [error, setError] = useState<unknown>();
   if (id) return <SubscriberDetail id={id} writable={writable} />;
@@ -243,11 +252,17 @@ export function Subscribers({ id, writable }: { id?: string; writable: boolean }
           </Button>
         }
       />
-      <ErrorBox error={query.error} />
       {query.isPending ? (
         <Loading />
       ) : (
         <DataTable
+          label="Subscribers"
+          searchMode="local"
+          loading={query.isPending}
+          refreshing={query.isFetching && !query.isPending}
+          error={query.error}
+          onRetry={() => void query.refetch()}
+          onRefresh={() => void query.refetch()}
           data={query.data?.data ?? []}
           searchPlaceholder="Search subscribers…"
           columns={[
@@ -287,6 +302,7 @@ export function Subscribers({ id, writable }: { id?: string; writable: boolean }
       <Modal
         open={open}
         onOpenChange={setOpen}
+        pending={create.isPending}
         title="Add subscriber"
         description="Identify a subscriber using a stable ID from your product."
       >
@@ -471,6 +487,13 @@ export function ActivityPage({ id, writable = true }: { id?: string; writable?: 
         <Loading />
       ) : (
         <DataTable
+          label="Activity feed"
+          searchMode="local"
+          loading={query.isPending}
+          refreshing={query.isFetching && !query.isPending}
+          error={query.error}
+          onRetry={() => void query.refetch()}
+          onRefresh={() => void query.refetch()}
           data={query.data?.data ?? []}
           searchPlaceholder="Search activity…"
           columns={[
@@ -629,11 +652,12 @@ function RunDetail({ id, writable }: { id: string; writable: boolean }) {
 type Topic = { id: string; key: string; name: string; subscribers: number; created_at: string };
 export function Topics({ writable }: { writable: boolean }) {
   const query = useApi<{ data: Topic[] }>('topics'),
-    create = useAction('topics');
+    create = useAction('topics', 'POST', false, { successMessage: 'Topic created' });
   const [open, setOpen] = useState(false),
     [selected, setSelected] = useState(''),
     [json, setJson] = useState('{"subscribers":["demo-subscriber"],"context":{}}'),
-    [error, setError] = useState<unknown>();
+    [error, setError] = useState<unknown>(),
+    [busy, setBusy] = useState(false);
   return (
     <>
       <PageHeader
@@ -646,8 +670,14 @@ export function Topics({ writable }: { writable: boolean }) {
           </Button>
         }
       />
-      <ErrorBox error={query.error} />
       <DataTable
+        label="Topics"
+        searchMode="local"
+        loading={query.isPending}
+        refreshing={query.isFetching && !query.isPending}
+        error={query.error}
+        onRetry={() => void query.refetch()}
+        onRefresh={() => void query.refetch()}
         data={query.data?.data ?? []}
         columns={[
           { accessorKey: 'name', header: 'Topic' },
@@ -676,7 +706,7 @@ export function Topics({ writable }: { writable: boolean }) {
           },
         ]}
       />
-      <Modal open={open} onOpenChange={setOpen} title="Create topic">
+      <Modal open={open} onOpenChange={setOpen} pending={create.isPending} title="Create topic">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -702,6 +732,7 @@ export function Topics({ writable }: { writable: boolean }) {
       <Modal
         open={Boolean(selected)}
         onOpenChange={(v) => !v && setSelected('')}
+        pending={busy}
         title={`Subscriptions · ${selected}`}
         description="Provide subscriber IDs and an exact context. Context is part of subscription identity."
       >
@@ -711,16 +742,19 @@ export function Topics({ writable }: { writable: boolean }) {
           {['DELETE', 'POST'].map((method) => (
             <Button
               key={method}
+              disabled={busy}
               onClick={() => {
+                if (busy) return;
                 try {
-                  void api(
-                    `topics/${encodeURIComponent(selected)}/subscriptions`,
-                    method,
-                    JSON.parse(json),
-                  ).then(() => {
-                    void query.refetch();
-                    setSelected('');
-                  }, setError);
+                  const payload = JSON.parse(json);
+                  setError(undefined);
+                  setBusy(true);
+                  void api(`topics/${encodeURIComponent(selected)}/subscriptions`, method, payload)
+                    .then(() => {
+                      void query.refetch();
+                      setSelected('');
+                    }, setError)
+                    .finally(() => setBusy(false));
                 } catch (e) {
                   setError(e);
                 }
@@ -755,15 +789,23 @@ export function Integrations({ writable }: { writable: boolean }) {
     } | null>(null),
     [credentials, setCredentials] = useState('{}'),
     [error, setError] = useState<unknown>();
-  const create = useAction('integrations');
+  const create = useAction('integrations', 'POST', false, {
+    successMessage: 'Integration connected',
+  });
   return (
     <>
       <PageHeader
         title="Integrations store"
         description="Connect your delivery providers. Keep every channel within reach."
       />
-      <ErrorBox error={query.error} />
       <DataTable
+        label="Integrations"
+        searchMode="local"
+        loading={query.isPending}
+        refreshing={query.isFetching && !query.isPending}
+        error={query.error}
+        onRetry={() => void query.refetch()}
+        onRefresh={() => void query.refetch()}
         data={query.data?.data ?? []}
         columns={[
           { accessorKey: 'name', header: 'Integration' },
@@ -829,6 +871,7 @@ export function Integrations({ writable }: { writable: boolean }) {
       <Modal
         open={Boolean(selection)}
         onOpenChange={(v) => !v && setSelection(null)}
+        pending={create.isPending}
         title={`Connect ${selection?.name}`}
         description="Credentials are encrypted and never returned in integration responses."
       >

@@ -4,6 +4,7 @@ import { emailPreview } from '../lib/email-preview';
 import { useState, useEffect } from 'react';
 import { useApi, useAction, pretty } from '../lib/api';
 import { Button, PageHeader, DataTable, Field, ErrorBox, Loading, Modal } from './ui';
+import { DraftNotice, useDrafts, useEditorDraft } from './drafts';
 type Layout = {
   id: string;
   identifier: string;
@@ -28,11 +29,16 @@ export function LayoutsPage({ id, editable }: { id?: string; editable: boolean }
           </Button>
         }
       />
-      <ErrorBox error={query.error} />
       {query.isPending ? (
         <Loading />
       ) : (
         <DataTable
+          searchMode="local"
+          loading={query.isPending}
+          refreshing={query.isFetching && !query.isPending}
+          error={query.error}
+          onRetry={() => void query.refetch()}
+          onRefresh={() => void query.refetch()}
           data={query.data ?? []}
           columns={[
             {
@@ -47,7 +53,7 @@ export function LayoutsPage({ id, editable }: { id?: string; editable: boolean }
           ]}
         />
       )}
-      <Modal title="Create layout" open={open} onOpenChange={setOpen}>
+      <Modal title="Create layout" open={open} onOpenChange={setOpen} pending={create.isPending}>
         <form
           className="stack"
           onSubmit={async (e) => {
@@ -86,16 +92,18 @@ function LayoutDetail({ id, editable }: { id: string; editable: boolean }) {
       Layout & { versions: { version: number; html: string; translations: boolean }[] }
     >(`layouts/${id}`),
     save = useAction(`layouts/${id}`, 'PUT');
-  const [html, setHtml] = useState(''),
-    [translations, setTranslations] = useState(false),
-    [loaded, setLoaded] = useState(false);
-  useEffect(() => {
-    if (query.data && !loaded) {
-      setHtml(query.data.versions[0]!.html);
-      setTranslations(query.data.versions[0]!.translations);
-      setLoaded(true);
-    }
-  }, [query.data, loaded]);
+  const draft = useEditorDraft(
+    `layout:${id}`,
+    query.data
+      ? {
+          html: query.data.versions[0]!.html,
+          translations: query.data.versions[0]!.translations,
+        }
+      : undefined,
+    query.isError,
+  );
+  const { html = '', translations = false } = draft.value ?? {};
+  const pending = save.isPending || draft.pending;
   if (query.isPending) return <Loading />;
   if (!query.data) return <ErrorBox error={query.error} />;
   return (
@@ -106,16 +114,30 @@ function LayoutDetail({ id, editable }: { id: string; editable: boolean }) {
         actions={
           <Button
             className="primary"
-            disabled={!editable || save.isPending}
-            onClick={() =>
-              save.mutate({ identifier: id, name: query.data!.name, html, translations })
-            }
+            disabled={!editable || pending}
+            onClick={async () => {
+              const finish = draft.startSaving();
+              try {
+                await save.mutateAsync({
+                  identifier: id,
+                  name: query.data!.name,
+                  html,
+                  translations,
+                });
+                draft.saved({ html, translations });
+              } catch {
+                /* Keep the draft and display the mutation error. */
+              } finally {
+                finish();
+              }
+            }}
           >
             Save layout version
           </Button>
         }
       />
-      <ErrorBox error={save.error} />
+      <ErrorBox error={query.error ?? save.error} />
+      <DraftNotice dirty={draft.dirty} onDiscard={draft.discard} pending={pending} />
       <div className="panel stack">
         <Field
           label="Layout HTML"
@@ -125,16 +147,18 @@ function LayoutDetail({ id, editable }: { id: string; editable: boolean }) {
             aria-label="Layout HTML"
             rows={12}
             value={html}
-            disabled={!editable}
-            onChange={(e) => setHtml(e.target.value)}
+            disabled={!editable || pending}
+            onChange={(e) => draft.setValue((current) => ({ ...current, html: e.target.value }))}
           />
         </Field>
         <label>
           <input
             type="checkbox"
             checked={translations}
-            disabled={!editable}
-            onChange={(e) => setTranslations(e.target.checked)}
+            disabled={!editable || pending}
+            onChange={(e) =>
+              draft.setValue((current) => ({ ...current, translations: e.target.checked }))
+            }
           />{' '}
           Enable layout translations
         </label>
@@ -158,10 +182,17 @@ function LayoutDetail({ id, editable }: { id: string; editable: boolean }) {
 }
 type Dictionary = { locale: string; current_version: number; entries: Record<string, string> };
 export function TranslationsPage({ editable }: { editable: boolean }) {
+  const { confirmNavigation } = useDrafts();
   const workflows = useApi<{ data: { identifier: string; definition: { name: string } }[] }>(
       'workflows?limit=100',
     ),
     [workflow, setWorkflow] = useState('');
+  useEffect(() => {
+    const restore = () => setWorkflow(new URLSearchParams(location.search).get('workflow') ?? '');
+    restore();
+    window.addEventListener('popstate', restore);
+    return () => window.removeEventListener('popstate', restore);
+  }, []);
   return (
     <>
       <PageHeader
@@ -173,7 +204,16 @@ export function TranslationsPage({ editable }: { editable: boolean }) {
         <select
           aria-label="Translation workflow"
           value={workflow}
-          onChange={(e) => setWorkflow(e.target.value)}
+          onChange={(e) => {
+            if (!confirmNavigation()) return;
+            const next = e.target.value;
+            setWorkflow(next);
+            const url = new URL(location.href);
+            if (next) url.searchParams.set('workflow', next);
+            else url.searchParams.delete('workflow');
+            url.searchParams.delete('locale');
+            history.pushState(null, '', url);
+          }}
         >
           <option value="">Choose a workflow</option>
           {workflows.data?.data.map((v) => (
@@ -188,52 +228,99 @@ export function TranslationsPage({ editable }: { editable: boolean }) {
   );
 }
 function DictionaryEditor({ workflow, editable }: { workflow: string; editable: boolean }) {
+  const { confirmNavigation } = useDrafts();
   const query = useApi<Dictionary[]>(`translations/${workflow}`),
     [locale, setLocale] = useState('en_US'),
-    [text, setText] = useState('{}'),
-    [loadedLocale, setLoadedLocale] = useState(''),
+    [localeInput, setLocaleInput] = useState('en_US'),
     [error, setError] = useState<unknown>();
   const save = useAction(`translations/${workflow}/${locale}`, 'PUT');
+  const draft = useEditorDraft(
+    `translation:${workflow}:${locale}`,
+    query.data
+      ? pretty(query.data.find((item) => item.locale === locale)?.entries ?? {})
+      : undefined,
+    query.isError,
+  );
+  const text = draft.value ?? '{}';
+  const pending = save.isPending || draft.pending;
   useEffect(() => {
-    if (query.data && loadedLocale !== locale) {
-      setText(pretty(query.data.find((v) => v.locale === locale)?.entries ?? {}));
-      setLoadedLocale(locale);
-    }
-  }, [query.data, locale, loadedLocale]);
+    const restore = () => {
+      const candidate = new URLSearchParams(location.search).get('locale') ?? 'en_US';
+      const next = /^[a-z]{2}_[A-Z]{2}$/.test(candidate) ? candidate : 'en_US';
+      setLocale(next);
+      setLocaleInput(next);
+    };
+    restore();
+    window.addEventListener('popstate', restore);
+    return () => window.removeEventListener('popstate', restore);
+  }, []);
   if (query.isPending) return <Loading />;
+  if (!query.data) return <ErrorBox error={query.error} />;
   return (
     <div className="panel stack">
-      <Field label="Locale">
-        <input
-          value={locale}
-          onChange={(e) => setLocale(e.target.value)}
-          placeholder="en_US"
-          pattern="[a-z]{2}_[A-Z]{2}"
-        />
-      </Field>
+      <div className="form-grid">
+        <Field
+          label="Locale"
+          hint="Enter a locale, then load it. Typing here keeps the current dictionary unchanged."
+        >
+          <input
+            value={localeInput}
+            onChange={(e) => setLocaleInput(e.target.value)}
+            placeholder="en_US"
+            pattern="[a-z]{2}_[A-Z]{2}"
+            disabled={pending}
+          />
+        </Field>
+        <div className="actions">
+          <Button
+            disabled={pending}
+            onClick={() => {
+              if (!/^[a-z]{2}_[A-Z]{2}$/.test(localeInput)) {
+                setError(new Error('Use a locale such as en_US or fr_FR.'));
+                return;
+              }
+              if (localeInput === locale) return;
+              if (!confirmNavigation()) return;
+              setLocale(localeInput);
+              setError(undefined);
+              const url = new URL(location.href);
+              url.searchParams.set('locale', localeInput);
+              history.pushState(null, '', url);
+            }}
+          >
+            Load locale
+          </Button>
+        </div>
+      </div>
       <p className="muted">
-        Version {query.data?.find((v) => v.locale === locale)?.current_version ?? 'not saved'} ·
-        Reference entries with {'{{t.key}}'} in workflow content.
+        Active locale: <strong>{locale}</strong> · Version{' '}
+        {query.data.find((v) => v.locale === locale)?.current_version ?? 'not saved'} · Reference
+        entries with {'{{t.key}}'} in workflow content.
       </p>
+      <DraftNotice dirty={draft.dirty} onDiscard={draft.discard} pending={pending} />
       <Field label="Dictionary JSON">
         <textarea
           aria-label="Dictionary JSON"
           rows={14}
           value={text}
-          disabled={!editable}
-          onChange={(e) => setText(e.target.value)}
+          disabled={!editable || pending}
+          onChange={(e) => draft.setValue(e.target.value)}
         />
       </Field>
       <div className="actions">
         <Button
           className="primary"
-          disabled={!editable || save.isPending}
+          disabled={!editable || pending}
           onClick={async () => {
+            const finish = draft.startSaving();
             try {
               setError(undefined);
               await save.mutateAsync(JSON.parse(text));
+              draft.saved(text);
             } catch (e) {
               setError(e);
+            } finally {
+              finish();
             }
           }}
         >
@@ -260,13 +347,13 @@ function DictionaryEditor({ workflow, editable }: { workflow: string; editable: 
           <input
             type="file"
             accept="application/json,.json"
-            disabled={!editable}
+            disabled={!editable || pending}
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file) return;
               try {
                 if (file.size > 262144) throw new Error('Maximum dictionary size is 256 KiB');
-                setText(pretty(JSON.parse(await file.text())));
+                draft.setValue(pretty(JSON.parse(await file.text())));
               } catch (e) {
                 setError(e);
               }

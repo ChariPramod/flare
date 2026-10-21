@@ -8,6 +8,10 @@ Browse the [documentation index](README.md).
 
 [Open this section](development/testing.md#where-to-write-tests-lint-rules-and-evals).
 
+### Editorial UI regressions
+
+[Open this section](development/testing.md#editorial-ui-regressions).
+
 ## A useful test-writing loop
 
 [Open this section](development/testing.md#a-useful-test-writing-loop).

@@ -22,7 +22,10 @@ async function compose(page: Page, subject: string) {
   await page.goto('/emails');
   await page.getByRole('button', { name: 'Send email', exact: true }).click();
   await page.getByLabel('From', { exact: true }).fill('sender@transfers.example.test');
-  await page.getByRole('textbox', { name: /^To / }).fill('reader@example.test');
+  await expect(page.getByRole('textbox', { name: 'To', exact: true })).toHaveAccessibleDescription(
+    'Separate multiple recipients with commas.',
+  );
+  await page.getByRole('textbox', { name: 'To', exact: true }).fill('reader@example.test');
   await page.getByLabel('Subject', { exact: true }).fill(subject);
   await page.getByLabel('Message body').fill('Large transfer — retained draft 🙂');
   return page.getByRole('dialog');

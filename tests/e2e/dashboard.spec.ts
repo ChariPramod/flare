@@ -194,7 +194,7 @@ test('domain DNS records, verification contract, email submission and raw source
   await page.getByRole('link', { name: 'Emails', exact: true }).click();
   await page.getByRole('button', { name: 'Send email', exact: true }).click();
   await page.getByLabel('From', { exact: true }).fill('hello@notifications.example.test');
-  await page.getByRole('textbox', { name: /^To / }).fill('recipient@example.test');
+  await page.getByRole('textbox', { name: 'To', exact: true }).fill('recipient@example.test');
   await page.getByLabel('Subject', { exact: true }).fill('Browser contract email');
   await page.locator('textarea[name="body"]').fill('Hello from the browser contract test.');
   await page.getByRole('dialog').getByRole('button', { name: 'Send email', exact: true }).click();
@@ -461,6 +461,7 @@ test('layout versions and translation dictionary import/export', async ({ page }
   await page.getByRole('button', { name: 'Save dictionary version', exact: true }).click();
   await expect(page.getByText(/Version 1 · Reference entries/)).toBeVisible();
   await page.getByLabel('Locale', { exact: true }).fill('fr_FR');
+  await page.getByRole('button', { name: 'Load locale', exact: true }).click();
   await page.getByLabel('Import JSON', { exact: true }).setInputFiles({
     name: 'fr_FR.json',
     mimeType: 'application/json',

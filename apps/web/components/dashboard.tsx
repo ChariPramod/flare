@@ -5,8 +5,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import * as Dialog from '@radix-ui/react-dialog';
+import * as Tooltip from '@radix-ui/react-tooltip';
+import { useTheme } from './theme-provider';
+import { useDrafts } from './drafts';
 import {
-  Flame,
   Send,
   Workflow,
   Users,
@@ -28,7 +30,6 @@ import {
   ArrowUpRight,
   LogOut,
   ChevronRight,
-  Command,
   PanelLeftClose,
   PanelLeft,
   Box,
@@ -39,7 +40,11 @@ import {
 } from 'lucide-react';
 import { api, useApi } from '../lib/api';
 import type { Session } from '../lib/api';
-import { Button, Badge, Modal, ErrorBox, Loading } from './ui';
+import { Button, Badge, ErrorBox, Loading } from './ui';
+import { CommandPalette } from './command-palette';
+import type { NavigationGroup } from './command-palette';
+import navigationStyles from './command-palette.module.css';
+import styles from './dashboard.module.css';
 import {
   Workflows,
   Subscribers,
@@ -60,7 +65,7 @@ import { InboundPage } from './inbound-pages';
 import { AutomationsPage } from './automation-pages';
 import { WorkflowEditor } from './workflow-editor';
 import { OverviewPage } from './overview-page';
-const groups: { name: string; items: [string, string, typeof Workflow][] }[] = [
+const groups: NavigationGroup[] = [
   {
     name: 'WORKSPACE',
     items: [
@@ -111,37 +116,64 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
   const router = useRouter(),
     client = useQueryClient();
   const [search, setSearch] = useState(false),
-    [query, setQuery] = useState(''),
     [publishing, setPublishing] = useState(false),
-    [theme, setTheme] = useState('light'),
+    [shortcut, setShortcut] = useState('Ctrl K'),
     [collapsed, setCollapsed] = useState(false),
     [navigationOpen, setNavigationOpen] = useState(false),
+    [switching, setSwitching] = useState(false),
     [error, setError] = useState<unknown>();
+  const { theme, toggleTheme } = useTheme();
+  const { confirmNavigation, confirmClearAll, clearAll } = useDrafts();
+  const switchingRef = useRef(false);
+  const desktopNavigation = useRef<HTMLElement>(null);
+  const drawerNavigation = useRef<HTMLDivElement>(null);
   const navigationTrigger = useRef<HTMLButtonElement>(null);
   const publishFromNavigation = useRef(false);
   const publicationReturnTarget = useRef<HTMLElement | null>(null);
+  const searchReturnTarget = useRef<HTMLElement | null>(null);
   const sessionRejected = Boolean(
     session.error && 'status' in session.error && session.error.status === 401,
   );
   useEffect(() => {
-    const theme = localStorage.getItem('flare-theme') ?? 'light';
-    setTheme(theme);
-    document.documentElement.dataset.theme = theme;
+    try {
+      setCollapsed(localStorage.getItem('flare-sidebar-collapsed') === 'true');
+    } catch {
+      // Preferences are optional when browser storage is restricted.
+    }
+    setShortcut(/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘ K' : 'Ctrl K');
+  }, []);
+  useEffect(() => {
     const listener = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && !event.repeat) {
+        // Keep another dialog's draft and focus scope intact.
+        if (!search && document.querySelector('[role="dialog"]')) return;
         event.preventDefault();
+        if (!search && document.activeElement instanceof HTMLElement)
+          searchReturnTarget.current = document.activeElement;
         setSearch((value) => !value);
       }
     };
     document.addEventListener('keydown', listener);
     return () => document.removeEventListener('keydown', listener);
-  }, []);
+  }, [search]);
   useEffect(() => {
     if (sessionRejected) {
+      clearAll();
       client.clear();
-      router.replace('/login');
+      router.replace('/login?reason=session-expired');
     }
-  }, [sessionRejected, client, router]);
+  }, [sessionRejected, client, router, clearAll]);
+  useEffect(() => {
+    const container = navigationOpen ? drawerNavigation.current : desktopNavigation.current;
+    const active = container?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!container || !active || !container.clientHeight) return;
+    const viewport = container.getBoundingClientRect();
+    const item = active.getBoundingClientRect();
+    // Move only the navigation scroll area; never jump the document or steal focus.
+    if (item.top < viewport.top + 12) container.scrollTop += item.top - viewport.top - 12;
+    else if (item.bottom > viewport.bottom - 12)
+      container.scrollTop += item.bottom - viewport.bottom + 12;
+  }, [section, collapsed, navigationOpen, session.data]);
   if (session.isPending || sessionRejected) return <Loading />;
   if (!session.data)
     return (
@@ -157,22 +189,36 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
   const canPublish = ['owner', 'admin'].includes(data.principal.role) && !data.principal.production;
   const activeEnvironment = environments.data?.find((v) => v.id === data.principal.environmentId);
   const change = async (orgId: string, environmentId: string) => {
-    if (orgId === data.principal.orgId && environmentId === data.principal.environmentId) return;
+    if (
+      switchingRef.current ||
+      (orgId === data.principal.orgId && environmentId === data.principal.environmentId)
+    )
+      return;
+    if (!confirmClearAll()) return;
+    switchingRef.current = true;
+    setSwitching(true);
     setError(undefined);
     try {
       await api('session/switch', 'POST', { orgId, environmentId });
+      clearAll();
       client.clear();
       router.push(`/${section}`);
       router.refresh();
     } catch (e) {
       setError(e);
+    } finally {
+      switchingRef.current = false;
+      setSwitching(false);
     }
   };
-  const toggleTheme = () => {
-    const next = theme === 'light' ? 'dark' : 'light';
-    setTheme(next);
-    localStorage.setItem('flare-theme', next);
-    document.documentElement.dataset.theme = next;
+  const toggleSidebar = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      localStorage.setItem('flare-sidebar-collapsed', String(next));
+    } catch {
+      /* Keep this session usable. */
+    }
   };
   const title = groups.flatMap((g) => g.items).find((v) => v[0] === section)?.[1] ?? 'Workspace';
   let content: React.ReactNode;
@@ -226,21 +272,27 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
     <>
       <Link
         href="/overview"
-        className="brand"
+        className={`brand ${styles.brand}`}
         aria-label="Flare overview"
         onClick={() => setNavigationOpen(false)}
       >
-        <span className="brand-mark">
-          <Flame size={23} />
+        <span className={`brand-mark ${styles.monogram}`} aria-hidden="true">
+          f.
         </span>
-        <span>flare</span>
-        <span className="brand-version">BETA</span>
+        <span className={styles.wordmark}>
+          Flare<span className={styles.wordmarkPeriod}>.</span>
+        </span>
+        <span className={`brand-version ${styles.edition}`}>WORKSPACE</span>
       </Link>
-      <div className="workspace-selectors">
-        <label className="organization-select">
-          <span className="org-avatar">{organization?.name.slice(0, 1)}</span>
+      <div className={`workspace-selectors ${styles.selectors}`}>
+        <span className={styles.selectorCaption}>Your workspace</span>
+        <label className={`organization-select ${styles.organization}`}>
+          <span className={`org-avatar ${styles.organizationAvatar}`}>
+            {organization?.name.slice(0, 1)}
+          </span>
           <select
             aria-label="Organization"
+            disabled={switching}
             value={organization?.id}
             onChange={(e) => {
               const next = data.organizations.find((v) => v.id === e.target.value);
@@ -255,12 +307,16 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
           </select>
           <ChevronsUpDown size={13} />
         </label>
-        <label className="environment-select">
+        <label
+          className={`environment-select ${styles.environment}`}
+          data-production={data.principal.production}
+        >
           <span
             className={`status-dot ${data.principal.production ? 'production' : 'development'}`}
           />
           <select
             aria-label="Environment"
+            disabled={switching}
             value={environment?.id}
             onChange={(e) => void change(data.principal.orgId, e.target.value)}
           >
@@ -274,30 +330,44 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
         </label>
       </div>
       <nav aria-label="Workspace pages">
-        {groups.map((group) => (
-          <div className="nav-group" key={group.name}>
-            <div className="nav-label">{group.name}</div>
+        {groups.map((group, index) => (
+          <div className={`nav-group ${styles.group}`} key={group.name}>
+            <div className={`nav-label ${styles.groupLabel}`}>
+              <span aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+              {group.name}
+            </div>
             {group.items.map(([href, label, Icon]) => (
-              <Link
-                key={href}
-                aria-label={label}
-                title={collapsed ? label : undefined}
-                onClick={() => setNavigationOpen(false)}
-                href={`/${href}`}
-                className={`nav-link ${section === href ? 'active' : ''}`}
-                aria-current={section === href ? 'page' : undefined}
-              >
-                <Icon size={17} />
-                <span>{label}</span>
-                {section === href && <span className="nav-active-dot" />}
-              </Link>
+              <Tooltip.Root key={href}>
+                <Tooltip.Trigger asChild>
+                  <Link
+                    aria-label={label}
+                    onClick={() => setNavigationOpen(false)}
+                    href={`/${href}`}
+                    className={`nav-link ${styles.navLink} ${section === href ? 'active' : ''}`}
+                    aria-current={section === href ? 'page' : undefined}
+                  >
+                    <Icon size={17} />
+                    <span>{label}</span>
+                    {section === href && (
+                      <ChevronRight className={styles.activeArrow} size={13} aria-hidden="true" />
+                    )}
+                  </Link>
+                </Tooltip.Trigger>
+                {collapsed && !navigationOpen && (
+                  <Tooltip.Portal>
+                    <Tooltip.Content className={styles.navTooltip} side="right" sideOffset={12}>
+                      {label}
+                    </Tooltip.Content>
+                  </Tooltip.Portal>
+                )}
+              </Tooltip.Root>
             ))}
           </div>
         ))}
       </nav>
       {canPublish && (
         <Button
-          className="drawer-publication primary"
+          className={`drawer-publication primary ${styles.drawerPublication}`}
           onClick={() => {
             publishFromNavigation.current = true;
             publicationReturnTarget.current = navigationTrigger.current;
@@ -307,232 +377,266 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
           Publish changes <ArrowUpRight size={15} aria-hidden="true" />
         </Button>
       )}
-      <div className="sidebar-bottom">
-        <span className="small muted">PARETO LABS</span>
-        <span className="small muted">Notification workspace</span>
+      <div className={`sidebar-bottom ${styles.footer}`}>
+        <span>Built at Pareto Labs</span>
+        <span>One place. Every message.</span>
       </div>
     </>
   );
   return (
-    <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
-      <a className="skip-link" href="#main-content">
-        Skip to main content
-      </a>
-      <aside id="workspace-navigation" className="sidebar" aria-label="Workspace navigation">
-        {navigation}
-      </aside>
-      <div className="main-shell">
-        <header className="topbar">
-          <button
-            className="icon-button desktop-sidebar-toggle"
-            aria-label="Toggle sidebar"
-            aria-controls="workspace-navigation"
-            aria-expanded={!collapsed}
-            onClick={() => setCollapsed(!collapsed)}
-          >
-            {collapsed ? <PanelLeft size={17} /> : <PanelLeftClose size={17} />}
-          </button>
-          <Dialog.Root open={navigationOpen} onOpenChange={setNavigationOpen}>
-            <Dialog.Trigger asChild>
-              <button
-                ref={navigationTrigger}
-                className="icon-button mobile-navigation-toggle"
-                aria-label="Open navigation"
-              >
-                <MenuIcon size={20} />
-              </button>
-            </Dialog.Trigger>
-            <Dialog.Portal>
-              <Dialog.Overlay className="navigation-overlay" />
-              <Dialog.Content
-                className="navigation-drawer"
-                onCloseAutoFocus={(event) => {
-                  if (!publishFromNavigation.current) return;
-                  event.preventDefault();
-                  publishFromNavigation.current = false;
-                  // Let the closing scope leave Radix’s stack before opening the next dialog.
-                  queueMicrotask(() => {
-                    if (!navigationTrigger.current?.isConnected) return;
-                    navigationTrigger.current.focus();
-                    setPublishing(true);
-                  });
+    <Tooltip.Provider delayDuration={250}>
+      <div
+        className={`app-shell ${styles.shell} ${id && section === 'workflows' ? styles.editorShell : ''} ${collapsed ? 'sidebar-collapsed' : ''}`}
+      >
+        <a className="skip-link" href="#main-content">
+          Skip to main content
+        </a>
+        <aside
+          id="workspace-navigation"
+          ref={desktopNavigation}
+          className={`sidebar ${styles.sidebar}`}
+          aria-label="Workspace navigation"
+        >
+          {navigation}
+        </aside>
+        <div className={`main-shell ${styles.main}`} aria-busy={switching}>
+          <header className={`topbar ${styles.masthead}`}>
+            <button
+              className={`icon-button desktop-sidebar-toggle ${styles.desktopToggle}`}
+              aria-label="Toggle sidebar"
+              aria-controls="workspace-navigation"
+              aria-expanded={!collapsed}
+              onClick={toggleSidebar}
+            >
+              {collapsed ? <PanelLeft size={17} /> : <PanelLeftClose size={17} />}
+            </button>
+            <Dialog.Root open={navigationOpen} onOpenChange={setNavigationOpen}>
+              <Dialog.Trigger asChild>
+                <button
+                  ref={navigationTrigger}
+                  className={`icon-button mobile-navigation-toggle ${styles.mobileToggle}`}
+                  aria-label="Open navigation"
+                >
+                  <MenuIcon size={20} />
+                </button>
+              </Dialog.Trigger>
+              <Dialog.Portal>
+                <Dialog.Overlay className={`navigation-overlay ${styles.navigationOverlay}`} />
+                <Dialog.Content
+                  ref={drawerNavigation}
+                  className={`navigation-drawer ${styles.drawer}`}
+                  onCloseAutoFocus={(event) => {
+                    if (!publishFromNavigation.current) return;
+                    event.preventDefault();
+                    publishFromNavigation.current = false;
+                    // Let the closing scope leave Radix’s stack before opening the next dialog.
+                    queueMicrotask(() => {
+                      if (!navigationTrigger.current?.isConnected) return;
+                      navigationTrigger.current.focus();
+                      setPublishing(true);
+                    });
+                  }}
+                >
+                  <Dialog.Title className="visually-hidden">Workspace navigation</Dialog.Title>
+                  <Dialog.Description className="visually-hidden">
+                    Choose your organization, environment or workspace page.
+                  </Dialog.Description>
+                  <Dialog.Close
+                    className={`icon-button navigation-close ${styles.navigationClose}`}
+                    aria-label="Close navigation"
+                  >
+                    <X size={20} />
+                  </Dialog.Close>
+                  {navigation}
+                </Dialog.Content>
+              </Dialog.Portal>
+            </Dialog.Root>
+            <div className={`mobile-workspace-context ${styles.mobileContext}`}>
+              <strong>{title}</strong>
+              <span>
+                <i
+                  className={`status-dot ${data.principal.production ? 'production' : 'development'}`}
+                />
+                {environment?.name ?? 'Environment unavailable'}
+              </span>
+            </div>
+            <div className={`compact-context ${styles.compactContext}`}>
+              <select
+                aria-label="Organization on tablet"
+                disabled={switching}
+                value={organization?.id}
+                onChange={(e) => {
+                  const org = data.organizations.find((value) => value.id === e.target.value);
+                  if (org?.environments[0]) void change(org.id, org.environments[0].id);
                 }}
               >
-                <Dialog.Title className="visually-hidden">Workspace navigation</Dialog.Title>
-                <Dialog.Description className="visually-hidden">
-                  Choose your organization, environment or workspace page.
-                </Dialog.Description>
-                <Dialog.Close
-                  className="icon-button navigation-close"
-                  aria-label="Close navigation"
+                {data.organizations.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label="Environment on tablet"
+                disabled={switching}
+                value={environment?.id}
+                onChange={(e) => void change(data.principal.orgId, e.target.value)}
+              >
+                {organization?.environments.map((env) => (
+                  <option key={env.id} value={env.id}>
+                    {env.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className={`breadcrumb ${styles.breadcrumb}`}>
+              <span className={styles.breadcrumbRoot}>Workspace</span>{' '}
+              <ChevronRight size={12} aria-hidden="true" />
+              <span>{title}</span>
+              {id && (
+                <>
+                  <ChevronRight size={13} />
+                  <span className="mono">{id}</span>
+                </>
+              )}
+            </div>
+            <div className={`top-actions ${styles.topActions}`}>
+              <button
+                className={navigationStyles.searchTrigger}
+                aria-label="Search pages"
+                aria-haspopup="dialog"
+                aria-expanded={search}
+                title={`Search pages (${shortcut})`}
+                onClick={(event) => {
+                  searchReturnTarget.current = event.currentTarget;
+                  setSearch(true);
+                }}
+              >
+                <Search size={16} aria-hidden="true" />
+                <span>Search pages</span>
+                <kbd aria-hidden="true">{shortcut}</kbd>
+              </button>
+              {canPublish && (
+                <Button
+                  className={`compact ${styles.publish}`}
+                  onClick={(event) => {
+                    publicationReturnTarget.current = event.currentTarget;
+                    setPublishing(true);
+                  }}
                 >
-                  <X size={20} />
-                </Dialog.Close>
-                {navigation}
-              </Dialog.Content>
-            </Dialog.Portal>
-          </Dialog.Root>
-          <div className="mobile-workspace-context">
-            <strong>{title}</strong>
-            <span>
+                  Publish changes
+                  <ArrowUpRight size={14} />
+                </Button>
+              )}
+              <button className="icon-button" aria-label="Toggle color theme" onClick={toggleTheme}>
+                {theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}
+              </button>
+              <Menu.Root>
+                <Menu.Trigger className={`user-avatar ${styles.avatar}`} aria-label="Account menu">
+                  {data.user.name.slice(0, 2).toUpperCase()}
+                </Menu.Trigger>
+                <Menu.Portal>
+                  <Menu.Content className="menu" align="end">
+                    <div className="menu-user">
+                      <strong>{data.user.name}</strong>
+                      <small>{data.user.email}</small>
+                      <Badge>{data.principal.role}</Badge>
+                    </div>
+                    <Menu.Item
+                      className="menu-item"
+                      onSelect={() => {
+                        if (confirmNavigation()) router.push('/settings');
+                      }}
+                    >
+                      <Settings size={15} />
+                      Account settings
+                    </Menu.Item>
+                    <Menu.Item
+                      className="menu-item"
+                      onSelect={() => {
+                        if (!confirmClearAll()) return;
+                        void api('auth/logout', 'POST', {})
+                          .then(() => {
+                            clearAll();
+                            client.clear();
+                            router.replace('/login');
+                          })
+                          .catch(setError);
+                      }}
+                    >
+                      <LogOut size={15} />
+                      Sign out
+                    </Menu.Item>
+                  </Menu.Content>
+                </Menu.Portal>
+              </Menu.Root>
+            </div>
+          </header>
+          <div className={styles.contextBar} aria-label="Workspace context">
+            <div className={styles.contextIdentity}>
+              <span className={styles.contextLabel}>Workspace</span>
+              <strong>{organization?.name ?? 'Workspace unavailable'}</strong>
+            </div>
+            <span className={styles.contextEnvironment} data-production={data.principal.production}>
               <i
                 className={`status-dot ${data.principal.production ? 'production' : 'development'}`}
+                aria-hidden="true"
               />
               {environment?.name ?? 'Environment unavailable'}
             </span>
-          </div>
-          <div className="compact-context">
-            <select
-              aria-label="Organization on tablet"
-              value={organization?.id}
-              onChange={(e) => {
-                const org = data.organizations.find((value) => value.id === e.target.value);
-                if (org?.environments[0]) void change(org.id, org.environments[0].id);
-              }}
-            >
-              {data.organizations.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Environment on tablet"
-              value={environment?.id}
-              onChange={(e) => void change(data.principal.orgId, e.target.value)}
-            >
-              {organization?.environments.map((env) => (
-                <option key={env.id} value={env.id}>
-                  {env.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="breadcrumb">
-            Workspace <ChevronRight size={13} />
-            <span>{title}</span>
-            {id && (
-              <>
-                <ChevronRight size={13} />
-                <span className="mono">{id}</span>
-              </>
-            )}
-          </div>
-          <div className="top-actions">
-            <button className="command-search" onClick={() => setSearch(true)}>
-              <Search size={14} />
-              <span>Search pages</span>
-              <kbd>⌘ K</kbd>
-            </button>
-            <span className="bridge-status">
-              <span
-                className={`status-dot ${activeEnvironment?.bridge_url ? 'development' : ''}`}
-              />
-              {activeEnvironment?.bridge_url ? 'Bridge configured' : 'No bridge'}
+            <span className={styles.contextRole}>
+              <span className={styles.contextLabel}>Role</span> {data.principal.role}
             </span>
-            {canPublish && (
-              <Button
-                className="compact"
-                onClick={(event) => {
-                  publicationReturnTarget.current = event.currentTarget;
-                  setPublishing(true);
-                }}
-              >
-                Publish changes
-                <ArrowUpRight size={14} />
-              </Button>
+            {switching && (
+              <span className={styles.switchStatus} role="status">
+                Switching workspace…
+              </span>
             )}
-            <button className="icon-button" aria-label="Toggle color theme" onClick={toggleTheme}>
-              {theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}
-            </button>
-            <Menu.Root>
-              <Menu.Trigger className="user-avatar" aria-label="Account menu">
-                {data.user.name.slice(0, 2).toUpperCase()}
-              </Menu.Trigger>
-              <Menu.Portal>
-                <Menu.Content className="menu" align="end">
-                  <div className="menu-user">
-                    <strong>{data.user.name}</strong>
-                    <small>{data.user.email}</small>
-                    <Badge>{data.principal.role}</Badge>
-                  </div>
-                  <Menu.Item className="menu-item" onSelect={() => router.push('/settings')}>
-                    <Settings size={15} />
-                    Account settings
-                  </Menu.Item>
-                  <Menu.Item
-                    className="menu-item"
-                    onSelect={() => {
-                      void api('auth/logout', 'POST', {}).finally(() => {
-                        client.clear();
-                        router.replace('/login');
-                      });
-                    }}
-                  >
-                    <LogOut size={15} />
-                    Sign out
-                  </Menu.Item>
-                </Menu.Content>
-              </Menu.Portal>
-            </Menu.Root>
+            <span className={styles.bridge}>
+              <Plug size={13} aria-hidden="true" />
+              {environments.isError
+                ? 'Bridge status unavailable'
+                : activeEnvironment?.bridge_url
+                  ? 'Bridge configured'
+                  : environments.isPending
+                    ? 'Checking bridge'
+                    : 'No bridge configured'}
+            </span>
           </div>
-        </header>
-        <ErrorBox error={error} />
-        <main
-          id="main-content"
-          tabIndex={-1}
-          className={id && section === 'workflows' ? 'editor-main' : 'page'}
-          key={`${data.principal.environmentId}/${section}/${id ?? ''}`}
-        >
-          {content}
-        </main>
-      </div>
-      <Modal
-        open={search}
-        onOpenChange={setSearch}
-        title="Go to…"
-        description="Jump to a workspace page. Press ⌘ K from anywhere."
-      >
-        <div className="command-input">
-          <Command size={18} />
-          <input
-            autoFocus
-            aria-label="Search pages"
-            placeholder="Search pages…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+          <ErrorBox error={error} />
+          <main
+            id="main-content"
+            tabIndex={-1}
+            className={id && section === 'workflows' ? 'editor-main' : 'page'}
+            key={`${data.principal.environmentId}/${section}/${id ?? ''}`}
+          >
+            {content}
+          </main>
+        </div>
+        {search && (
+          <CommandPalette
+            groups={groups}
+            section={section}
+            returnTarget={searchReturnTarget.current}
+            onClose={() => setSearch(false)}
+            onNavigate={(href) => {
+              if (!confirmNavigation()) return;
+              router.push(href);
+              setSearch(false);
+            }}
           />
-        </div>
-        <div className="command-results">
-          {groups
-            .flatMap((g) => g.items)
-            .filter((v) => v[1].toLowerCase().includes(query.toLowerCase()))
-            .map(([href, label, Icon]) => (
-              <button
-                key={href}
-                onClick={() => {
-                  router.push(`/${href}`);
-                  setSearch(false);
-                  setQuery('');
-                }}
-              >
-                <Icon size={18} />
-                {label}
-                <ChevronRight size={15} />
-              </button>
-            ))}
-        </div>
-      </Modal>
-      {publishing && (
-        <PublicationPanel
-          open={publishing}
-          close={() => setPublishing(false)}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            publicationReturnTarget.current?.focus();
-          }}
-        />
-      )}
-    </div>
+        )}
+        {publishing && (
+          <PublicationPanel
+            open={publishing}
+            close={() => setPublishing(false)}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              publicationReturnTarget.current?.focus();
+            }}
+          />
+        )}
+      </div>
+    </Tooltip.Provider>
   );
 }

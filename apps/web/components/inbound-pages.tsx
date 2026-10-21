@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { emailPreview, EMAIL_PREVIEW_CHAR_LIMIT } from '../lib/email-preview';
 import { useEffect, useState } from 'react';
-import { api, useApi, useAction, date, pretty } from '../lib/api';
+import { api, useApi, useAction, date, pretty, notifyAuthenticationRequired } from '../lib/api';
 import { browserTransfer, downloadFilename, responseJson } from '../lib/browser-transfers';
 import { PageHeader, DataTable, Button, Badge, Field, Modal, ErrorBox, Loading, Empty } from './ui';
 type InboundRow = {
@@ -29,11 +29,17 @@ type Rule = {
   enabled: boolean;
 };
 async function download(path: string, fallbackName: string) {
-  const response = await browserTransfer(path, 'GET');
+  let response: Response | null;
+  try {
+    response = await browserTransfer(path, 'GET');
+    if (response && !response.ok) await responseJson(response);
+  } catch (error) {
+    notifyAuthenticationRequired(error);
+    throw error;
+  }
   let bytes: Blob;
   let filename: string;
   if (response) {
-    if (!response.ok) await responseJson(response);
     bytes = await response.blob();
     filename = downloadFilename(response.headers.get('content-disposition'), fallbackName);
   } else {
@@ -76,7 +82,9 @@ function InboundList({ writable }: { writable: boolean }) {
   const query = useApi<{ data: InboundRow[] }>(`inbound?page=${page}`, 5000),
     rules = useApi<Rule[]>('forwarding-rules'),
     domains = useApi<{ id: string; name: string; receiving: boolean }[]>('domains'),
-    create = useAction('forwarding-rules');
+    create = useAction('forwarding-rules', 'POST', false, {
+      successMessage: 'Forwarding rule created',
+    });
   const [error, setError] = useState<unknown>();
   return (
     <>
@@ -89,7 +97,7 @@ function InboundList({ writable }: { writable: boolean }) {
           </Button>
         }
       />
-      <ErrorBox error={query.error ?? rules.error ?? domains.error ?? error} />
+      <ErrorBox error={domains.error ?? error} />
       <p className="muted section-description">
         Looking for notifications inside your product? Open a subscriber’s In-app Inbox instead.
       </p>
@@ -97,6 +105,12 @@ function InboundList({ writable }: { writable: boolean }) {
         <Loading />
       ) : (
         <DataTable
+          searchMode="local"
+          loading={query.isPending}
+          refreshing={query.isFetching && !query.isPending}
+          error={query.error}
+          onRetry={() => void query.refetch()}
+          onRefresh={() => void query.refetch()}
           key={page}
           data={query.data?.data ?? []}
           paginate={false}
@@ -156,6 +170,11 @@ function InboundList({ writable }: { writable: boolean }) {
         </div>
       </div>
       <DataTable
+        searchMode="local"
+        refreshing={rules.isFetching && !rules.isPending}
+        error={rules.error}
+        onRetry={() => void rules.refetch()}
+        onRefresh={() => void rules.refetch()}
         data={rules.data ?? []}
         loading={rules.isPending}
         urlStateKey="forwarding"
@@ -204,6 +223,7 @@ function InboundList({ writable }: { writable: boolean }) {
       <Modal
         open={open}
         onOpenChange={setOpen}
+        pending={create.isPending}
         title="Add forwarding rule"
         description="Forward through a verified sender. Automatic messages and forwarding loops are skipped."
       >

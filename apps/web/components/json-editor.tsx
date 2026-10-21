@@ -1,5 +1,6 @@
 'use client';
 import dynamic from 'next/dynamic';
+import { useEffect, useState } from 'react';
 const Editor = dynamic(
   async () => {
     const module = await import('@monaco-editor/react');
@@ -21,18 +22,29 @@ export function JsonEditor({
   height?: number;
   readOnly?: boolean;
 }) {
+  const [theme, setTheme] = useState<'light' | 'vs-dark'>('light');
+  useEffect(() => {
+    const root = document.documentElement;
+    const syncTheme = () => setTheme(root.dataset.theme === 'dark' ? 'vs-dark' : 'light');
+    syncTheme();
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="json-editor">
       <Editor
         height={height}
         language={language}
+        theme={theme}
         value={value}
         onChange={(v) => onChange(v ?? '')}
         options={{
           // Keep native textarea input across browsers and assistive technologies.
           editContext: false,
           minimap: { enabled: false },
-          fontSize: 12,
+          fontSize: 13,
           lineNumbers: 'on',
           scrollBeyondLastLine: false,
           automaticLayout: true,

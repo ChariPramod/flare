@@ -48,7 +48,7 @@ async function compose(page: Page) {
   await page.goto('/emails');
   await page.getByRole('button', { name: 'Send email', exact: true }).click();
   await page.getByLabel('From', { exact: true }).fill('sender@attachments.example.test');
-  await page.getByRole('textbox', { name: /^To / }).fill('reader@example.test');
+  await page.getByRole('textbox', { name: 'To', exact: true }).fill('reader@example.test');
   await page.getByLabel('Subject', { exact: true }).fill('Retained draft');
   await page.getByLabel('Message body').fill('Preserve this draft while the API recovers.');
   return page.getByRole('dialog');
@@ -69,7 +69,7 @@ test('Overview shows organization allowance, sender blockers and retained messag
   await request.post('http://127.0.0.1:4311/fixtures/email-outcomes');
   await request.post('http://127.0.0.1:4311/fixtures/domain-readiness', { data: { route: true } });
   await login(page);
-  await expect(page.getByRole('region', { name: 'Sending access' })).toContainText(
+  await expect(page.getByRole('region', { name: 'Sending access', exact: true })).toContainText(
     'Sending paused',
   );
   const allowance = page.getByRole('region', { name: 'Recipient allowance', exact: true });
@@ -79,16 +79,16 @@ test('Overview shows organization allowance, sender blockers and retained messag
     'aria-valuenow',
     '49',
   );
-  await expect(page.getByRole('region', { name: 'Sender readiness' })).toContainText(
+  await expect(page.getByRole('region', { name: 'Sender readiness', exact: true })).toContainText(
     '0 of 1 sending domains pass Development checks',
   );
-  await expect(page.getByRole('region', { name: 'Sender readiness' })).toContainText(
+  await expect(page.getByRole('region', { name: 'Sender readiness', exact: true })).toContainText(
     'They do not establish Production readiness or verify real-world delivery.',
   );
   const feedback = page.getByRole('region', { name: 'Recipient feedback', exact: true });
   await expect(feedback).toContainText('Unknown bounce outcomes');
   await expect(feedback).toContainText('No recorded feedback is not proof of delivery');
-  const attention = page.getByRole('region', { name: 'Needs attention' });
+  const attention = page.getByRole('region', { name: 'Needs attention', exact: true });
   await expect(attention).toContainText('Latest 100 emails · selected environment');
   await expect(attention).toContainText('Held: sending not approved');
   await expect(attention).toContainText(
@@ -97,7 +97,7 @@ test('Overview shows organization allowance, sender blockers and retained messag
   await page.screenshot({ path: testInfo.outputPath('overview-desktop.png'), fullPage: true });
   await attention.getByRole('link', { name: /Held policy fixture/ }).click();
   await expect(page).toHaveURL(new RegExp(`/emails/${id}$`));
-  await expect(page.getByRole('region', { name: 'Email on hold' })).toContainText(
+  await expect(page.getByRole('region', { name: 'Email on hold', exact: true })).toContainText(
     'Next eligibility check',
   );
 });
@@ -114,10 +114,10 @@ test('unavailable overview APIs never look healthy and each card can recover', a
       : route.continue(),
   );
   await login(page);
-  const access = page.getByRole('region', { name: 'Sending access' });
+  const access = page.getByRole('region', { name: 'Sending access', exact: true });
   const allowance = page.getByRole('region', { name: 'Recipient allowance', exact: true });
-  const readiness = page.getByRole('region', { name: 'Sender readiness' });
-  const attention = page.getByRole('region', { name: 'Needs attention' });
+  const readiness = page.getByRole('region', { name: 'Sender readiness', exact: true });
+  const attention = page.getByRole('region', { name: 'Needs attention', exact: true });
   await expect(access).toContainText('Sending policy unavailable');
   await expect(allowance).toContainText('Recipient allowance unavailable');
   await expect(allowance.getByRole('meter')).toHaveCount(0);
@@ -135,7 +135,7 @@ test('unavailable overview APIs never look healthy and each card can recover', a
   await expect(readiness).toContainText('Add a sending domain');
   await attention.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(
-    attention.getByRole('heading', { name: 'Your first message starts here' }),
+    attention.getByRole('heading', { name: 'Your first message starts here', exact: true }),
   ).toBeVisible();
 });
 
@@ -359,9 +359,9 @@ test('one recipient bounce does not conceal another recipient’s ambiguous acce
   const { id } = await result.json();
   await login(page);
   await page.goto(`/emails/${id}`);
-  await expect(page.getByRole('region', { name: 'Uncertain email acceptance' })).toContainText(
-    'Provider acceptance is uncertain',
-  );
+  await expect(
+    page.getByRole('region', { name: 'Uncertain email acceptance', exact: true }),
+  ).toContainText('Provider acceptance is uncertain');
   await expect(page.getByText('postal · ambiguous', { exact: true })).toBeVisible();
   await expect(
     page.locator('.recipient-row').filter({ hasText: 'bounced@example.test' }),
@@ -394,7 +394,7 @@ test('a background policy failure removes stale approval and quota until retry s
   );
   await login(page);
   await page.goto('/emails');
-  const policy = page.getByRole('region', { name: 'Organization sending access' });
+  const policy = page.getByRole('region', { name: 'Organization sending access', exact: true });
   await expect(policy).toContainText('Your organization is approved');
   await expect(policy).toContainText('Used: 37');
   unavailable = true;

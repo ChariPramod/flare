@@ -1139,7 +1139,21 @@ const server = createServer(async (req, res) => {
       contacts.set(row.id, row);
       return reply(row);
     }
-    if (path === 'contacts') return reply({ data: [...contacts.values()] });
+    if (path === 'contacts') {
+      const search = (url.searchParams.get('q') ?? '').toLowerCase();
+      const page = Math.max(1, Number(url.searchParams.get('page') ?? 1));
+      const limit = Math.max(1, Math.min(100, Number(url.searchParams.get('limit') ?? 25)));
+      const matching = [...contacts.values()]
+        .filter(
+          (contact) =>
+            String(contact.email).toLowerCase().includes(search) ||
+            String(contact.first_name ?? '')
+              .toLowerCase()
+              .includes(search),
+        )
+        .sort((left, right) => String(right.created_at).localeCompare(String(left.created_at)));
+      return reply({ data: matching.slice((page - 1) * limit, page * limit) });
+    }
     if (path.startsWith('contacts/')) {
       const [, id, action] = path.split('/'),
         row = contacts.get(id!);

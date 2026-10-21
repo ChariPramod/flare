@@ -1,0 +1,145 @@
+.toolbar {
+  flex-wrap: wrap;
+}
+
+.errorState {
+  padding: 0 18px 18px;
+}
+
+.dialogLayout:global(.dialog) {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.dialogHeader:global(.dialog-header) {
+  margin-bottom: 0;
+  padding-bottom: 22px;
+}
+
+.dialogBody {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 3px;
+  margin: -3px;
+}
+
+.dialogBody :global(.dialog-actions) {
+  position: sticky;
+  bottom: -3px;
+  z-index: 1;
+  padding-block: 16px 3px;
+  background: var(--panel);
+}
+
+.search {
+  flex: 1 1 240px;
+  min-width: 0;
+  max-width: 360px;
+}
+
+.search input {
+  min-width: 0;
+}
+
+.clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--muted);
+  background: transparent;
+}
+
+.clear:hover {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+.results {
+  font-variant-numeric: tabular-nums;
+}
+
+.pagination {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.range {
+  font-variant-numeric: tabular-nums;
+}
+
+.pageSize {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.pageSize select {
+  width: auto;
+  min-width: 64px;
+  padding: 5px 8px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--panel);
+}
+
+.pagination .pageNumber {
+  margin-right: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.emptyIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+  background: var(--bg);
+}
+
+.noResults p {
+  max-width: 360px;
+  margin: 0 auto 18px;
+}
+
+@media (max-width: 900px), (pointer: coarse) {
+  .clear {
+    flex-basis: 44px;
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (max-width: 600px) {
+  .search {
+    max-width: none;
+    flex-basis: 100%;
+  }
+
+  .range {
+    flex-basis: 100%;
+  }
+
+  .pageSize {
+    margin-right: auto;
+  }
+
+  .pagination .pageNumber {
+    flex-basis: 100%;
+    order: 1;
+  }
+}

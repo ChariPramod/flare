@@ -1,17 +1,21 @@
 'use client';
 import Link from 'next/link';
+import { useState } from 'react';
 import {
   ArrowRight,
+  ArrowUpRight,
+  Clock3,
+  RefreshCw,
   CheckCircle2,
   CircleHelp,
-  Globe,
   Inbox,
   Mail,
-  ShieldCheck,
   Workflow,
 } from 'lucide-react';
 import { date, useApi } from '../lib/api';
 import type { Session } from '../lib/api';
+import { deliveryLabel } from '../lib/email-status';
+import styles from './overview.module.css';
 import { Badge, Button, ErrorBox, Loading, PageHeader } from './ui';
 
 type SendingPolicy = {
@@ -61,6 +65,7 @@ export function OverviewPage({
   const domains = useApi<Domain[]>('domains', 30000);
   const emails = useApi<Email[]>('emails', 30000);
   const writable = session.principal.role !== 'viewer';
+  const [attentionFilter, setAttentionFilter] = useState<'all' | 'held' | 'failed'>('all');
   // Never use retained query data to suggest a current successful state after a failed refresh.
   const currentPolicy = policy.error ? undefined : policy.data;
   const currentDomains = domains.error ? undefined : domains.data;
@@ -71,9 +76,21 @@ export function OverviewPage({
       domain.readiness?.blockers.length === 0 &&
       domain.readiness.transports.some((transport) => transport.ready),
   );
-  const attention = currentEmails
-    ?.filter((email) => ['held', 'failed'].includes(email.status))
-    .slice(0, 5);
+  const recentEmails = currentEmails?.toSorted(
+    (left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
+  );
+  const allAttention = recentEmails?.filter((email) => ['held', 'failed'].includes(email.status));
+  const matchingAttention = allAttention?.filter(
+    (email) => attentionFilter === 'all' || email.status === attentionFilter,
+  );
+  const attention = matchingAttention?.slice(0, 5);
+  const pending = policy.isPending || domains.isPending || emails.isPending;
+  const refreshing = policy.isFetching || domains.isFetching || emails.isFetching;
+  const unavailable = Boolean(policy.error || domains.error || emails.error);
+  const updatedAt = Math.min(policy.dataUpdatedAt, domains.dataUpdatedAt, emails.dataUpdatedAt);
+  const refresh = () => {
+    void Promise.allSettled([policy.refetch(), domains.refetch(), emails.refetch()]);
+  };
   const used = currentPolicy ? currentPolicy.usage.reserved + currentPolicy.usage.sent_24h : 0;
   const progress = currentPolicy?.daily_limit
     ? Math.min(100, (used / currentPolicy.daily_limit) * 100)
@@ -84,35 +101,121 @@ export function OverviewPage({
       : currentPolicy?.state === 'suspended'
         ? 'Sending paused'
         : 'Awaiting review';
+  const nextStep =
+    unavailable || pending
+      ? undefined
+      : currentPolicy?.state === 'suspended'
+        ? {
+            title: 'Sending is paused. Review what needs attention.',
+            description:
+              'A platform operator must review the suspension before real outbound sending can resume. Check held messages for the reason.',
+            label: 'Review held emails',
+            href: '/emails',
+            attention: true,
+          }
+        : currentPolicy?.state === 'pending_review'
+          ? {
+              title: 'Get ready for your first real send.',
+              description:
+                writable && !session.principal.production
+                  ? 'Real outbound sending needs operator approval. You can review your domains and build notification workflows while that review is pending.'
+                  : 'Real outbound sending needs operator approval. You can review your domains and explore notification workflows while that review is pending.',
+              label: 'Review sender setup',
+              href: '/domains',
+              attention: false,
+            }
+          : !currentDomains?.some((domain) => domain.sending)
+            ? {
+                title: 'Give your notifications a sending domain.',
+                description: writable
+                  ? 'Add a domain, verify ownership and review the transport checks before sending email.'
+                  : 'Ask a workspace administrator to add a sending domain. You can follow its verification here.',
+                label: writable ? 'Set up a domain' : 'Review domains',
+                href: '/domains',
+                attention: false,
+              }
+            : !readyDomains?.length
+              ? {
+                  title: 'Your sender setup needs a closer look.',
+                  description:
+                    'No sending domain currently passes the checks for this environment. Open a domain to see which evidence or configuration is missing.',
+                  label: 'Review sender checks',
+                  href: '/domains',
+                  attention: true,
+                }
+              : currentPolicy && used >= currentPolicy.daily_limit
+                ? {
+                    title: 'Your recipient allowance is fully allocated.',
+                    description:
+                      'Used and reserved recipients share the organization allowance. Review pending messages before submitting more email.',
+                    label: 'Review email activity',
+                    href: '/emails',
+                    attention: true,
+                  }
+                : allAttention?.length
+                  ? {
+                      title: 'A few messages need your attention.',
+                      description:
+                        'Held and failed emails retain their delivery details. Review the outcome before considering another send.',
+                      label: 'Review email activity',
+                      href: '/emails',
+                      attention: true,
+                    }
+                  : {
+                      title: 'Follow your next notification from start to finish.',
+                      description:
+                        'Open a workflow, follow its activity and check the subscriber’s Inbox. Email provider acceptance is separate from recipient delivery.',
+                      label:
+                        writable && !session.principal.production
+                          ? 'Build a workflow'
+                          : 'Explore workflows',
+                      href: '/workflows',
+                      attention: false,
+                    };
   return (
-    <div className="overview-page">
+    <div className={`overview-page ${styles.page}`}>
       <PageHeader
         title="Overview"
         description={`Your notification workspace at a glance. You’re viewing ${environmentName}.`}
         actions={
-          <Link className="button" href="/activity">
-            View activity <ArrowRight size={15} aria-hidden="true" />
-          </Link>
+          <>
+            <Button onClick={refresh} disabled={refreshing} aria-label="Refresh overview">
+              <RefreshCw size={15} className={refreshing ? 'spin' : undefined} aria-hidden="true" />
+              Refresh
+            </Button>
+            <Link className="button" href="/activity">
+              View activity <ArrowUpRight size={15} aria-hidden="true" />
+            </Link>
+          </>
         }
       />
-      <section className="overview-welcome" aria-labelledby="overview-welcome-title">
-        <div>
-          <span className="eyebrow">WORKSPACE PULSE</span>
-          <h2 id="overview-welcome-title">A clear view of your next delivery.</h2>
-          <p>Check sender readiness, follow messages and keep your team’s notifications moving.</p>
-        </div>
-        <div className="overview-environment">
-          <span
-            className={`status-dot ${session.principal.production ? 'production' : 'development'}`}
-          />
-          <span>{environmentName}</span>
-          <Badge>{session.principal.role}</Badge>
-        </div>
-      </section>
-      <div className="overview-stats">
-        <section className="overview-card" aria-labelledby="sending-access-title">
+      <div className={styles.contextBar}>
+        <p
+          className={styles.freshness}
+          role="status"
+          aria-live="polite"
+          aria-label="Overview refresh status"
+        >
+          <Clock3 size={13} aria-hidden="true" />
+          {refreshing
+            ? 'Updating overview…'
+            : unavailable
+              ? 'Some data is unavailable. Refresh to retry.'
+              : updatedAt
+                ? `Updated ${new Date(updatedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} · refreshes every 30 seconds`
+                : 'Waiting for workspace data…'}
+        </p>
+      </div>
+      <div className={styles.sectionLabel}>
+        <span>01 / Sending status</span>
+        <span>Organization policy · environment readiness</span>
+      </div>
+      <div className={`overview-stats ${styles.stats}`}>
+        <section
+          className={`overview-card ${styles.statCard}`}
+          aria-labelledby="sending-access-title"
+        >
           <div className="overview-card-heading">
-            <ShieldCheck size={18} aria-hidden="true" />
             <h2 id="sending-access-title">Sending access</h2>
           </div>
           {policy.isPending ? (
@@ -147,9 +250,11 @@ export function OverviewPage({
             </>
           )}
         </section>
-        <section className="overview-card" aria-labelledby="recipient-allowance-title">
+        <section
+          className={`overview-card ${styles.statCard}`}
+          aria-labelledby="recipient-allowance-title"
+        >
           <div className="overview-card-heading">
-            <Mail size={18} aria-hidden="true" />
             <h2 id="recipient-allowance-title">Recipient allowance</h2>
           </div>
           {policy.isPending ? (
@@ -183,9 +288,11 @@ export function OverviewPage({
             </>
           )}
         </section>
-        <section className="overview-card" aria-labelledby="sender-readiness-title">
+        <section
+          className={`overview-card ${styles.statCard}`}
+          aria-labelledby="sender-readiness-title"
+        >
           <div className="overview-card-heading">
-            <Globe size={18} aria-hidden="true" />
             <h2 id="sender-readiness-title">Sender readiness</h2>
           </div>
           {domains.isPending ? (
@@ -216,8 +323,38 @@ export function OverviewPage({
           )}
         </section>
       </div>
-      <div className="overview-columns">
-        <section className="panel overview-attention" aria-labelledby="needs-attention-title">
+      <section className={styles.nextStep} aria-labelledby="overview-welcome-title">
+        <div className={styles.nextStepContent}>
+          <span className={styles.eyebrow}>
+            {nextStep?.attention ? 'Action required' : 'Recommended next step'}
+          </span>
+          <h2 id="overview-welcome-title">
+            {unavailable
+              ? 'Let’s get a current view of your workspace.'
+              : (nextStep?.title ?? 'Checking your workspace…')}
+          </h2>
+          <p>
+            {unavailable
+              ? 'Some checks could not be loaded. Retry below to see the current policy, domains and email activity.'
+              : (nextStep?.description ??
+                'Loading sending policy, sender checks and recent emails.')}
+          </p>
+        </div>
+        {nextStep && (
+          <Link href={nextStep.href} className={`button ${styles.nextStepAction}`}>
+            {nextStep.label} <ArrowRight size={15} aria-hidden="true" />
+          </Link>
+        )}
+      </section>
+      <div className={styles.sectionLabel}>
+        <span>02 / Delivery review</span>
+        <span>Exceptions &amp; authenticated feedback</span>
+      </div>
+      <div className={`overview-columns ${styles.reviewColumns}`}>
+        <section
+          className={`panel overview-attention ${styles.attentionPanel}`}
+          aria-labelledby="needs-attention-title"
+        >
           <div className="overview-section-heading">
             <div>
               <h2 id="needs-attention-title">Needs attention</h2>
@@ -227,6 +364,28 @@ export function OverviewPage({
               All emails <ArrowRight size={14} aria-hidden="true" />
             </Link>
           </div>
+          {currentEmails && (
+            <div
+              className={styles.filterBar}
+              role="group"
+              aria-label="Filter emails needing attention"
+            >
+              {(['all', 'held', 'failed'] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={attentionFilter === value}
+                  onClick={() => setAttentionFilter(value)}
+                >
+                  {value === 'all' ? 'All' : value === 'held' ? 'On hold' : 'Failed'}
+                  <span>
+                    {allAttention?.filter((email) => value === 'all' || email.status === value)
+                      .length ?? 0}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
           {emails.isPending ? (
             <Loading />
           ) : !currentEmails ? (
@@ -250,7 +409,7 @@ export function OverviewPage({
                           : ''}
                       </small>
                     </div>
-                    <Badge>{email.status}</Badge>
+                    <Badge tone={email.status}>{deliveryLabel(email.status)}</Badge>
                     <ArrowRight size={16} aria-hidden="true" />
                   </Link>
                 </li>
@@ -260,9 +419,11 @@ export function OverviewPage({
             <div className="overview-clear">
               <CheckCircle2 size={25} aria-hidden="true" />
               <h3>
-                {currentEmails.length
-                  ? 'No held or failed emails in this list'
-                  : 'Your first message starts here'}
+                {attentionFilter !== 'all' && allAttention?.length
+                  ? `No ${attentionFilter === 'held' ? 'held' : 'failed'} emails in this list`
+                  : currentEmails.length
+                    ? 'No held or failed emails in this list'
+                    : 'Your first message starts here'}
               </h3>
               <p>
                 {currentEmails.length
@@ -271,8 +432,21 @@ export function OverviewPage({
               </p>
             </div>
           )}
+          {Boolean(matchingAttention?.length) && (
+            <div className={styles.listFooter}>
+              <span>
+                Showing {attention?.length} of {matchingAttention?.length} in this list
+              </span>
+              <Link href="/emails">
+                View all emails <ArrowRight size={13} aria-hidden="true" />
+              </Link>
+            </div>
+          )}
         </section>
-        <section className="panel overview-feedback" aria-labelledby="feedback-title">
+        <section
+          className={`panel overview-feedback ${styles.feedbackPanel}`}
+          aria-labelledby="feedback-title"
+        >
           <div className="overview-section-heading">
             <div>
               <h2 id="feedback-title">Recipient feedback</h2>
@@ -311,14 +485,74 @@ export function OverviewPage({
           )}
         </section>
       </div>
+      <section className={`panel ${styles.recentPanel}`} aria-labelledby="recent-emails-title">
+        <div className="overview-section-heading">
+          <div>
+            <span className={styles.eyebrow}>03 / Message ledger</span>
+            <h2 id="recent-emails-title">Recent emails</h2>
+            <p>
+              Your latest submissions in {environmentName}. Open one to follow its recipient
+              outcomes.
+            </p>
+          </div>
+          <Link href="/emails" className="overview-inline-link">
+            View emails <ArrowRight size={14} aria-hidden="true" />
+          </Link>
+        </div>
+        {emails.isPending ? (
+          <Loading />
+        ) : !recentEmails ? (
+          <Unavailable label="Recent emails" retry={() => void emails.refetch()} />
+        ) : recentEmails.length ? (
+          <ul className={styles.recentList}>
+            {recentEmails.slice(0, 5).map((email, index) => (
+              <li key={email.id}>
+                <Link href={`/emails/${email.id}`}>
+                  <span className={styles.messageIndex} aria-hidden="true">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                  <span className={styles.messageSubject}>
+                    <strong>{email.subject || '(No subject)'}</strong>
+                    <span>{date(email.created_at)}</span>
+                  </span>
+                  <Badge tone={email.status}>{deliveryLabel(email.status)}</Badge>
+                  <ArrowUpRight size={15} aria-hidden="true" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className={styles.recentEmpty}>
+            <span className={styles.messageIcon}>
+              <Mail size={21} aria-hidden="true" />
+            </span>
+            <div>
+              <h3>No email submissions yet</h3>
+              <p>
+                {writable
+                  ? 'Send an email or test an email workflow to see its progress here.'
+                  : 'Submitted emails will appear here with their latest status.'}
+              </p>
+            </div>
+            <Link href="/emails" className="overview-inline-link">
+              {writable ? 'Open emails' : 'View emails'} <ArrowRight size={14} aria-hidden="true" />
+            </Link>
+          </div>
+        )}
+        <p className={styles.deliveryNote}>
+          Provider accepted means the transport accepted the message. Delivered requires a recipient
+          delivery event.
+        </p>
+      </section>
       <section aria-labelledby="workspace-shortcuts-title">
         <div className="overview-section-heading">
           <div>
+            <span className={styles.eyebrow}>04 / Workspace directory</span>
             <h2 id="workspace-shortcuts-title">Keep building</h2>
             <p>Two ways to reach people. One place to follow the result.</p>
           </div>
         </div>
-        <div className="overview-shortcuts">
+        <div className={`overview-shortcuts ${styles.shortcuts}`}>
           <Link href="/workflows" className="overview-shortcut">
             <Workflow size={21} aria-hidden="true" />
             <div>

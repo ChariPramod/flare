@@ -78,7 +78,7 @@ test('live large email survives a lost acceptance response without another logic
   await page.getByRole('button', { name: 'Send email', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('From', { exact: true }).fill(required('E2E_FROM'));
-  await dialog.getByRole('textbox', { name: /^To / }).fill(required('E2E_TO'));
+  await dialog.getByRole('textbox', { name: 'To', exact: true }).fill(required('E2E_TO'));
   await dialog.getByLabel('Subject', { exact: true }).fill(subject);
   await dialog.getByLabel('Message body').fill('Keep this exact draft after a lost response — 🙂');
   await dialog.locator('input[type=file]').setInputFiles({

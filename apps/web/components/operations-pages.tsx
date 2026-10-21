@@ -90,13 +90,20 @@ export function WebhooksPage({ id, writable }: { id?: string; writable: boolean 
           </Button>
         }
       />
-      <ErrorBox error={error || endpoints.error} />
+      <ErrorBox error={error} />
       {alerts.data?.map((alert) => (
         <div className="error-box" key={alert.id}>
           {alert.message}
         </div>
       ))}
       <DataTable
+        label="Webhook endpoints"
+        searchMode="local"
+        loading={endpoints.isPending}
+        refreshing={endpoints.isFetching && !endpoints.isPending}
+        error={endpoints.error}
+        onRetry={() => void endpoints.refetch()}
+        onRefresh={() => void endpoints.refetch()}
         data={endpoints.data ?? []}
         columns={[
           {
@@ -192,8 +199,14 @@ export function WebhooksPage({ id, writable }: { id?: string; writable: boolean 
           ))}
         </select>
       </div>
-      <ErrorBox error={deliveries.error} />
       <DataTable
+        label="Webhook deliveries"
+        searchMode="local"
+        loading={deliveries.isPending}
+        refreshing={deliveries.isFetching && !deliveries.isPending}
+        error={deliveries.error}
+        onRetry={() => void deliveries.refetch()}
+        onRefresh={() => void deliveries.refetch()}
         paginate={false}
         data={deliveries.data?.data ?? []}
         columns={[
@@ -224,6 +237,7 @@ export function WebhooksPage({ id, writable }: { id?: string; writable: boolean 
       <Modal
         open={editing !== undefined}
         onOpenChange={(open) => !open && setEditing(undefined)}
+        pending={busy}
         title={editing ? 'Configure endpoint' : 'Add a webhook endpoint'}
         description="Flare signs every request using a secret unique to this endpoint."
       >
@@ -321,7 +335,9 @@ function WebhookDetail({ id, writable }: { id: string; writable: boolean }) {
         }[];
       }
     >(`webhook-deliveries/${id}`, 5000),
-    replay = useAction(`webhook-deliveries/${id}/replay`);
+    replay = useAction(`webhook-deliveries/${id}/replay`, 'POST', false, {
+      successMessage: 'Webhook replay requested',
+    });
   return (
     <>
       <Link className="back-link" href="/webhooks">
@@ -472,11 +488,18 @@ export function LogsPage({ id }: { id?: string }) {
         />
         <Button>Apply filters</Button>
       </form>
-      <ErrorBox error={query.error || error} />
+      <ErrorBox error={error} />
       {query.isPending ? (
         <Loading />
       ) : (
         <DataTable
+          label="Request logs"
+          searchMode="none"
+          loading={query.isPending}
+          refreshing={query.isFetching && !query.isPending}
+          error={query.error}
+          onRetry={() => void query.refetch()}
+          onRefresh={() => void query.refetch()}
           paginate={false}
           data={query.data?.data ?? []}
           columns={[
@@ -709,24 +732,35 @@ export function MetricsPage() {
                       timeZone: 'UTC',
                     })
                   }
-                  tick={{ fontSize: 11 }}
+                  tick={{ fontSize: 12, fill: 'var(--muted)' }}
                 />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                <Tooltip labelFormatter={(value) => new Date(String(value)).toLocaleDateString()} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: 'var(--muted)' }} />
+                <Tooltip
+                  labelFormatter={(value) =>
+                    new Date(String(value)).toLocaleDateString(undefined, { timeZone: 'UTC' })
+                  }
+                  contentStyle={{
+                    background: 'var(--panel)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 3,
+                    color: 'var(--text)',
+                  }}
+                  labelStyle={{ color: 'var(--text)' }}
+                />
                 <Area
                   isAnimationActive={false}
                   dataKey="sent"
                   name="Accepted"
-                  stroke="#fc603e"
-                  fill="#fc603e"
+                  stroke="var(--accent)"
+                  fill="var(--accent)"
                   fillOpacity={0.09}
                 />
                 <Area
                   isAnimationActive={false}
                   dataKey="delivered"
                   name="Delivered"
-                  stroke="#43a787"
-                  fill="#43a787"
+                  stroke="var(--chart-secondary)"
+                  fill="var(--chart-secondary)"
                   fillOpacity={0.09}
                 />
               </AreaChart>
@@ -744,6 +778,13 @@ export function MetricsPage() {
           <h2>Workflow triggers</h2>
           <p className="muted small">Engine acceptance is separate from delivery.</p>
           <DataTable
+            label="Workflow triggers"
+            searchMode="local"
+            loading={query.isPending}
+            refreshing={query.isFetching && !query.isPending}
+            error={query.error}
+            onRetry={() => void query.refetch()}
+            onRefresh={() => void query.refetch()}
             paginate={false}
             data={data?.workflows ?? []}
             columns={[
@@ -769,6 +810,13 @@ export function MetricsPage() {
             explicit <code>workflow</code> tag.
           </p>
           <DataTable
+            label="Native engine events"
+            searchMode="local"
+            loading={query.isPending}
+            refreshing={query.isFetching && !query.isPending}
+            error={query.error}
+            onRetry={() => void query.refetch()}
+            onRefresh={() => void query.refetch()}
             paginate={false}
             data={data?.engine ?? []}
             columns={[

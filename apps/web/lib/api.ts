@@ -3,6 +3,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { browserTransfer, responseJson } from './browser-transfers';
 export { ApiError } from './browser-transfers';
+export const AUTHENTICATION_REQUIRED = 'flare:authentication-required';
+/** Ask the shell to verify the session; a service rejection alone does not sign the user out. */
+export function notifyAuthenticationRequired(error: unknown) {
+  if (
+    typeof window !== 'undefined' &&
+    error &&
+    typeof error === 'object' &&
+    'status' in error &&
+    error.status === 401
+  )
+    window.dispatchEvent(new Event(AUTHENTICATION_REQUIRED));
+}
 export async function api<T = Record<string, unknown>>(
   path: string,
   method = 'GET',
@@ -25,17 +37,22 @@ async function apiSerialized<T>(
   key?: string,
   signal?: AbortSignal,
 ): Promise<T> {
-  const response =
-    (await browserTransfer(path, method, serializedBody, key, signal)) ??
-    (await fetch(`/api/${path}`, {
-      method,
-      credentials: 'same-origin',
-      redirect: 'error',
-      signal,
-      headers: { 'Content-Type': 'application/json', ...(key ? { 'Idempotency-Key': key } : {}) },
-      ...(serializedBody === undefined ? {} : { body: serializedBody }),
-    }));
-  return responseJson<T>(response);
+  try {
+    const response =
+      (await browserTransfer(path, method, serializedBody, key, signal)) ??
+      (await fetch(`/api/${path}`, {
+        method,
+        credentials: 'same-origin',
+        redirect: 'error',
+        signal,
+        headers: { 'Content-Type': 'application/json', ...(key ? { 'Idempotency-Key': key } : {}) },
+        ...(serializedBody === undefined ? {} : { body: serializedBody }),
+      }));
+    return await responseJson<T>(response);
+  } catch (error) {
+    if (path !== 'session' && path !== 'operator/session') notifyAuthenticationRequired(error);
+    throw error;
+  }
 }
 export function useApi<T>(path: string, interval?: number) {
   return useQuery({
@@ -45,10 +62,24 @@ export function useApi<T>(path: string, interval?: number) {
     retry: false,
   });
 }
-export function useAction<T = unknown>(path: string, method = 'POST', idempotent = false) {
+export function useAction<T = unknown>(
+  path: string,
+  method = 'POST',
+  idempotent = false,
+  options: { successMessage?: string | false } = {},
+) {
   const client = useQueryClient();
   const submission = useRef<{ body: string; key: string } | null>(null);
   return useMutation({
+    meta: {
+      successMessage:
+        options.successMessage ??
+        (method === 'DELETE'
+          ? 'Deleted'
+          : method === 'PUT' || method === 'PATCH'
+            ? 'Changes saved'
+            : 'Request completed'),
+    },
     mutationFn: (body: unknown) => {
       const serialized = JSON.stringify(body);
       if (idempotent) {

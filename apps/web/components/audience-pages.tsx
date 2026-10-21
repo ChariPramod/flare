@@ -1,10 +1,11 @@
 'use client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Plus, Upload, Copy, Send, Code2 } from 'lucide-react';
 import { api, useApi, date, pretty } from '../lib/api';
+import { DraftNotice, useDrafts, useEditorDraft } from './drafts';
 import {
   PageHeader,
   Button,
@@ -84,15 +85,6 @@ function Contacts({ writable }: { writable: boolean }) {
     <>
       <div className="panel-heading">
         <div className="actions">
-          <input
-            aria-label="Search contacts"
-            placeholder="Search email or first name"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-          />
           <select
             aria-label="Contact segment"
             value={segment}
@@ -120,8 +112,21 @@ function Contacts({ writable }: { writable: boolean }) {
           </Button>
         </div>
       </div>
-      <ErrorBox error={error || query.error} />
+      <ErrorBox error={error} />
       <DataTable
+        label="Contacts"
+        searchMode="external"
+        searchPlaceholder="Search contacts"
+        searchValue={search}
+        onSearchChange={(value) => {
+          setSearch(value);
+          setPage(1);
+        }}
+        loading={query.isPending}
+        refreshing={query.isFetching && !query.isPending}
+        error={query.error}
+        onRetry={() => void query.refetch()}
+        onRefresh={() => void query.refetch()}
         paginate={false}
         data={query.data?.data ?? []}
         columns={[
@@ -146,14 +151,18 @@ function Contacts({ writable }: { writable: boolean }) {
       />
       <div className="server-pages">
         <span>Page {page}</span>
-        <Button disabled={page === 1} onClick={() => setPage(page - 1)}>
+        <Button disabled={page === 1 || query.isFetching} onClick={() => setPage(page - 1)}>
           Previous
         </Button>
-        <Button disabled={query.data?.data.length !== 25} onClick={() => setPage(page + 1)}>
+        <Button
+          disabled={query.isFetching || query.data?.data.length !== 25}
+          onClick={() => setPage(page + 1)}
+        >
           Next
         </Button>
       </div>
       <Modal
+        pending={busy}
         open={editing}
         onOpenChange={setEditing}
         title="Add contact"
@@ -212,6 +221,7 @@ function CsvImport({
   const properties = useApi<Definition[]>('contact-properties');
   return (
     <Modal
+      pending={busy}
       open={open}
       onOpenChange={(v) => !v && close()}
       title="Import contacts"
@@ -440,8 +450,14 @@ function Definitions({ section, writable }: { section: string; writable: boolean
           Add {kind}
         </Button>
       </div>
-      <ErrorBox error={error || query.error} />
+      <ErrorBox error={error} />
       <DataTable
+        searchMode="local"
+        loading={query.isPending}
+        refreshing={query.isFetching && !query.isPending}
+        error={query.error}
+        onRetry={() => void query.refetch()}
+        onRefresh={() => void query.refetch()}
         data={query.data ?? []}
         columns={[
           { accessorKey: 'name', header: 'Name' },
@@ -469,6 +485,7 @@ function Definitions({ section, writable }: { section: string; writable: boolean
         ]}
       />
       <Modal
+        pending={busy}
         open={editing !== undefined}
         onOpenChange={(v) => !v && setEditing(undefined)}
         title={`${editing ? 'Edit' : 'Add'} ${kind}`}
@@ -600,7 +617,7 @@ export function TemplatesPage({ id, editable }: { id?: string; editable: boolean
     [error, setError] = useState<unknown>(),
     [busy, setBusy] = useState(false);
   const router = useRouter();
-  if (id) return <TemplateEditor id={id} editable={editable} />;
+  if (id) return <TemplateEditor key={id} id={id} editable={editable} />;
   return (
     <>
       <PageHeader
@@ -613,8 +630,14 @@ export function TemplatesPage({ id, editable }: { id?: string; editable: boolean
           </Button>
         }
       />
-      <ErrorBox error={query.error || error} />
+      <ErrorBox error={error} />
       <DataTable
+        searchMode="local"
+        loading={query.isPending}
+        refreshing={query.isFetching && !query.isPending}
+        error={query.error}
+        onRetry={() => void query.refetch()}
+        onRefresh={() => void query.refetch()}
         data={query.data ?? []}
         columns={[
           {
@@ -634,6 +657,7 @@ export function TemplatesPage({ id, editable }: { id?: string; editable: boolean
         ]}
       />
       <Modal
+        pending={busy}
         open={creating}
         onOpenChange={setCreating}
         title="Create email template"
@@ -681,15 +705,40 @@ export function TemplatesPage({ id, editable }: { id?: string; editable: boolean
 }
 function TemplateEditor({ id, editable }: { id: string; editable: boolean }) {
   const client = useQueryClient();
+  const drafts = useDrafts();
+  const { confirmNavigation } = drafts;
+  const mounted = useRef(false);
   const [version, setVersion] = useState(''),
     query = useApi<Template>(`templates/${id}${version ? `?version=${version}` : ''}`),
     [error, setError] = useState<unknown>(),
     [preview, setPreview] = useState<{ subject: string; html: string }>(),
     [busy, setBusy] = useState(false);
   useEffect(() => {
-    setVersion(new URLSearchParams(location.search).get('version') ?? '');
+    mounted.current = true;
+    const restore = () => setVersion(new URLSearchParams(location.search).get('version') ?? '');
+    restore();
+    window.addEventListener('popstate', restore);
+    return () => {
+      mounted.current = false;
+      window.removeEventListener('popstate', restore);
+    };
   }, []);
   const data = query.data;
+  const initial = data
+    ? {
+        subject: data.subject,
+        html: data.html,
+        text: data.text_body ?? '',
+        variables: pretty(data.variables),
+        sample: pretty({
+          first_name: 'Alex',
+          FLARE_UNSUBSCRIBE_URL: 'https://example.test/preferences',
+        }),
+      }
+    : undefined;
+  const draft = useEditorDraft(`template:${id}:${version || 'latest'}`, initial, query.isError);
+  const fields = draft.value;
+  const pending = busy || draft.pending;
   if (query.isPending) return <Loading />;
   return (
     <>
@@ -703,9 +752,17 @@ function TemplateEditor({ id, editable }: { id: string; editable: boolean }) {
           <select
             aria-label="Template version"
             value={version}
+            disabled={pending}
             onChange={(e) => {
-              setVersion(e.target.value);
+              if (!confirmNavigation()) return;
+              const next = e.target.value;
+              setVersion(next);
               setPreview(undefined);
+              setError(undefined);
+              const url = new URL(location.href);
+              if (next) url.searchParams.set('version', next);
+              else url.searchParams.delete('version');
+              history.pushState(null, '', url);
             }}
           >
             <option value="">Latest version</option>
@@ -718,101 +775,161 @@ function TemplateEditor({ id, editable }: { id: string; editable: boolean }) {
         }
       />
       <ErrorBox error={error || query.error} />
-      {data && (
+      <DraftNotice
+        dirty={draft.dirty}
+        pending={pending}
+        onDiscard={() => {
+          draft.discard();
+          setPreview(undefined);
+        }}
+      />
+      {data && fields && (
         <form
-          key={`${id}/${data.version}`}
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            const form = Object.fromEntries(new FormData(e.currentTarget));
             const intent = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('value');
+            const submittedLocation = location.href;
+            const submittedGeneration = drafts.generation();
+            const ownsCurrentEditor = () =>
+              mounted.current &&
+              location.href === submittedLocation &&
+              drafts.generation() === submittedGeneration;
             setBusy(true);
+            const finish = draft.startSaving();
             setError(undefined);
             try {
               const content = {
-                subject: form.subject,
-                html: form.html,
-                text: form.text || undefined,
-                variables: JSON.parse(String(form.variables)),
+                subject: fields.subject,
+                html: fields.html,
+                text: fields.text || undefined,
+                variables: JSON.parse(fields.variables),
               };
-              const action =
-                intent === 'preview'
-                  ? api<{ subject: string; html: string }>('template-preview', 'POST', {
-                      content,
-                      variables: JSON.parse(String(form.sample)),
-                    }).then(setPreview)
-                  : api(`templates/${id}/versions`, 'POST', content).then(() => {
-                      setVersion('');
-                      void query.refetch();
-                      void client.invalidateQueries({ queryKey: ['api', 'templates'] });
-                    });
-              void action.catch(setError).finally(() => setBusy(false));
+              if (intent === 'preview') {
+                const result = await api<{ subject: string; html: string }>(
+                  'template-preview',
+                  'POST',
+                  {
+                    content,
+                    variables: JSON.parse(fields.sample),
+                  },
+                );
+                if (ownsCurrentEditor()) setPreview(result);
+              } else {
+                await api(`templates/${id}/versions`, 'POST', content);
+                if (drafts.generation() === submittedGeneration)
+                  await client.invalidateQueries({
+                    predicate: (item) =>
+                      item.queryKey[0] === 'api' &&
+                      String(item.queryKey[1]).startsWith('templates'),
+                  });
+                // A version save creates a new version; it never changes the
+                // immutable historical version whose draft was submitted.
+                draft.saved(fields, version ? initial! : fields);
+                if (ownsCurrentEditor()) {
+                  setVersion('');
+                  setPreview(undefined);
+                  const url = new URL(submittedLocation);
+                  url.searchParams.delete('version');
+                  history.replaceState(null, '', url);
+                }
+              }
             } catch (error) {
-              setError(error);
-              setBusy(false);
+              if (ownsCurrentEditor()) setError(error);
+            } finally {
+              finish();
+              if (mounted.current) setBusy(false);
             }
           }}
         >
-          <div className="detail-grid">
-            <section className="panel">
-              <Field label="Subject">
-                <input name="subject" defaultValue={data.subject} readOnly={!editable} />
-              </Field>
-              <Field label="HTML">
-                <textarea
-                  name="html"
-                  className="mono template-code"
-                  defaultValue={data.html}
-                  readOnly={!editable}
-                />
-              </Field>
-              <Field label="Plain text">
-                <textarea
-                  name="text"
-                  rows={3}
-                  defaultValue={data.text_body ?? ''}
-                  readOnly={!editable}
-                />
-              </Field>
-              <Field label="Variable fallbacks (JSON)">
-                <textarea
-                  name="variables"
-                  className="mono"
-                  rows={3}
-                  defaultValue={pretty(data.variables)}
-                  readOnly={!editable}
-                />
-              </Field>
-              <p className="small muted">
-                Use {'{{first_name}}'} or {'{{payload.name}}'} in workflow templates. Broadcasts
-                require {'{{{FLARE_UNSUBSCRIBE_URL}}}'}.
-              </p>
-              <div className="actions">
-                <Button name="intent" value="preview" disabled={busy || !editable}>
-                  Preview draft
-                </Button>
-                <Button name="intent" value="save" className="primary" disabled={busy || !editable}>
-                  Save new version
-                </Button>
-              </div>
-            </section>
-            <section className="panel">
-              <h2>Preview</h2>
-              <Field label="Sample variables (JSON)">
-                <textarea
-                  name="sample"
-                  className="mono"
-                  rows={4}
-                  defaultValue={pretty({
-                    first_name: 'Alex',
-                    FLARE_UNSUBSCRIBE_URL: 'https://example.test/preferences',
-                  })}
-                />
-              </Field>
-              <h3>{preview?.subject ?? data.subject}</h3>
-              <SafeEmailPreview html={preview?.html ?? data.html} />
-              <p className="small muted">Remote images and scripts are blocked in the preview.</p>
-            </section>
-          </div>
+          <fieldset className="form-fields" disabled={pending}>
+            <div className="detail-grid">
+              <section className="panel">
+                <Field label="Subject">
+                  <input
+                    name="subject"
+                    value={fields.subject}
+                    onChange={(e) =>
+                      draft.setValue((current) => ({ ...current, subject: e.target.value }))
+                    }
+                    readOnly={!editable}
+                  />
+                </Field>
+                <Field label="HTML">
+                  <textarea
+                    name="html"
+                    className="mono template-code"
+                    value={fields.html}
+                    onChange={(e) =>
+                      draft.setValue((current) => ({ ...current, html: e.target.value }))
+                    }
+                    readOnly={!editable}
+                  />
+                </Field>
+                <Field label="Plain text">
+                  <textarea
+                    name="text"
+                    rows={3}
+                    value={fields.text}
+                    onChange={(e) =>
+                      draft.setValue((current) => ({ ...current, text: e.target.value }))
+                    }
+                    readOnly={!editable}
+                  />
+                </Field>
+                <Field label="Variable fallbacks (JSON)">
+                  <textarea
+                    name="variables"
+                    className="mono"
+                    rows={3}
+                    value={fields.variables}
+                    onChange={(e) =>
+                      draft.setValue((current) => ({ ...current, variables: e.target.value }))
+                    }
+                    readOnly={!editable}
+                  />
+                </Field>
+                <p className="small muted">
+                  Use {'{{first_name}}'} or {'{{payload.name}}'} in workflow templates. Broadcasts
+                  require {'{{{FLARE_UNSUBSCRIBE_URL}}}'}.
+                </p>
+                <div className="actions">
+                  <Button name="intent" value="preview" disabled={pending || !editable}>
+                    Preview draft
+                  </Button>
+                  <Button
+                    name="intent"
+                    value="save"
+                    className="primary"
+                    disabled={pending || !editable}
+                  >
+                    Save new version
+                  </Button>
+                </div>
+              </section>
+              <section className="panel">
+                <h2>Preview</h2>
+                <Field label="Sample variables (JSON)">
+                  <textarea
+                    name="sample"
+                    className="mono"
+                    rows={4}
+                    value={fields.sample}
+                    onChange={(e) =>
+                      draft.setValue((current) => ({ ...current, sample: e.target.value }))
+                    }
+                  />
+                </Field>
+                <h3>{preview?.subject ?? data.subject}</h3>
+                <SafeEmailPreview html={preview?.html ?? data.html} />
+                <p className="small muted">
+                  {preview
+                    ? 'Last requested preview. Update it after editing.'
+                    : 'Showing saved content. Preview your draft to see edits.'}{' '}
+                  Remote images and scripts are blocked in the preview.
+                </p>
+              </section>
+            </div>
+          </fieldset>
         </form>
       )}
     </>
@@ -869,8 +986,14 @@ export function BroadcastsPage({ id, writable }: { id?: string; writable: boolea
           </Button>
         }
       />
-      <ErrorBox error={query.error || error} />
+      <ErrorBox error={error} />
       <DataTable
+        searchMode="local"
+        loading={query.isPending}
+        refreshing={query.isFetching && !query.isPending}
+        error={query.error}
+        onRetry={() => void query.refetch()}
+        onRefresh={() => void query.refetch()}
         data={query.data ?? []}
         columns={[
           {
@@ -896,6 +1019,7 @@ export function BroadcastsPage({ id, writable }: { id?: string; writable: boolea
         ]}
       />
       <Modal
+        pending={busy}
         open={creating}
         onOpenChange={setCreating}
         title="Create broadcast"
@@ -1032,6 +1156,12 @@ function BroadcastDetail({ id, writable }: { id: string; writable: boolean }) {
             <section className="panel">
               <h2>Audience progress</h2>
               <DataTable
+                searchMode="none"
+                loading={query.isPending}
+                refreshing={query.isFetching && !query.isPending}
+                error={query.error}
+                onRetry={() => void query.refetch()}
+                onRefresh={() => void query.refetch()}
                 paginate={false}
                 data={b.stats.recipients}
                 columns={[
@@ -1043,6 +1173,12 @@ function BroadcastDetail({ id, writable }: { id: string; writable: boolean }) {
             <section className="panel">
               <h2>Email outcomes</h2>
               <DataTable
+                searchMode="none"
+                loading={query.isPending}
+                refreshing={query.isFetching && !query.isPending}
+                error={query.error}
+                onRetry={() => void query.refetch()}
+                onRefresh={() => void query.refetch()}
                 paginate={false}
                 data={b.stats.messages}
                 columns={[
@@ -1059,6 +1195,12 @@ function BroadcastDetail({ id, writable }: { id: string; writable: boolean }) {
           <section className="panel">
             <h2>Engagement events</h2>
             <DataTable
+              searchMode="none"
+              loading={query.isPending}
+              refreshing={query.isFetching && !query.isPending}
+              error={query.error}
+              onRetry={() => void query.refetch()}
+              onRefresh={() => void query.refetch()}
               paginate={false}
               data={b.stats.events}
               columns={[
