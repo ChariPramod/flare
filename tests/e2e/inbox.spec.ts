@@ -198,7 +198,8 @@ test('session revalidation removes the Inbox and closes its socket after revocat
   await expect(page.getByText('Read-only fixture notification', { exact: true })).toBeVisible();
   await expect.poll(() => fixture.state.opened).toBe(1);
   fixture.state.revoked = true;
-  await expect(page).toHaveURL(/\/login$/, { timeout: 20000 });
+  await expect(page).toHaveURL(/\/login\?reason=session-expired$/, { timeout: 20000 });
+  await expect(page.getByRole('status')).toContainText('Your session has ended');
   await expect.poll(() => fixture.state.closed).toBe(1);
   await expect(page.getByText('Read-only fixture notification', { exact: true })).toHaveCount(0);
 });

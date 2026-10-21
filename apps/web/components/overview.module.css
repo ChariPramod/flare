@@ -1,0 +1,300 @@
+.page {
+  gap: 22px;
+}
+.contextBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: -8px;
+}
+.contextBar :global(.overview-environment) {
+  padding: 7px 11px;
+  font-size: 11px;
+}
+.freshness {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.freshness svg {
+  flex-shrink: 0;
+}
+.nextStep {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 24px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+}
+.nextStep::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--accent);
+  content: '';
+}
+.nextStepIcon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 15px;
+  color: var(--accent);
+  background: var(--accent-light);
+}
+.nextStepContent {
+  flex: 1;
+  min-width: 0;
+}
+.eyebrow {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 1.2px;
+}
+.nextStep h2 {
+  margin-top: 7px;
+  font-size: 19px;
+  line-height: 1.35;
+  letter-spacing: -0.45px;
+}
+.nextStep p {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+  max-width: 690px;
+}
+.nextStepAction {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.statCard {
+  border-radius: 14px;
+}
+.statCard :global(.overview-card-heading) {
+  gap: 9px;
+}
+.statCard :global(.overview-card-heading) > svg {
+  padding: 7px;
+  box-sizing: content-box;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--bg);
+  width: 17px;
+  height: 17px;
+}
+.statCard :global(.overview-value) {
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.attentionPanel,
+.feedbackPanel {
+  min-width: 0;
+}
+.attentionPanel :global(.overview-section-heading),
+.feedbackPanel :global(.overview-section-heading) {
+  margin-bottom: 16px;
+}
+.filterBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.filterBar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 550;
+}
+.filterBar button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.filterBar button[aria-pressed='true'] {
+  border-color: var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+.filterBar button span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--hover);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.listFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.listFooter a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+}
+.listFooter a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.recentPanel {
+  margin: 0;
+  border-radius: 14px;
+}
+.recentPanel :global(.overview-section-heading) {
+  margin-bottom: 10px;
+}
+.recentList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.recentList li + li {
+  border-top: 1px solid var(--border);
+}
+.recentList a {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 14px 4px;
+  border-radius: 6px;
+}
+.recentList a:hover {
+  background: var(--hover);
+}
+.recentList a > svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.messageIcon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  height: 36px;
+  width: 36px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  border-radius: 10px;
+}
+.messageSubject {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+.messageSubject strong {
+  font-size: 12px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.messageSubject > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.deliveryNote {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.recentEmpty {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 22px 0;
+}
+.recentEmpty > div {
+  flex: 1;
+}
+.recentEmpty h3 {
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.recentEmpty p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+@media (max-width: 1200px) {
+  .nextStep {
+    flex-wrap: wrap;
+  }
+  .nextStepContent {
+    flex-basis: calc(100% - 80px);
+  }
+  .nextStepAction {
+    margin-left: 72px;
+  }
+}
+@media (max-width: 600px) {
+  .page {
+    gap: 18px;
+  }
+  .nextStep {
+    padding: 20px;
+    gap: 14px;
+  }
+  .nextStepIcon {
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+  }
+  .nextStepContent {
+    flex-basis: calc(100% - 54px);
+  }
+  .nextStep h2 {
+    font-size: 17px;
+  }
+  .nextStepAction {
+    margin-left: 0;
+    width: 100%;
+    justify-content: center;
+  }
+  .recentList a {
+    gap: 9px;
+  }
+  .recentList .messageIcon,
+  .recentList a > svg {
+    display: none;
+  }
+  .recentEmpty {
+    flex-wrap: wrap;
+  }
+  .recentEmpty > div {
+    min-width: 170px;
+  }
+}

@@ -1,7 +1,15 @@
 'use client';
 import type { ReactNode } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { X, LoaderCircle, ArrowUpDown, Search } from 'lucide-react';
+import {
+  X,
+  LoaderCircle,
+  ArrowUpDown,
+  Search,
+  SearchX,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 import {
   flexRender,
   getCoreRowModel,
@@ -12,6 +20,9 @@ import {
 } from '@tanstack/react-table';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useEffect, useRef, useState } from 'react';
+import styles from './ui-table.module.css';
+
+const tablePageSizes = [10, 25, 50, 100];
 export function Button({
   children,
   className = '',
@@ -155,30 +166,35 @@ export function DataTable<T>({
   const [filter, setFilter] = useState('');
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
   const hasLoadedData = useRef(false);
+  const searchInput = useRef<HTMLInputElement>(null);
   const filterKey = urlStateKey ? `${urlStateKey}_q` : 'q';
   const pageKey = urlStateKey ? `${urlStateKey}_page` : 'page';
+  const pageSizeKey = urlStateKey ? `${urlStateKey}_page_size` : 'page_size';
   useEffect(() => {
     if (!paginate) return;
     const read = () => {
       const params = new URLSearchParams(location.search);
       setFilter(params.get(filterKey) ?? '');
       const page = Number(params.get(pageKey) ?? 1);
+      const pageSize = Number(params.get(pageSizeKey) ?? 25);
       setPagination({
         pageIndex: Number.isSafeInteger(page) && page > 0 ? page - 1 : 0,
-        pageSize: 25,
+        pageSize: tablePageSizes.includes(pageSize) ? pageSize : 25,
       });
     };
     read();
     window.addEventListener('popstate', read);
     return () => window.removeEventListener('popstate', read);
-  }, [paginate, filterKey, pageKey]);
-  const syncUrl = (q: string, page: number, push = false) => {
+  }, [paginate, filterKey, pageKey, pageSizeKey]);
+  const syncUrl = (q: string, page: number, push = false, pageSize = pagination.pageSize) => {
     if (!paginate) return;
     const url = new URL(location.href);
     if (q) url.searchParams.set(filterKey, q);
     else url.searchParams.delete(filterKey);
     if (page > 0) url.searchParams.set(pageKey, String(page + 1));
     else url.searchParams.delete(pageKey);
+    if (pageSize !== 25) url.searchParams.set(pageSizeKey, String(pageSize));
+    else url.searchParams.delete(pageSizeKey);
     if (push) history.pushState(null, '', url);
     else history.replaceState(null, '', url);
   };
@@ -195,6 +211,20 @@ export function DataTable<T>({
     autoResetPageIndex: false,
   });
   const filteredCount = table.getFilteredRowModel().rows.length;
+  const firstResult = filteredCount
+    ? paginate
+      ? pagination.pageIndex * pagination.pageSize + 1
+      : 1
+    : 0;
+  const lastResult = paginate
+    ? Math.min((pagination.pageIndex + 1) * pagination.pageSize, filteredCount)
+    : filteredCount;
+  const clearSearch = () => {
+    setFilter('');
+    setPagination((current) => ({ ...current, pageIndex: 0 }));
+    syncUrl('', 0);
+    searchInput.current?.focus();
+  };
   useEffect(() => {
     if (!paginate || loading) return;
     if (loading === false || data.length > 0) hasLoadedData.current = true;
@@ -218,11 +248,12 @@ export function DataTable<T>({
     pageKey,
   ]);
   return (
-    <div className="table-panel">
-      <div className="table-toolbar">
-        <div className="search-field">
+    <div className="table-panel" aria-busy={loading || undefined}>
+      <div className={`table-toolbar ${styles.toolbar}`}>
+        <div className={`search-field ${styles.search}`}>
           <Search size={15} aria-hidden="true" />
           <input
+            ref={searchInput}
             aria-label={searchPlaceholder}
             placeholder={searchPlaceholder}
             value={filter}
@@ -232,9 +263,29 @@ export function DataTable<T>({
               syncUrl(e.target.value, 0);
             }}
           />
+          {filter && (
+            <button
+              type="button"
+              className={styles.clear}
+              onClick={clearSearch}
+              aria-label="Clear search"
+            >
+              <X size={14} aria-hidden="true" />
+            </button>
+          )}
         </div>
-        <span className="muted small" role="status" aria-live="polite">
-          {loading ? 'Loading results…' : `${filteredCount} loaded results`}
+        <span
+          className={`muted small ${styles.results}`}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {loading
+            ? 'Loading results…'
+            : filter
+              ? `${filteredCount} ${filteredCount === 1 ? 'match' : 'matches'} from ${data.length} loaded results`
+              : `${data.length} loaded ${data.length === 1 ? 'result' : 'results'}`}
+          {!paginate && !loading && ' on this page'}
         </span>
       </div>
       <div className="table-scroll">
@@ -281,14 +332,50 @@ export function DataTable<T>({
         </table>
       </div>
       {loading && <Loading />}
-      {!loading && !table.getRowModel().rows.length && (
-        <Empty title="Nothing here yet">Create your first item or adjust your search.</Empty>
-      )}
+      {!loading &&
+        !table.getRowModel().rows.length &&
+        (data.length > 0 && filter ? (
+          <div className={`empty ${styles.noResults}`}>
+            <span className={styles.emptyIcon}>
+              <SearchX size={24} aria-hidden="true" />
+            </span>
+            <h3>No matching results</h3>
+            <p>Try a different search, or clear it to see all loaded items.</p>
+            <Button type="button" className="compact" onClick={clearSearch}>
+              Clear search and show all
+            </Button>
+          </div>
+        ) : (
+          <Empty title="Nothing here yet">Items will appear here once they have been added.</Empty>
+        ))}
       {paginate && (
-        <div className="table-pagination">
-          <span className="small muted">
+        <div className={`table-pagination ${styles.pagination}`}>
+          <span className={`small muted ${styles.range}`} aria-live="polite" aria-atomic="true">
             {loading
               ? 'Loading page…'
+              : `${firstResult}–${lastResult} of ${filteredCount} ${filter ? 'matching' : 'loaded'} results`}
+          </span>
+          <label className={styles.pageSize}>
+            <span>Rows per page</span>
+            <select
+              value={pagination.pageSize}
+              disabled={loading}
+              onChange={(event) => {
+                const pageSize = Number(event.target.value);
+                setPagination({ pageIndex: 0, pageSize });
+                syncUrl(filter, 0, true, pageSize);
+              }}
+            >
+              {tablePageSizes.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className={`small muted ${styles.pageNumber}`}>
+            {loading
+              ? '…'
               : `Page ${pagination.pageIndex + 1} of ${Math.max(1, table.getPageCount())}`}
           </span>
           <Button
@@ -299,6 +386,7 @@ export function DataTable<T>({
               syncUrl(filter, pagination.pageIndex - 1, true);
             }}
           >
+            <ChevronLeft size={14} aria-hidden="true" />
             Previous
           </Button>
           <Button
@@ -310,6 +398,7 @@ export function DataTable<T>({
             }}
           >
             Next
+            <ChevronRight size={14} aria-hidden="true" />
           </Button>
         </div>
       )}

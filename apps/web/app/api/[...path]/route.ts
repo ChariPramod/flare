@@ -180,14 +180,13 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
       const { token: _token, ...safe } = data;
       return NextResponse.json(safe);
     }
-    // Session validation also rejects revoked membership/context with 403.
-    // Other resource-level 403 responses must not sign out a valid viewer.
-    const sessionRejected = joined === 'session' && response.status === 403;
-    if (
-      ['auth/logout', 'operator/logout'].includes(joined) ||
-      response.status === 401 ||
-      sessionRejected
-    )
+    // Only a session check can establish that the dashboard session is invalid.
+    // Resource-level 401s may come from providers; keep cookies until the active
+    // session is revalidated. Operator 403 means missing authority, not expiry.
+    const sessionRejected =
+      (joined === 'session' && [401, 403].includes(response.status)) ||
+      (joined === 'operator/session' && response.status === 401);
+    if (['auth/logout', 'operator/logout'].includes(joined) || sessionRejected)
       for (const name of Object.values(names)) jar.delete(name);
     return new NextResponse(text || null, {
       status: sessionRejected ? 401 : response.status,

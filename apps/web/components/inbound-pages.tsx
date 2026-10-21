@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { emailPreview, EMAIL_PREVIEW_CHAR_LIMIT } from '../lib/email-preview';
 import { useEffect, useState } from 'react';
-import { api, useApi, useAction, date, pretty } from '../lib/api';
+import { api, useApi, useAction, date, pretty, notifyAuthenticationRequired } from '../lib/api';
 import { browserTransfer, downloadFilename, responseJson } from '../lib/browser-transfers';
 import { PageHeader, DataTable, Button, Badge, Field, Modal, ErrorBox, Loading, Empty } from './ui';
 type InboundRow = {
@@ -29,11 +29,17 @@ type Rule = {
   enabled: boolean;
 };
 async function download(path: string, fallbackName: string) {
-  const response = await browserTransfer(path, 'GET');
+  let response: Response | null;
+  try {
+    response = await browserTransfer(path, 'GET');
+    if (response && !response.ok) await responseJson(response);
+  } catch (error) {
+    notifyAuthenticationRequired(error);
+    throw error;
+  }
   let bytes: Blob;
   let filename: string;
   if (response) {
-    if (!response.ok) await responseJson(response);
     bytes = await response.blob();
     filename = downloadFilename(response.headers.get('content-disposition'), fallbackName);
   } else {

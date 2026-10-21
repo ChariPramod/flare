@@ -18,8 +18,10 @@ export default function Login() {
   const [exchange, setExchange] = useState('');
   const [mfa, setMfa] = useState('');
   const [next, setNext] = useState('/overview');
+  const [sessionExpired, setSessionExpired] = useState(false);
   useEffect(() => {
     const params = new URLSearchParams(location.search);
+    setSessionExpired(params.get('reason') === 'session-expired');
     setExchange(params.get('code') ?? '');
     const target = params.get('next');
     if (target?.startsWith('/invite?')) setNext(target);
@@ -93,6 +95,11 @@ export default function Login() {
           <span className="small muted">YOUR NOTIFICATION WORKSPACE</span>
           <h2>Welcome back</h2>
           <p className="muted">Sign in to keep things moving.</p>
+          {sessionExpired && (
+            <p className="session-notice" role="status">
+              Your session has ended. Sign in again to return to your workspace.
+            </p>
+          )}
           {exchange ? (
             <form
               onSubmit={(e) => {

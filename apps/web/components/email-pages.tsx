@@ -1,4 +1,5 @@
 'use client';
+import { deliveryLabel } from '../lib/email-status';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -482,17 +483,6 @@ type SendingPolicy = {
     unknown?: number;
   };
 };
-function deliveryLabel(status: string) {
-  return (
-    {
-      queued: 'Accepted',
-      sent: 'Provider accepted',
-      delivered: 'Delivered',
-      held: 'On hold',
-      delivery_delayed: 'Delivery delayed',
-    }[status] ?? status.replaceAll('_', ' ')
-  );
-}
 function fileSize(bytes: number) {
   if (bytes >= 1024 * 1024)
     return `${(bytes / (1024 * 1024)).toLocaleString(undefined, { maximumFractionDigits: 2 })} MiB`;

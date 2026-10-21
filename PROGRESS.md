@@ -1,8 +1,24 @@
 # Flare progress
 
-Updated: 2026-10-19, America/Los_Angeles.
+Updated: 2026-10-20, America/Los_Angeles.
 
-## Current work — documentation organization
+## Current work — frontend refinement
+
+- Branch: **`codex/frontend-refinement`**, based on the documentation checkpoint `0a5aa3d`. Preserve the separate documentation branch and existing local demo/story files.
+- Refine the shared visual system, Overview, navigation and tables while retaining all 25 sidebar modules, role/environment boundaries and existing APIs. Overview offers a context-sensitive next step, manual refresh with honest freshness/error states, held/failed filters and recent-email outcomes. Provider acceptance remains separate from delivery.
+- Add keyboard-driven grouped page search with descriptions and keywords, a mobile search action, focus restoration and storage-safe sidebar/theme preferences. Shared tables gain page-size controls, clear-search actions, accurate loaded-result ranges and distinct empty/no-match states while preserving independent URL state and remote inbound pagination.
+- Fix expired sessions stranded in the authenticated shell. A rejected request asks the session endpoint to confirm expiry before redirecting; an independent provider/transfer rejection must retain a valid login. Cover query, direct mutation and transfer paths in browser regressions.
+- **Local verification passed:** full checkpoint with **904 unit/database tests, 25 evals**, documentation links, lint, typecheck, OpenAPI, build and gitleaks; **68 Chrome browser scenarios**, including 20 new navigation, table, Overview and session regressions. Initial sandbox socket restrictions and the absent Playwright Chromium binary were resolved by allowing local servers and using installed Chrome. Two older browser assertions were updated for exact section names and the explanatory login URL; the complete rerun is green.
+- Rebuilt and restarted only the isolated **`flare-demo` dashboard**, preserving all data/backend services. It is healthy at `http://127.0.0.1:3000`. Visually checked 1440px desktop, 390px phone (no horizontal overflow), dark-theme email rows, keyword navigation, filtering and page size using real local APIs; restored the normal viewport and light theme. Local screenshots/logs are under the ignored `.tools/frontend-refinement/` folder. This is not a new full-stack restore/load rehearsal.
+- Delivery uses this frontend branch and a stacked pull request against `codex/docs-organization`. Its CI result must be checked independently; the baseline documentation run is not evidence for these application changes.
+
+### Frontend follow-through
+
+1. Review this frontend checkpoint and its CI results, then merge the documentation base before the frontend branch.
+2. Rehearse the module-by-module demo using the refreshed local application. Keep real-provider readiness limitations visible.
+3. Continue staging account/domain setup and real Email + Inbox validation below. UI refinement does not establish public DNS, Postal pool isolation or external deliverability.
+
+## Previous checkpoint — documentation organization
 
 - Branch: **`codex/docs-organization`**, based on `db4f0a4`. This checkpoint reorganizes documentation; source feature folders and script relocation remain later work in [the cleanup plan](docs/planning/repository-cleanup-plan.md).
 - Added [task-based documentation indexes](docs/README.md), grouped canonical guides and the [website/backend tour](docs/product/website-and-backend-guide.md). Legacy document paths and section anchors are retained through generated compatibility pages; repository Markdown links point to canonical guides.

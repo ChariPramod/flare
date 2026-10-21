@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refine the dashboard visual system, actionable Overview, grouped keyboard page search, responsive table search/pagination and expired-session recovery. Preserve honest delivery status, environment boundaries and remote pagination; add browser regressions for navigation, table history, overview recovery and confirmed session expiry. Verification is tracked in `PROGRESS.md`.
+
 - Organize documentation into architecture, product, development, operations, planning and archive groups with task-based indexes and the website/backend tour. Preserve legacy document paths and section links through generated compatibility pages, archive prior progress without losing evidence, and add local link/anchor validation. Application source, generated contracts and runtime configuration are unchanged.
 
 - Add an explicit Vercel/backend staging overlay with private-path guards, a live-session-bound Inbox WebSocket gateway, strict event/backpressure limits and bounded reconnects. Add exact split-web encrypted backup profiles and a populated nine-volume restore rehearsal. Support externally hosted dashboard DNS in the public verifier while pinning every checked TLS connection. Remove WebSocket credentials from ingress/runtime/request logs, preserve the dashboard Metrics route, and type Inbox socket options in OpenAPI/SDK. Verification and remaining deployment gates are recorded in `PROGRESS.md`.

@@ -230,7 +230,7 @@ it('preserves self-host Inbox bootstrap authorization and redirect rejection thr
 });
 
 it.each(['session', 'emails'])(
-  'retains valid cookies after a forwarding proof rejection on %s, but clears them for normal unauthorized responses',
+  'retains valid cookies after a forwarding proof rejection on %s',
   async (path) => {
     fetcher.mockResolvedValueOnce(
       Response.json(
@@ -249,12 +249,54 @@ it.each(['session', 'emails'])(
     expect(values.get('flare_org')).toBe(org);
     expect(values.get('flare_environment')).toBe(environment);
     expect(jar.delete).not.toHaveBeenCalled();
-    fetcher.mockResolvedValueOnce(Response.json({ message: 'Session expired' }, { status: 401 }));
-    expect((await api(request(path), context(path))).status).toBe(401);
-    expect(values.size).toBe(0);
-    expect(jar.delete).toHaveBeenCalledTimes(3);
   },
 );
+it.each(['emails', 'workflows', 'operator/organizations'])(
+  'retains cookies after resource-level 401 on %s so the active session can be revalidated',
+  async (path) => {
+    fetcher.mockResolvedValueOnce(
+      Response.json({ message: 'Upstream service credentials were rejected' }, { status: 401 }),
+    );
+    const response = await api(request(path), context(path));
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      message: 'Upstream service credentials were rejected',
+    });
+    expect(jar.delete).not.toHaveBeenCalled();
+    expect(values.get('flare_session')).toBe('session-cookie');
+    expect(values.get('flare_org')).toBe(org);
+    expect(values.get('flare_environment')).toBe(environment);
+    fetcher.mockResolvedValueOnce(Response.json({ user: { id: 'valid-session-user' } }));
+    const session = await api(request('session'), context('session'));
+    expect(session.status).toBe(200);
+    expect(fetcher.mock.calls[1]?.[1]?.headers).toMatchObject({
+      Authorization: 'Bearer session-cookie',
+      'x-org-id': org,
+      'x-environment-id': environment,
+    });
+    expect(jar.delete).not.toHaveBeenCalled();
+  },
+);
+it.each([
+  ['session', 401],
+  ['session', 403],
+  ['operator/session', 401],
+] as const)('clears cookies after confirmed %s rejection with %s', async (path, status) => {
+  fetcher.mockResolvedValueOnce(Response.json({ message: 'Session rejected' }, { status }));
+  const response = await api(request(path), context(path));
+  expect(response.status).toBe(401);
+  expect(values.size).toBe(0);
+  expect(jar.delete).toHaveBeenCalledTimes(3);
+});
+it('retains the tenant session when operator authorization is denied', async () => {
+  fetcher.mockResolvedValueOnce(
+    Response.json({ message: 'Operator access required' }, { status: 403 }),
+  );
+  const response = await api(request('operator/session'), context('operator/session'));
+  expect(response.status).toBe(403);
+  expect(jar.delete).not.toHaveBeenCalled();
+  expect(values.get('flare_session')).toBe('session-cookie');
+});
 it.each(['auth/logout', 'operator/logout'])(
   'still clears cookies for explicit %s when the backend rejects forwarding proof',
   async (path) => {

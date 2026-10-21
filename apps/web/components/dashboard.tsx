@@ -28,7 +28,6 @@ import {
   ArrowUpRight,
   LogOut,
   ChevronRight,
-  Command,
   PanelLeftClose,
   PanelLeft,
   Box,
@@ -39,7 +38,10 @@ import {
 } from 'lucide-react';
 import { api, useApi } from '../lib/api';
 import type { Session } from '../lib/api';
-import { Button, Badge, Modal, ErrorBox, Loading } from './ui';
+import { Button, Badge, ErrorBox, Loading } from './ui';
+import { CommandPalette } from './command-palette';
+import type { NavigationGroup } from './command-palette';
+import navigationStyles from './command-palette.module.css';
 import {
   Workflows,
   Subscribers,
@@ -60,7 +62,7 @@ import { InboundPage } from './inbound-pages';
 import { AutomationsPage } from './automation-pages';
 import { WorkflowEditor } from './workflow-editor';
 import { OverviewPage } from './overview-page';
-const groups: { name: string; items: [string, string, typeof Workflow][] }[] = [
+const groups: NavigationGroup[] = [
   {
     name: 'WORKSPACE',
     items: [
@@ -111,35 +113,48 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
   const router = useRouter(),
     client = useQueryClient();
   const [search, setSearch] = useState(false),
-    [query, setQuery] = useState(''),
     [publishing, setPublishing] = useState(false),
     [theme, setTheme] = useState('light'),
+    [shortcut, setShortcut] = useState('Ctrl K'),
     [collapsed, setCollapsed] = useState(false),
     [navigationOpen, setNavigationOpen] = useState(false),
     [error, setError] = useState<unknown>();
   const navigationTrigger = useRef<HTMLButtonElement>(null);
   const publishFromNavigation = useRef(false);
   const publicationReturnTarget = useRef<HTMLElement | null>(null);
+  const searchReturnTarget = useRef<HTMLElement | null>(null);
   const sessionRejected = Boolean(
     session.error && 'status' in session.error && session.error.status === 401,
   );
   useEffect(() => {
-    const theme = localStorage.getItem('flare-theme') ?? 'light';
-    setTheme(theme);
-    document.documentElement.dataset.theme = theme;
+    try {
+      const theme = localStorage.getItem('flare-theme') === 'dark' ? 'dark' : 'light';
+      setTheme(theme);
+      document.documentElement.dataset.theme = theme;
+      setCollapsed(localStorage.getItem('flare-sidebar-collapsed') === 'true');
+    } catch {
+      // Preferences are optional when browser storage is restricted.
+    }
+    setShortcut(/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘ K' : 'Ctrl K');
+  }, []);
+  useEffect(() => {
     const listener = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && !event.repeat) {
+        // Keep another dialog's draft and focus scope intact.
+        if (!search && document.querySelector('[role="dialog"]')) return;
         event.preventDefault();
+        if (!search && document.activeElement instanceof HTMLElement)
+          searchReturnTarget.current = document.activeElement;
         setSearch((value) => !value);
       }
     };
     document.addEventListener('keydown', listener);
     return () => document.removeEventListener('keydown', listener);
-  }, []);
+  }, [search]);
   useEffect(() => {
     if (sessionRejected) {
       client.clear();
-      router.replace('/login');
+      router.replace('/login?reason=session-expired');
     }
   }, [sessionRejected, client, router]);
   if (session.isPending || sessionRejected) return <Loading />;
@@ -171,8 +186,21 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
   const toggleTheme = () => {
     const next = theme === 'light' ? 'dark' : 'light';
     setTheme(next);
-    localStorage.setItem('flare-theme', next);
+    try {
+      localStorage.setItem('flare-theme', next);
+    } catch {
+      /* The current page still updates. */
+    }
     document.documentElement.dataset.theme = next;
+  };
+  const toggleSidebar = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      localStorage.setItem('flare-sidebar-collapsed', String(next));
+    } catch {
+      /* Keep this session usable. */
+    }
   };
   const title = groups.flatMap((g) => g.items).find((v) => v[0] === section)?.[1] ?? 'Workspace';
   let content: React.ReactNode;
@@ -328,7 +356,7 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
             aria-label="Toggle sidebar"
             aria-controls="workspace-navigation"
             aria-expanded={!collapsed}
-            onClick={() => setCollapsed(!collapsed)}
+            onClick={toggleSidebar}
           >
             {collapsed ? <PanelLeft size={17} /> : <PanelLeftClose size={17} />}
           </button>
@@ -419,10 +447,20 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
             )}
           </div>
           <div className="top-actions">
-            <button className="command-search" onClick={() => setSearch(true)}>
-              <Search size={14} />
+            <button
+              className={navigationStyles.searchTrigger}
+              aria-label="Search pages"
+              aria-haspopup="dialog"
+              aria-expanded={search}
+              title={`Search pages (${shortcut})`}
+              onClick={(event) => {
+                searchReturnTarget.current = event.currentTarget;
+                setSearch(true);
+              }}
+            >
+              <Search size={16} aria-hidden="true" />
               <span>Search pages</span>
-              <kbd>⌘ K</kbd>
+              <kbd aria-hidden="true">{shortcut}</kbd>
             </button>
             <span className="bridge-status">
               <span
@@ -487,42 +525,18 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
           {content}
         </main>
       </div>
-      <Modal
-        open={search}
-        onOpenChange={setSearch}
-        title="Go to…"
-        description="Jump to a workspace page. Press ⌘ K from anywhere."
-      >
-        <div className="command-input">
-          <Command size={18} />
-          <input
-            autoFocus
-            aria-label="Search pages"
-            placeholder="Search pages…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-        <div className="command-results">
-          {groups
-            .flatMap((g) => g.items)
-            .filter((v) => v[1].toLowerCase().includes(query.toLowerCase()))
-            .map(([href, label, Icon]) => (
-              <button
-                key={href}
-                onClick={() => {
-                  router.push(`/${href}`);
-                  setSearch(false);
-                  setQuery('');
-                }}
-              >
-                <Icon size={18} />
-                {label}
-                <ChevronRight size={15} />
-              </button>
-            ))}
-        </div>
-      </Modal>
+      {search && (
+        <CommandPalette
+          groups={groups}
+          section={section}
+          returnTarget={searchReturnTarget.current}
+          onClose={() => setSearch(false)}
+          onNavigate={(href) => {
+            router.push(href);
+            setSearch(false);
+          }}
+        />
+      )}
       {publishing && (
         <PublicationPanel
           open={publishing}
