@@ -119,7 +119,7 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
         style: {
           border: '1px solid var(--border)',
           background: 'var(--panel)',
-          borderRadius: 9,
+          borderRadius: 3,
           width: 240,
           color: 'var(--text)',
         },
@@ -147,9 +147,9 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
         style: {
           border: '1px solid var(--border)',
           background: 'var(--panel)',
-          borderRadius: 30,
+          borderRadius: 3,
           width: 140,
-          fontSize: 11,
+          fontSize: 12,
           color: 'var(--muted)',
         },
       },
@@ -161,7 +161,7 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
     source: nodes[index]!.id,
     target: node.id,
     type: 'smoothstep',
-    style: { stroke: '#c6cbd2', strokeWidth: 1.5 },
+    style: { stroke: 'var(--muted)', strokeWidth: 1.5 },
   }));
   if (query.isPending || !workflow)
     return (
@@ -257,7 +257,7 @@ export function WorkflowEditor({ id, editable }: { id: string; editable: boolean
             minZoom={0.35}
             maxZoom={1.5}
           >
-            <Background gap={20} size={1} color="#cbd0d7" />
+            <Background gap={20} size={1} color="var(--border)" />
             <Controls showInteractive={false} />
           </ReactFlow>
           <div className="canvas-legend">

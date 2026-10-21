@@ -4,15 +4,12 @@ import { useState } from 'react';
 import {
   ArrowRight,
   ArrowUpRight,
-  CircleAlert,
   Clock3,
   RefreshCw,
   CheckCircle2,
   CircleHelp,
-  Globe,
   Inbox,
   Mail,
-  ShieldCheck,
   Workflow,
 } from 'lucide-react';
 import { date, useApi } from '../lib/api';
@@ -177,6 +174,7 @@ export function OverviewPage({
                     };
   return (
     <div className={`overview-page ${styles.page}`}>
+      <p className={styles.pageEyebrow}>Workspace brief · {environmentName}</p>
       <PageHeader
         title="Overview"
         description={`Your notification workspace at a glance. You’re viewing ${environmentName}.`}
@@ -217,15 +215,10 @@ export function OverviewPage({
         </p>
       </div>
       <section className={styles.nextStep} aria-labelledby="overview-welcome-title">
-        <div className={styles.nextStepIcon}>
-          {nextStep?.attention ? (
-            <CircleAlert size={24} aria-hidden="true" />
-          ) : (
-            <Workflow size={24} aria-hidden="true" />
-          )}
-        </div>
         <div className={styles.nextStepContent}>
-          <span className={styles.eyebrow}>YOUR NEXT STEP</span>
+          <span className={styles.eyebrow}>
+            {nextStep?.attention ? 'Action required' : 'Recommended next step'}
+          </span>
           <h2 id="overview-welcome-title">
             {unavailable
               ? 'Let’s get a current view of your workspace.'
@@ -244,13 +237,16 @@ export function OverviewPage({
           </Link>
         )}
       </section>
-      <div className="overview-stats">
+      <div className={styles.sectionLabel}>
+        <span>01 / Sending status</span>
+        <span>Organization policy · environment readiness</span>
+      </div>
+      <div className={`overview-stats ${styles.stats}`}>
         <section
           className={`overview-card ${styles.statCard}`}
           aria-labelledby="sending-access-title"
         >
           <div className="overview-card-heading">
-            <ShieldCheck size={18} aria-hidden="true" />
             <h2 id="sending-access-title">Sending access</h2>
           </div>
           {policy.isPending ? (
@@ -290,7 +286,6 @@ export function OverviewPage({
           aria-labelledby="recipient-allowance-title"
         >
           <div className="overview-card-heading">
-            <Mail size={18} aria-hidden="true" />
             <h2 id="recipient-allowance-title">Recipient allowance</h2>
           </div>
           {policy.isPending ? (
@@ -329,7 +324,6 @@ export function OverviewPage({
           aria-labelledby="sender-readiness-title"
         >
           <div className="overview-card-heading">
-            <Globe size={18} aria-hidden="true" />
             <h2 id="sender-readiness-title">Sender readiness</h2>
           </div>
           {domains.isPending ? (
@@ -360,7 +354,11 @@ export function OverviewPage({
           )}
         </section>
       </div>
-      <div className="overview-columns">
+      <div className={styles.sectionLabel}>
+        <span>02 / Delivery review</span>
+        <span>Exceptions &amp; authenticated feedback</span>
+      </div>
+      <div className={`overview-columns ${styles.reviewColumns}`}>
         <section
           className={`panel overview-attention ${styles.attentionPanel}`}
           aria-labelledby="needs-attention-title"
@@ -498,6 +496,7 @@ export function OverviewPage({
       <section className={`panel ${styles.recentPanel}`} aria-labelledby="recent-emails-title">
         <div className="overview-section-heading">
           <div>
+            <span className={styles.eyebrow}>03 / Message ledger</span>
             <h2 id="recent-emails-title">Recent emails</h2>
             <p>
               Your latest submissions in {environmentName}. Open one to follow its recipient
@@ -514,11 +513,11 @@ export function OverviewPage({
           <Unavailable label="Recent emails" retry={() => void emails.refetch()} />
         ) : recentEmails.length ? (
           <ul className={styles.recentList}>
-            {recentEmails.slice(0, 5).map((email) => (
+            {recentEmails.slice(0, 5).map((email, index) => (
               <li key={email.id}>
                 <Link href={`/emails/${email.id}`}>
-                  <span className={styles.messageIcon}>
-                    <Mail size={17} aria-hidden="true" />
+                  <span className={styles.messageIndex} aria-hidden="true">
+                    {String(index + 1).padStart(2, '0')}
                   </span>
                   <span className={styles.messageSubject}>
                     <strong>{email.subject || '(No subject)'}</strong>
@@ -556,11 +555,12 @@ export function OverviewPage({
       <section aria-labelledby="workspace-shortcuts-title">
         <div className="overview-section-heading">
           <div>
+            <span className={styles.eyebrow}>04 / Workspace directory</span>
             <h2 id="workspace-shortcuts-title">Keep building</h2>
             <p>Two ways to reach people. One place to follow the result.</p>
           </div>
         </div>
-        <div className="overview-shortcuts">
+        <div className={`overview-shortcuts ${styles.shortcuts}`}>
           <Link href="/workflows" className="overview-shortcut">
             <Workflow size={21} aria-hidden="true" />
             <div>

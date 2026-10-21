@@ -709,24 +709,35 @@ export function MetricsPage() {
                       timeZone: 'UTC',
                     })
                   }
-                  tick={{ fontSize: 11 }}
+                  tick={{ fontSize: 12, fill: 'var(--muted)' }}
                 />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                <Tooltip labelFormatter={(value) => new Date(String(value)).toLocaleDateString()} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: 'var(--muted)' }} />
+                <Tooltip
+                  labelFormatter={(value) =>
+                    new Date(String(value)).toLocaleDateString(undefined, { timeZone: 'UTC' })
+                  }
+                  contentStyle={{
+                    background: 'var(--panel)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 3,
+                    color: 'var(--text)',
+                  }}
+                  labelStyle={{ color: 'var(--text)' }}
+                />
                 <Area
                   isAnimationActive={false}
                   dataKey="sent"
                   name="Accepted"
-                  stroke="#fc603e"
-                  fill="#fc603e"
+                  stroke="var(--accent)"
+                  fill="var(--accent)"
                   fillOpacity={0.09}
                 />
                 <Area
                   isAnimationActive={false}
                   dataKey="delivered"
                   name="Delivered"
-                  stroke="#43a787"
-                  fill="#43a787"
+                  stroke="var(--chart-secondary)"
+                  fill="var(--chart-secondary)"
                   fillOpacity={0.09}
                 />
               </AreaChart>

@@ -228,8 +228,10 @@ function SequenceEditor({
     selected: s.id === selected,
     style: {
       width: 210,
-      borderColor: s.id === selected ? '#e65d36' : '#cbd0d8',
-      borderRadius: 10,
+      borderColor: s.id === selected ? 'var(--accent)' : 'var(--border)',
+      background: 'var(--panel)',
+      color: 'var(--text)',
+      borderRadius: 3,
       padding: 18,
     },
   }));
@@ -371,7 +373,7 @@ function SequenceEditor({
               fitView
               fitViewOptions={{ maxZoom: 1.2 }}
             >
-              <Background />
+              <Background color="var(--border)" />
               <Controls />
             </ReactFlow>
           </div>

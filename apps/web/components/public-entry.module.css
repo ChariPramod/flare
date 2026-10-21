@@ -1,0 +1,187 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  padding: 0 clamp(22px, 5vw, 80px);
+  color: var(--text);
+  background: var(--bg);
+}
+
+.header {
+  min-height: 106px;
+  max-width: 1180px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 0 auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 20px;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 33px;
+  color: var(--text);
+  line-height: 1;
+  letter-spacing: -1px;
+}
+
+.brand span,
+.eyebrow {
+  font-family: var(--font-sans), sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 1.4px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.card {
+  width: 100%;
+  max-width: 500px;
+  margin: 64px auto;
+  padding: 38px;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--accent);
+  border-radius: 3px;
+  background: var(--panel);
+}
+
+.card > .eyebrow {
+  margin: 0 0 16px;
+}
+
+.card h1 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 39px;
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -1.2px;
+  margin: 0 0 12px;
+}
+
+.description {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--muted);
+  margin: 0 0 30px;
+}
+
+.card :global(.field) {
+  margin-bottom: 22px;
+  font-size: 12px;
+}
+
+.card :global(.field) input,
+.card :global(.button) {
+  min-height: 44px;
+  border-radius: 3px;
+}
+
+.card :global(.field) small {
+  font-size: 11px;
+}
+
+.card :global(.small) {
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.card a {
+  color: var(--accent);
+}
+
+.preferences {
+  max-width: 660px;
+}
+
+.recipient {
+  font-size: 13px;
+  color: var(--accent);
+  padding: 0 0 20px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.preferenceRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  border-top: 1px solid var(--border);
+  padding: 20px 0;
+  cursor: pointer;
+}
+
+.preferenceRow span {
+  min-width: 0;
+}
+
+.preferenceRow strong,
+.preferenceRow small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.preferenceRow strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.preferenceRow small {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+  margin-top: 5px;
+}
+
+.preferenceRow input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+
+.save {
+  margin-top: 14px;
+}
+
+.footer {
+  max-width: 1180px;
+  width: 100%;
+  padding: 24px 0;
+  margin: auto auto 0;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .header {
+    min-height: 82px;
+  }
+
+  .header > .eyebrow {
+    max-width: 135px;
+    text-align: right;
+    font-size: 9px;
+  }
+
+  .brand span {
+    display: none;
+  }
+
+  .card {
+    margin: 32px auto;
+    padding: 26px;
+  }
+
+  .card h1 {
+    font-size: 32px;
+  }
+}

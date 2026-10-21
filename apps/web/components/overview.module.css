@@ -1,22 +1,57 @@
 .page {
-  gap: 22px;
+  gap: 28px;
+}
+.pageEyebrow,
+.eyebrow,
+.sectionLabel {
+  color: var(--muted);
+  font-family: var(--font-sans), sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 1.65px;
+  line-height: 1.6;
+  text-transform: uppercase;
+}
+.pageEyebrow {
+  margin: 0 0 -16px;
+}
+.page > :global(.page-heading) {
+  align-items: center;
+}
+.page > :global(.page-heading) h1 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: clamp(36px, 4vw, 48px);
+  font-weight: 500;
+  letter-spacing: -1.25px;
+  line-height: 1.15;
+}
+.page > :global(.page-heading) p {
+  margin-top: 12px;
+  font-size: 14px;
 }
 .contextBar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-top: -8px;
+  gap: 14px;
+  padding: 14px 0;
+  border-block: 1px solid var(--border);
 }
 .contextBar :global(.overview-environment) {
-  padding: 7px 11px;
-  font-size: 11px;
+  border: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 12px;
+}
+.contextBar :global(.badge) {
+  margin-left: 8px;
 }
 .freshness {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   margin: 0;
   font-size: 11px;
   color: var(--muted);
@@ -27,125 +62,235 @@
 .nextStep {
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 24px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: var(--shadow);
-  position: relative;
-  overflow: hidden;
-}
-.nextStep::before {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 3px;
-  background: var(--accent);
-  content: '';
-}
-.nextStepIcon {
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  width: 52px;
-  height: 52px;
-  border-radius: 15px;
-  color: var(--accent);
-  background: var(--accent-light);
+  gap: 28px;
+  padding: 10px 0 16px;
 }
 .nextStepContent {
   flex: 1;
   min-width: 0;
+  padding-left: 20px;
+  border-left: 2px solid var(--accent);
 }
-.eyebrow {
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 1.2px;
+.nextStep .eyebrow {
+  color: var(--accent);
 }
 .nextStep h2 {
-  margin-top: 7px;
-  font-size: 19px;
-  line-height: 1.35;
+  margin-top: 8px;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 25px;
+  font-weight: 500;
+  line-height: 1.3;
   letter-spacing: -0.45px;
 }
 .nextStep p {
-  margin-top: 7px;
+  margin-top: 9px;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.7;
-  max-width: 690px;
+  font-size: 13px;
+  line-height: 1.8;
+  max-width: 740px;
 }
 .nextStepAction {
   flex-shrink: 0;
   font-size: 12px;
 }
-.statCard {
-  border-radius: 14px;
+.sectionLabel {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 4px;
+  margin-bottom: -12px;
+}
+.sectionLabel > :last-child {
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 11px;
+}
+.page .stats {
+  gap: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.page .statCard {
+  gap: 16px;
+  padding: 26px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  box-shadow: none;
+  background: var(--panel);
 }
 .statCard :global(.overview-card-heading) {
-  gap: 9px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
 }
-.statCard :global(.overview-card-heading) > svg {
-  padding: 7px;
-  box-sizing: content-box;
-  border: 1px solid var(--border);
-  border-radius: 11px;
-  background: var(--bg);
-  width: 17px;
-  height: 17px;
+.statCard :global(.overview-card-heading) h2 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 23px;
+  line-height: 1.25;
+  font-weight: 500;
+  letter-spacing: -0.35px;
 }
 .statCard :global(.overview-value) {
   margin-top: 2px;
-  font-variant-numeric: tabular-nums;
+  min-height: 62px;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 46px;
+  font-weight: 500;
+  line-height: 1.2;
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: -1px;
+  gap: 7px;
 }
-.attentionPanel,
-.feedbackPanel {
+.statCard :global(.overview-value) > span:not(:global(.badge)) {
+  font-family: var(--font-sans), sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 190px;
+}
+.statCard :global(.overview-value .badge) {
+  padding: 7px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -0.5px;
+}
+.statCard > p {
+  font-size: 12px;
+  line-height: 1.8;
+}
+.statCard :global(.overview-card-note) {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  line-height: 1.7;
+}
+.statCard :global(.quota-track) {
+  height: 3px;
+  border-radius: 0;
+}
+.page .reviewColumns {
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+  gap: 20px;
+}
+.page .attentionPanel,
+.page .feedbackPanel,
+.page .recentPanel {
   min-width: 0;
+  margin: 0;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  box-shadow: none;
+}
+.page :global(.overview-section-heading) h2 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.45px;
+}
+.page :global(.overview-section-heading) .eyebrow + h2 {
+  margin-top: 8px;
+}
+.page :global(.overview-section-heading) p {
+  font-size: 12px;
+  margin-top: 8px;
+}
+.page :global(.overview-section-heading) > a {
+  margin-top: 7px;
 }
 .attentionPanel :global(.overview-section-heading),
 .feedbackPanel :global(.overview-section-heading) {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 .filterBar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
-  padding-bottom: 14px;
+  gap: 4px 20px;
   border-bottom: 1px solid var(--border);
 }
 .filterBar button {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 6px 10px;
-  border: 1px solid transparent;
-  border-radius: 7px;
+  min-height: 40px;
+  margin-bottom: -1px;
+  padding: 8px 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 550;
+  font-size: 12px;
+  font-weight: 500;
 }
 .filterBar button:hover {
-  background: var(--hover);
   color: var(--text);
 }
 .filterBar button[aria-pressed='true'] {
-  border-color: var(--border);
-  background: var(--bg);
-  color: var(--text);
+  border-bottom-color: var(--accent);
+  color: var(--accent);
 }
 .filterBar button span {
-  display: inline-grid;
-  place-items: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  border-radius: 4px;
-  background: var(--hover);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
+  padding: 1px 5px;
+  background: var(--hover);
+  border-radius: 2px;
+}
+.attentionPanel :global(.overview-message-list) a {
+  padding: 20px 0;
+}
+.attentionPanel :global(.overview-message-list) strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.attentionPanel :global(.overview-message-list) p {
+  margin-top: 6px;
+  font-size: 11px;
+}
+.attentionPanel :global(.overview-message-list) small {
+  font-size: 10px;
+}
+.page :global(.overview-clear) {
+  padding: 30px 0 22px;
+  gap: 12px;
+}
+.page :global(.overview-clear) > svg {
+  color: var(--accent);
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.5;
+}
+.page :global(.overview-clear) h3 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 21px;
+  font-weight: 500;
+}
+.feedbackPanel :global(.overview-feedback-list) {
+  margin-top: 12px;
+}
+.feedbackPanel :global(.overview-feedback-list) > div {
+  padding: 15px 0;
+}
+.feedbackPanel :global(.overview-feedback-list) dt {
+  font-size: 12px;
+  align-self: center;
+}
+.feedbackPanel :global(.overview-feedback-list) dd {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 24px;
+  font-weight: 500;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.feedbackPanel :global(.overview-card-note) {
+  font-size: 11px;
+  line-height: 1.8;
 }
 .listFooter {
   display: flex;
@@ -154,7 +299,7 @@
   gap: 12px;
   flex-wrap: wrap;
   border-top: 1px solid var(--border);
-  padding-top: 14px;
+  padding-top: 16px;
   font-size: 11px;
   color: var(--muted);
 }
@@ -168,17 +313,14 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.recentPanel {
-  margin: 0;
-  border-radius: 14px;
-}
 .recentPanel :global(.overview-section-heading) {
-  margin-bottom: 10px;
+  margin-bottom: 20px;
 }
 .recentList {
   list-style: none;
   padding: 0;
   margin: 0;
+  border-top: 1px solid var(--border);
 }
 .recentList li + li {
   border-top: 1px solid var(--border);
@@ -186,37 +328,37 @@
 .recentList a {
   display: flex;
   align-items: center;
-  gap: 13px;
-  padding: 14px 4px;
-  border-radius: 6px;
+  gap: 20px;
+  padding: 21px 4px;
 }
 .recentList a:hover {
   background: var(--hover);
 }
 .recentList a > svg {
   flex-shrink: 0;
-  color: var(--muted);
+  color: var(--accent);
+}
+.messageIndex {
+  flex-shrink: 0;
+  width: 28px;
+  color: var(--accent);
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 22px;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 .messageIcon {
-  display: grid;
-  place-items: center;
   flex-shrink: 0;
-  height: 36px;
-  width: 36px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--muted);
-  border-radius: 10px;
+  color: var(--accent);
 }
 .messageSubject {
   flex: 1;
   min-width: 0;
   display: grid;
-  gap: 5px;
+  gap: 6px;
 }
 .messageSubject strong {
-  font-size: 12px;
-  font-weight: 550;
+  font-size: 13px;
+  font-weight: 500;
   overflow-wrap: anywhere;
 }
 .messageSubject > span {
@@ -224,77 +366,142 @@
   font-size: 11px;
 }
 .deliveryNote {
-  margin-top: 12px;
-  padding-top: 12px;
+  margin-top: 0;
+  padding-top: 16px;
   border-top: 1px solid var(--border);
   color: var(--muted);
   font-size: 11px;
-  line-height: 1.6;
+  line-height: 1.8;
 }
 .recentEmpty {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 22px 0;
+  gap: 20px;
+  padding: 24px 0 30px;
 }
 .recentEmpty > div {
   flex: 1;
 }
 .recentEmpty h3 {
-  font-size: 13px;
-  margin-bottom: 6px;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 22px;
+  font-weight: 500;
+  margin-bottom: 8px;
 }
 .recentEmpty p {
   color: var(--muted);
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.7;
+}
+.page .shortcuts {
+  gap: 24px;
+}
+.shortcuts :global(.overview-shortcut) {
+  padding: 22px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  gap: 12px;
+}
+.shortcuts :global(.overview-shortcut):hover {
+  border-top-color: var(--accent);
+}
+.shortcuts :global(.overview-shortcut) > svg {
+  width: 17px;
+  height: 17px;
+  margin-top: 4px;
+  stroke-width: 1.5;
+}
+.shortcuts :global(.overview-shortcut) h3 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 22px;
+  font-weight: 500;
 }
 @media (max-width: 1200px) {
   .nextStep {
-    flex-wrap: wrap;
-  }
-  .nextStepContent {
-    flex-basis: calc(100% - 80px);
-  }
-  .nextStepAction {
-    margin-left: 72px;
-  }
-}
-@media (max-width: 600px) {
-  .page {
+    align-items: flex-start;
+    flex-direction: column;
     gap: 18px;
   }
-  .nextStep {
-    padding: 20px;
-    gap: 14px;
+  .nextStepAction {
+    margin-left: 22px;
   }
-  .nextStepIcon {
-    width: 40px;
-    height: 40px;
-    border-radius: 11px;
+  .page .statCard {
+    padding: 22px;
   }
-  .nextStepContent {
-    flex-basis: calc(100% - 54px);
+  .page .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stats > :last-child {
+    grid-column: 1 / -1;
+  }
+  .page .reviewColumns {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+}
+@media (max-width: 760px) {
+  .page {
+    gap: 24px;
+  }
+  .page .stats,
+  .page .reviewColumns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .page .attentionPanel,
+  .page .feedbackPanel,
+  .page .recentPanel {
+    padding: 22px;
   }
   .nextStep h2 {
-    font-size: 17px;
+    font-size: 23px;
   }
   .nextStepAction {
-    margin-left: 0;
+    max-width: calc(100% - 22px);
+  }
+  .sectionLabel > :last-child {
     width: 100%;
-    justify-content: center;
   }
   .recentList a {
-    gap: 9px;
+    gap: 12px;
   }
-  .recentList .messageIcon,
   .recentList a > svg {
     display: none;
+  }
+  .messageIndex {
+    width: 22px;
+    font-size: 19px;
   }
   .recentEmpty {
     flex-wrap: wrap;
   }
   .recentEmpty > div {
     min-width: 170px;
+  }
+}
+@media (max-width: 420px) {
+  .page .attentionPanel,
+  .page .feedbackPanel,
+  .page .recentPanel {
+    padding: 18px;
+  }
+  .page :global(.overview-section-heading) {
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+  .recentList a {
+    flex-wrap: wrap;
+  }
+  .messageSubject {
+    flex-basis: calc(100% - 38px);
+  }
+  .recentList :global(.badge) {
+    margin-left: 34px;
+  }
+  .attentionPanel :global(.overview-message-list) a {
+    flex-wrap: wrap;
+  }
+  .attentionPanel :global(.overview-message-list) a > div {
+    flex-basis: 100%;
   }
 }

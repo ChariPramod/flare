@@ -2,9 +2,9 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Flame } from 'lucide-react';
 import { api, useApi } from '../../lib/api';
 import { Button, ErrorBox, Field } from '../../components/ui';
+import styles from '../../components/public-entry.module.css';
 export default function Invite() {
   const session = useApi('session');
   const router = useRouter();
@@ -15,16 +15,17 @@ export default function Invite() {
     setToken(new URLSearchParams(location.search).get('token') ?? '');
   }, []);
   return (
-    <main className="invite-page">
-      <section className="panel invite-panel">
-        <span className="brand">
-          <span className="brand-mark">
-            <Flame />
-          </span>
-          flare
-        </span>
+    <main className={styles.page}>
+      <header className={styles.header}>
+        <Link href="/" className={styles.brand} aria-label="Flare home">
+          Flare<span>BY PARETO LABS</span>
+        </Link>
+        <span className={styles.eyebrow}>WORKSPACE INVITATION</span>
+      </header>
+      <section className={styles.card}>
+        <p className={styles.eyebrow}>BETTER TOGETHER</p>
         <h1>Join your team</h1>
-        <p className="muted">Accept your invitation to a Flare workspace.</p>
+        <p className={styles.description}>Accept your invitation to a Flare workspace.</p>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -77,6 +78,7 @@ export default function Invite() {
           </p>
         )}
       </section>
+      <footer className={styles.footer}>Your next chapter starts with a conversation.</footer>
     </main>
   );
 }

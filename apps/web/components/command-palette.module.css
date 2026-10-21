@@ -3,10 +3,10 @@
   align-items: center;
   justify-content: center;
   gap: 9px;
-  min-height: 34px;
+  min-height: 35px;
   padding: 7px 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 3px;
   background: var(--panel);
   color: var(--muted);
   font-size: 11px;
@@ -26,7 +26,7 @@
   gap: 11px;
   padding: 4px 12px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 3px;
   background: var(--bg);
   color: var(--muted);
 }
@@ -43,7 +43,7 @@
   background: transparent;
   color: var(--text);
   outline: none;
-  font-size: 13px;
+  font-size: 14px;
 }
 .inputRow input::placeholder {
   color: var(--muted);
@@ -60,7 +60,7 @@
   padding: 14px 10px 7px;
   font-size: 10px;
   font-weight: 650;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
   color: var(--muted);
 }
 .option {
@@ -71,13 +71,13 @@
   gap: 12px;
   padding: 10px;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: 3px;
   background: transparent;
   color: var(--text);
   text-align: left;
 }
 .option[aria-selected='true'] {
-  background: var(--hover);
+  background: var(--accent-light);
   border-color: var(--border);
 }
 .optionIcon {
@@ -86,9 +86,9 @@
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  background: var(--panel);
+  background: transparent;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 3px;
   color: var(--muted);
 }
 .option[aria-selected='true'] .optionIcon {
@@ -101,13 +101,13 @@
   min-width: 0;
 }
 .optionText strong {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
 }
 .optionText > span {
   color: var(--muted);
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: 12px;
+  line-height: 1.5;
 }
 .current {
   color: var(--muted);
@@ -161,7 +161,7 @@
   min-width: 20px;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 2px;
   font-size: 9px;
 }
 .keyHints kbd:not(:first-child) {

@@ -6,7 +6,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import * as Dialog from '@radix-ui/react-dialog';
 import {
-  Flame,
   Send,
   Workflow,
   Users,
@@ -42,6 +41,7 @@ import { Button, Badge, ErrorBox, Loading } from './ui';
 import { CommandPalette } from './command-palette';
 import type { NavigationGroup } from './command-palette';
 import navigationStyles from './command-palette.module.css';
+import styles from './dashboard.module.css';
 import {
   Workflows,
   Subscribers,
@@ -254,19 +254,24 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
     <>
       <Link
         href="/overview"
-        className="brand"
+        className={`brand ${styles.brand}`}
         aria-label="Flare overview"
         onClick={() => setNavigationOpen(false)}
       >
-        <span className="brand-mark">
-          <Flame size={23} />
+        <span className={`brand-mark ${styles.monogram}`} aria-hidden="true">
+          f.
         </span>
-        <span>flare</span>
-        <span className="brand-version">BETA</span>
+        <span className={styles.wordmark}>
+          Flare<span className={styles.wordmarkPeriod}>.</span>
+        </span>
+        <span className={`brand-version ${styles.edition}`}>WORKSPACE</span>
       </Link>
-      <div className="workspace-selectors">
-        <label className="organization-select">
-          <span className="org-avatar">{organization?.name.slice(0, 1)}</span>
+      <div className={`workspace-selectors ${styles.selectors}`}>
+        <span className={styles.selectorCaption}>Your workspace</span>
+        <label className={`organization-select ${styles.organization}`}>
+          <span className={`org-avatar ${styles.organizationAvatar}`}>
+            {organization?.name.slice(0, 1)}
+          </span>
           <select
             aria-label="Organization"
             value={organization?.id}
@@ -283,7 +288,10 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
           </select>
           <ChevronsUpDown size={13} />
         </label>
-        <label className="environment-select">
+        <label
+          className={`environment-select ${styles.environment}`}
+          data-production={data.principal.production}
+        >
           <span
             className={`status-dot ${data.principal.production ? 'production' : 'development'}`}
           />
@@ -302,9 +310,12 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
         </label>
       </div>
       <nav aria-label="Workspace pages">
-        {groups.map((group) => (
-          <div className="nav-group" key={group.name}>
-            <div className="nav-label">{group.name}</div>
+        {groups.map((group, index) => (
+          <div className={`nav-group ${styles.group}`} key={group.name}>
+            <div className={`nav-label ${styles.groupLabel}`}>
+              <span aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+              {group.name}
+            </div>
             {group.items.map(([href, label, Icon]) => (
               <Link
                 key={href}
@@ -312,12 +323,14 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
                 title={collapsed ? label : undefined}
                 onClick={() => setNavigationOpen(false)}
                 href={`/${href}`}
-                className={`nav-link ${section === href ? 'active' : ''}`}
+                className={`nav-link ${styles.navLink} ${section === href ? 'active' : ''}`}
                 aria-current={section === href ? 'page' : undefined}
               >
                 <Icon size={17} />
                 <span>{label}</span>
-                {section === href && <span className="nav-active-dot" />}
+                {section === href && (
+                  <ChevronRight className={styles.activeArrow} size={13} aria-hidden="true" />
+                )}
               </Link>
             ))}
           </div>
@@ -335,22 +348,26 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
           Publish changes <ArrowUpRight size={15} aria-hidden="true" />
         </Button>
       )}
-      <div className="sidebar-bottom">
-        <span className="small muted">PARETO LABS</span>
-        <span className="small muted">Notification workspace</span>
+      <div className={`sidebar-bottom ${styles.footer}`}>
+        <span>Built at Pareto Labs</span>
+        <span>One place. Every message.</span>
       </div>
     </>
   );
   return (
-    <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
+    <div className={`app-shell ${styles.shell} ${collapsed ? 'sidebar-collapsed' : ''}`}>
       <a className="skip-link" href="#main-content">
         Skip to main content
       </a>
-      <aside id="workspace-navigation" className="sidebar" aria-label="Workspace navigation">
+      <aside
+        id="workspace-navigation"
+        className={`sidebar ${styles.sidebar}`}
+        aria-label="Workspace navigation"
+      >
         {navigation}
       </aside>
       <div className="main-shell">
-        <header className="topbar">
+        <header className={`topbar ${styles.masthead}`}>
           <button
             className="icon-button desktop-sidebar-toggle"
             aria-label="Toggle sidebar"
@@ -373,7 +390,7 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
             <Dialog.Portal>
               <Dialog.Overlay className="navigation-overlay" />
               <Dialog.Content
-                className="navigation-drawer"
+                className={`navigation-drawer ${styles.drawer}`}
                 onCloseAutoFocus={(event) => {
                   if (!publishFromNavigation.current) return;
                   event.preventDefault();
@@ -400,7 +417,7 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
               </Dialog.Content>
             </Dialog.Portal>
           </Dialog.Root>
-          <div className="mobile-workspace-context">
+          <div className={`mobile-workspace-context ${styles.mobileContext}`}>
             <strong>{title}</strong>
             <span>
               <i
@@ -436,8 +453,9 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
               ))}
             </select>
           </div>
-          <div className="breadcrumb">
-            Workspace <ChevronRight size={13} />
+          <div className={`breadcrumb ${styles.breadcrumb}`}>
+            <span className={styles.breadcrumbRoot}>Workspace</span>{' '}
+            <ChevronRight size={12} aria-hidden="true" />
             <span>{title}</span>
             {id && (
               <>
@@ -446,7 +464,7 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
               </>
             )}
           </div>
-          <div className="top-actions">
+          <div className={`top-actions ${styles.topActions}`}>
             <button
               className={navigationStyles.searchTrigger}
               aria-label="Search pages"
@@ -462,15 +480,9 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
               <span>Search pages</span>
               <kbd aria-hidden="true">{shortcut}</kbd>
             </button>
-            <span className="bridge-status">
-              <span
-                className={`status-dot ${activeEnvironment?.bridge_url ? 'development' : ''}`}
-              />
-              {activeEnvironment?.bridge_url ? 'Bridge configured' : 'No bridge'}
-            </span>
             {canPublish && (
               <Button
-                className="compact"
+                className={`compact ${styles.publish}`}
                 onClick={(event) => {
                   publicationReturnTarget.current = event.currentTarget;
                   setPublishing(true);
@@ -484,7 +496,7 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
               {theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}
             </button>
             <Menu.Root>
-              <Menu.Trigger className="user-avatar" aria-label="Account menu">
+              <Menu.Trigger className={`user-avatar ${styles.avatar}`} aria-label="Account menu">
                 {data.user.name.slice(0, 2).toUpperCase()}
               </Menu.Trigger>
               <Menu.Portal>
@@ -515,6 +527,32 @@ export function Dashboard({ section, id }: { section: string; id?: string }) {
             </Menu.Root>
           </div>
         </header>
+        <div className={styles.contextBar} aria-label="Workspace context">
+          <div className={styles.contextIdentity}>
+            <span className={styles.contextLabel}>Workspace</span>
+            <strong>{organization?.name ?? 'Workspace unavailable'}</strong>
+          </div>
+          <span className={styles.contextEnvironment} data-production={data.principal.production}>
+            <i
+              className={`status-dot ${data.principal.production ? 'production' : 'development'}`}
+              aria-hidden="true"
+            />
+            {environment?.name ?? 'Environment unavailable'}
+          </span>
+          <span className={styles.contextRole}>
+            <span className={styles.contextLabel}>Role</span> {data.principal.role}
+          </span>
+          <span className={styles.bridge}>
+            <Plug size={13} aria-hidden="true" />
+            {environments.isError
+              ? 'Bridge status unavailable'
+              : activeEnvironment?.bridge_url
+                ? 'Bridge configured'
+                : environments.isPending
+                  ? 'Checking bridge'
+                  : 'No bridge configured'}
+          </span>
+        </div>
         <ErrorBox error={error} />
         <main
           id="main-content"

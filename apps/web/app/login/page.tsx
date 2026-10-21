@@ -4,9 +4,10 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Flame, ArrowRight, ShieldCheck, Workflow, Mail, Activity } from 'lucide-react';
+import { ArrowRight, ShieldCheck } from 'lucide-react';
 import { api, useApi } from '../../lib/api';
 import { Button, ErrorBox, Field } from '../../components/ui';
+import styles from './login.module.css';
 const schema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
@@ -51,50 +52,55 @@ export default function Login() {
     }
   });
   return (
-    <main className="login-page">
-      <section className="login-story">
-        <a className="brand" href="/">
-          <span className="brand-mark">
-            <Flame size={23} />
-          </span>
-          flare<span className="brand-caption">BY PARETO LABS</span>
+    <main className={styles.page}>
+      <header className={styles.header}>
+        <a className={styles.brand} href="/" aria-label="Flare home">
+          Flare<span>BY PARETO LABS</span>
         </a>
-        <div className="login-copy">
-          <div className="eyebrow">A LITTLE SIGNAL. A LOT OF IMPACT.</div>
-          <h1>
+        <span className={styles.headerNote}>Your notification workspace</span>
+      </header>
+      <div className={styles.content}>
+        <section className={styles.story} aria-labelledby="welcome-heading">
+          <div className={styles.eyebrow}>A LITTLE SIGNAL. A LOT OF IMPACT.</div>
+          <h1 id="welcome-heading">
             The right message.
             <br />
-            At the right moment.
+            <em>At the right moment.</em>
           </h1>
-          <p>One home for the notifications that connect your product to your people.</p>
-          <div className="signal-lines">
-            <div>
-              <Workflow />
-              <span>Orchestrate every channel</span>
-              <i />
-            </div>
-            <div>
-              <Mail />
-              <span>Make every email count</span>
-              <i />
-            </div>
-            <div>
-              <Activity />
-              <span>Follow every delivery</span>
-              <i />
-            </div>
+          <p className={styles.introduction}>
+            A considered approach to notification operations. Bring your channels, content and
+            delivery into one place.
+          </p>
+          <ol className={styles.capabilities}>
+            <li>
+              <span aria-hidden="true">01</span>
+              <div>
+                <h2>Connect the journey</h2>
+                <p>Build workflows across email, Inbox and your connected channels.</p>
+              </div>
+            </li>
+            <li>
+              <span aria-hidden="true">02</span>
+              <div>
+                <h2>Make it personal</h2>
+                <p>Keep your content, audiences and preferences working together.</p>
+              </div>
+            </li>
+            <li>
+              <span aria-hidden="true">03</span>
+              <div>
+                <h2>Follow the details</h2>
+                <p>See each operation from acceptance through its recorded outcome.</p>
+              </div>
+            </li>
+          </ol>
+        </section>
+        <section className={styles.formPanel} aria-labelledby="sign-in-heading">
+          <div className={styles.formHeading}>
+            <span className={styles.eyebrow}>WORKSPACE ACCESS</span>
+            <h2 id="sign-in-heading">Welcome back</h2>
+            <p>Sign in to keep things moving.</p>
           </div>
-        </div>
-        <div className="login-footer">
-          <span>Built for Pareto Labs</span>
-          <span>Your infrastructure. Your control.</span>
-        </div>
-      </section>
-      <section className="login-form">
-        <div className="login-box">
-          <span className="small muted">YOUR NOTIFICATION WORKSPACE</span>
-          <h2>Welcome back</h2>
-          <p className="muted">Sign in to keep things moving.</p>
           {sessionExpired && (
             <p className="session-notice" role="status">
               Your session has ended. Sign in again to return to your workspace.
@@ -173,16 +179,20 @@ export default function Login() {
             </form>
           )}
           {config.data?.oidc_url && (
-            <a className="button full sso-button" href={config.data.oidc_url}>
+            <a className={`button full ${styles.sso}`} href={config.data.oidc_url}>
               Continue with SSO
             </a>
           )}
-          <div className="login-security">
+          <div className={styles.security}>
             <ShieldCheck size={15} />
             <span>Secure access to your team’s workspace</span>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
+      <footer className={styles.footer}>
+        <span>Purposeful communication, powered by Flare.</span>
+        <span>Your infrastructure. Your control.</span>
+      </footer>
     </main>
   );
 }
