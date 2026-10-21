@@ -1,5 +1,12 @@
 'use client';
-import { Inbox, NovuProvider, useNotifications, useNovu, type BellRenderer } from '@novu/react';
+import {
+  Inbox,
+  NovuProvider,
+  useNotifications,
+  useNovu,
+  type BellRenderer,
+  type InboxAppearance,
+} from '@novu/react';
 import { useCallback, useEffect, useRef } from 'react';
 import { Bell } from 'lucide-react';
 import { Button, Loading } from './ui';
@@ -110,23 +117,80 @@ function ReadOnlyInbox({ onFailure }: { onFailure: () => void }) {
     </div>
   );
 }
-const renderBell: BellRenderer = (unreadCount) => {
-  const total = unreadCount?.total ?? 0;
-  return (
-    <span style={{ position: 'relative', display: 'inline-flex' }}>
-      <Bell size={18} aria-hidden="true" />
-      {total > 0 && (
+const inboxAppearance = {
+  elements: {
+    inbox__popoverContent: {
+      width: 'min(400px, calc(100vw - 32px))',
+      height: 'var(--flare-inbox-height, min(600px, calc((100dvh - 80px) / 2)))',
+    },
+  },
+} satisfies Pick<InboxAppearance, 'elements'>;
+function WritableInbox() {
+  const host = useRef<HTMLDivElement>(null);
+  const bell = useRef<HTMLSpanElement>(null);
+  const measure = useCallback(() => {
+    const button = bell.current?.closest('button');
+    if (!host.current || !button) return;
+    const bounds = button.getBoundingClientRect();
+    const viewport = window.visualViewport;
+    const top = viewport?.offsetTop ?? 0;
+    const bottom = top + (viewport?.height ?? window.innerHeight);
+    // The pinned SDK flips its 600px popover but does not shrink it to fit.
+    // Leave room for its 10px gap and an 8px viewport edge on either side.
+    const available = Math.max(bounds.top - top, bottom - bounds.bottom) - 18;
+    host.current.style.setProperty(
+      '--flare-inbox-height',
+      `${Math.max(0, Math.min(600, available))}px`,
+    );
+  }, []);
+  useEffect(() => {
+    const observer = new ResizeObserver(measure);
+    if (host.current) observer.observe(host.current);
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    window.visualViewport?.addEventListener('resize', measure);
+    window.visualViewport?.addEventListener('scroll', measure);
+    measure();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+      window.visualViewport?.removeEventListener('resize', measure);
+      window.visualViewport?.removeEventListener('scroll', measure);
+    };
+  }, [measure]);
+  const renderBell: BellRenderer = useCallback(
+    (unreadCount) => {
+      const total = unreadCount?.total ?? 0;
+      return (
         <span
-          aria-hidden="true"
-          style={{ position: 'absolute', top: -7, right: -7, fontSize: 10, fontWeight: 700 }}
+          ref={(node) => {
+            bell.current = node;
+            measure();
+          }}
+          style={{ position: 'relative', display: 'inline-flex' }}
         >
-          {total > 99 ? '99+' : total}
+          <Bell size={18} aria-hidden="true" />
+          {total > 0 && (
+            <span
+              aria-hidden="true"
+              style={{ position: 'absolute', top: -7, right: -7, fontSize: 12, fontWeight: 700 }}
+            >
+              {total > 99 ? '99+' : total}
+            </span>
+          )}
+          <span className="visually-hidden">Open notifications</span>
         </span>
-      )}
-      <span className="visually-hidden">Open notifications</span>
-    </span>
+      );
+    },
+    [measure],
   );
-};
+  return (
+    <div ref={host} onPointerDownCapture={measure} onFocusCapture={measure}>
+      <Inbox renderBell={renderBell} appearance={inboxAppearance} placement="bottom-end" />
+    </div>
+  );
+}
 export default function SubscriberInboxClient({
   access,
   writable,
@@ -156,7 +220,7 @@ export default function SubscriberInboxClient({
       socketOptions={access.socketOptions}
     >
       <Lifecycle onFailure={fail} />
-      {writable ? <Inbox renderBell={renderBell} /> : <ReadOnlyInbox onFailure={fail} />}
+      {writable ? <WritableInbox /> : <ReadOnlyInbox onFailure={fail} />}
     </NovuProvider>
   );
 }

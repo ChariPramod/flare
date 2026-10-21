@@ -1,4 +1,58 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+// Native credentials must never be retained in traces or DOM/image artifacts.
+test.use({ trace: 'off', screenshot: 'off', video: 'off' });
+const diagnostics = new WeakMap<
+  Page,
+  {
+    operations: { operation: string; method: string; status: number }[];
+    pageErrors: number;
+    failedRequests: number;
+  }
+>();
+test.beforeEach(async ({ page }) => {
+  process.env.PLAYWRIGHT_NO_COPY_PROMPT = '1';
+  const metadata = {
+    operations: [] as { operation: string; method: string; status: number }[],
+    pageErrors: 0,
+    failedRequests: 0,
+  };
+  diagnostics.set(page, metadata);
+  page.on('pageerror', () => metadata.pageErrors++);
+  page.on('requestfailed', (request) => {
+    if (new URL(request.url()).pathname.startsWith('/novu/v1/inbox/')) metadata.failedRequests++;
+  });
+  page.on('response', (response) => {
+    const path = new URL(response.url()).pathname;
+    const operation =
+      path === '/novu/v1/inbox/session'
+        ? 'session'
+        : path === '/novu/v1/inbox/notifications'
+          ? 'list'
+          : path.endsWith('/count')
+            ? 'count'
+            : path.endsWith('/seen')
+              ? 'seen'
+              : path.endsWith('/read')
+                ? 'read'
+                : path.endsWith('/unread')
+                  ? 'unread'
+                  : undefined;
+    if (path.startsWith('/novu/v1/inbox/') && operation && metadata.operations.length < 100)
+      metadata.operations.push({
+        operation,
+        method: response.request().method(),
+        status: response.status(),
+      });
+  });
+});
+test.afterEach(async ({ page }, info) => {
+  if (info.status !== info.expectedStatus)
+    await info.attach('inbox-operation-metadata', {
+      body: JSON.stringify(diagnostics.get(page)),
+      contentType: 'application/json',
+    });
+});
 
 test('live subscriber Inbox renders native delivery and persists read state', async ({ page }) => {
   test.skip(!process.env.E2E_ACCEPTANCE, 'Requires the disposable native Inbox fixture');
@@ -40,13 +94,16 @@ test('live subscriber Inbox renders native delivery and persists read state', as
     .getByRole('button', { name: 'Open notifications', exact: true })
     .click();
   await expect(page.getByText(body, { exact: true })).toBeVisible();
-  const marked = page.waitForResponse(
-    (result) =>
-      new URL(result.url()).pathname === `/novu/v1/inbox/notifications/${notification.id}/read` &&
-      result.request().method() === 'PATCH',
-  );
-  await page.getByText(body, { exact: true }).click();
-  expect((await marked).status()).toBe(200);
+  await expect(page.getByText(body, { exact: true })).toBeInViewport();
+  const [marked] = await Promise.all([
+    page.waitForResponse(
+      (result) =>
+        new URL(result.url()).pathname === `/novu/v1/inbox/notifications/${notification.id}/read` &&
+        result.request().method() === 'PATCH',
+    ),
+    page.getByText(body, { exact: true }).click(),
+  ]);
+  expect(marked.status()).toBe(200);
   await expect
     .poll(async () => (await feed()).find((item) => item.id === notification.id)?.isRead)
     .toBe(true);

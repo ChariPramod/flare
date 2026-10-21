@@ -174,7 +174,6 @@ export function OverviewPage({
                     };
   return (
     <div className={`overview-page ${styles.page}`}>
-      <p className={styles.pageEyebrow}>Workspace brief · {environmentName}</p>
       <PageHeader
         title="Overview"
         description={`Your notification workspace at a glance. You’re viewing ${environmentName}.`}
@@ -191,13 +190,6 @@ export function OverviewPage({
         }
       />
       <div className={styles.contextBar}>
-        <div className="overview-environment">
-          <span
-            className={`status-dot ${session.principal.production ? 'production' : 'development'}`}
-          />
-          <span>{environmentName}</span>
-          <Badge>{session.principal.role}</Badge>
-        </div>
         <p
           className={styles.freshness}
           role="status"
@@ -214,29 +206,6 @@ export function OverviewPage({
                 : 'Waiting for workspace data…'}
         </p>
       </div>
-      <section className={styles.nextStep} aria-labelledby="overview-welcome-title">
-        <div className={styles.nextStepContent}>
-          <span className={styles.eyebrow}>
-            {nextStep?.attention ? 'Action required' : 'Recommended next step'}
-          </span>
-          <h2 id="overview-welcome-title">
-            {unavailable
-              ? 'Let’s get a current view of your workspace.'
-              : (nextStep?.title ?? 'Checking your workspace…')}
-          </h2>
-          <p>
-            {unavailable
-              ? 'Some checks could not be loaded. Retry below to see the current policy, domains and email activity.'
-              : (nextStep?.description ??
-                'Loading sending policy, sender checks and recent emails.')}
-          </p>
-        </div>
-        {nextStep && (
-          <Link href={nextStep.href} className={`button ${styles.nextStepAction}`}>
-            {nextStep.label} <ArrowRight size={15} aria-hidden="true" />
-          </Link>
-        )}
-      </section>
       <div className={styles.sectionLabel}>
         <span>01 / Sending status</span>
         <span>Organization policy · environment readiness</span>
@@ -354,6 +323,29 @@ export function OverviewPage({
           )}
         </section>
       </div>
+      <section className={styles.nextStep} aria-labelledby="overview-welcome-title">
+        <div className={styles.nextStepContent}>
+          <span className={styles.eyebrow}>
+            {nextStep?.attention ? 'Action required' : 'Recommended next step'}
+          </span>
+          <h2 id="overview-welcome-title">
+            {unavailable
+              ? 'Let’s get a current view of your workspace.'
+              : (nextStep?.title ?? 'Checking your workspace…')}
+          </h2>
+          <p>
+            {unavailable
+              ? 'Some checks could not be loaded. Retry below to see the current policy, domains and email activity.'
+              : (nextStep?.description ??
+                'Loading sending policy, sender checks and recent emails.')}
+          </p>
+        </div>
+        {nextStep && (
+          <Link href={nextStep.href} className={`button ${styles.nextStepAction}`}>
+            {nextStep.label} <ArrowRight size={15} aria-hidden="true" />
+          </Link>
+        )}
+      </section>
       <div className={styles.sectionLabel}>
         <span>02 / Delivery review</span>
         <span>Exceptions &amp; authenticated feedback</span>

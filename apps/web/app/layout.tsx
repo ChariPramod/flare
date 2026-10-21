@@ -26,7 +26,12 @@ export const metadata: Metadata = {
 };
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${sans.variable} ${display.variable}`}>
+    <html lang="en" className={`${sans.variable} ${display.variable}`} suppressHydrationWarning>
+      <head>
+        {/* Intentionally parser-blocking: restore the theme before any body content paints.
+            A same-origin asset works with script-src 'self' without allowing inline code. */}
+        <script src="/theme.js" />
+      </head>
       <body>
         <Providers>{children}</Providers>
       </body>

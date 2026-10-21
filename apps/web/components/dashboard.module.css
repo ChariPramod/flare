@@ -1,92 +1,122 @@
-.shell:global(.app-shell) {
-  --shell-height: 123px;
+/* The workspace shell owns its desktop rail, context and mobile drawer. */
+.shell {
+  display: grid;
   grid-template-columns: 244px minmax(0, 1fr);
+  min-height: 100dvh;
 }
-.sidebar:global(.sidebar),
-.drawer:global(.navigation-drawer) {
-  padding: 28px 18px 0;
+.main {
+  min-width: 0;
+}
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-6) var(--space-4) 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--sidebar);
+  border-right: 1px solid var(--border);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
-.brand:global(.brand) {
-  min-height: 53px;
+.brand {
+  display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 4px 9px;
+  gap: 4px 10px;
+  min-height: 48px;
   padding: 0 10px;
   letter-spacing: normal;
 }
 .wordmark {
-  font-family: var(--font-display);
-  font-size: 41px;
-  font-weight: 500;
-  line-height: 1;
-  letter-spacing: -1.8px;
+  font:
+    500 38px/1 var(--font-display),
+    Georgia,
+    serif;
+  letter-spacing: -1.6px;
 }
 .wordmarkPeriod {
   color: var(--accent);
 }
 .monogram:global(.brand-mark) {
   display: none;
-  width: auto;
-  font-family: var(--font-display);
-  font-size: 36px;
-  line-height: 1;
-  font-weight: 500;
+  color: var(--accent);
+  font:
+    500 36px/1 var(--font-display),
+    Georgia,
+    serif;
   letter-spacing: -2px;
 }
-.edition:global(.brand-version) {
-  padding: 0;
-  margin: 0 0 4px;
+.edition {
   border: 0;
-  border-radius: 0;
-  font-family: var(--font-sans);
-  font-size: 8px;
-  font-weight: 600;
-  letter-spacing: 1.4px;
+  padding: 0;
+  margin: 0;
+  color: var(--muted);
+  font:
+    500 12px/1.5 var(--font-sans),
+    sans-serif;
+  letter-spacing: 1px;
 }
-.selectors:global(.workspace-selectors) {
+.selectors {
+  display: grid;
   gap: 0;
-  margin: 25px 0 30px;
+  margin: var(--space-6) 0 var(--space-6);
 }
 .selectorCaption {
-  margin: 0 10px 10px;
+  margin: 0 10px 8px;
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.5px;
+  font-size: 12px;
 }
-.organization:global(.organization-select) {
-  min-height: 44px;
-  padding: 9px 10px;
-  border-radius: 3px 3px 0 0;
+.organization,
+.environment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
   background: var(--panel);
 }
-.organization select {
-  font-size: 13px;
-  font-weight: 500;
-  min-width: 0;
+.organization {
+  min-height: 44px;
+  border-radius: 3px 3px 0 0;
 }
-.organizationAvatar:global(.org-avatar) {
-  width: 23px;
-  height: 23px;
-  border-color: var(--border);
-  border-radius: 2px;
-  background: var(--bg);
-  color: var(--accent);
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 15px;
-}
-.environment:global(.environment-select) {
-  min-height: 35px;
-  padding: 7px 11px;
+.environment {
+  min-height: 40px;
   border-top: 0;
   border-radius: 0 0 3px 3px;
   background: transparent;
 }
+.organization select,
 .environment select {
-  font-size: 12px;
+  appearance: none;
+  border: 0;
+  min-width: 0;
+  padding: 2px 0;
+  font-size: 14px;
+  font-weight: 500;
+  background: transparent;
+}
+.organization svg,
+.environment svg {
+  flex: none;
   color: var(--muted);
+}
+.organizationAvatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--bg);
+  color: var(--accent);
+  font:
+    600 15px/1 var(--font-display),
+    Georgia,
+    serif;
 }
 .environment[data-production='true'] {
   background: var(--accent-light);
@@ -94,109 +124,141 @@
 .environment[data-production='true'] select {
   color: var(--accent);
 }
-.group:global(.nav-group) {
-  margin-bottom: 27px;
+.group {
+  margin-bottom: var(--space-6);
 }
-.groupLabel:global(.nav-label) {
+.groupLabel {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 10px;
   padding: 0 10px;
-  font-size: 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
   font-weight: 500;
-  letter-spacing: 1.5px;
+  letter-spacing: 1px;
   color: var(--muted);
 }
 .groupLabel > span {
-  font-family: var(--font-display);
-  font-size: 11px;
+  font-family: var(--font-display), Georgia, serif;
   letter-spacing: 0;
 }
-.navLink:global(.nav-link) {
-  min-height: 37px;
+.navLink {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
   padding: 8px 10px;
-  gap: 11px;
+  gap: 10px;
   margin: 1px 0;
   border: 1px solid transparent;
   border-radius: 2px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 450;
 }
-.navLink:global(.active) {
-  background: var(--accent-light);
-  color: var(--accent);
-  font-weight: 600;
-  box-shadow: inset 2px 0 var(--accent);
+.navLink > svg {
+  flex-shrink: 0;
+  stroke-width: 1.65;
 }
 .navLink:hover {
   color: var(--text);
   background: var(--hover);
 }
-.navLink:global(.active):hover {
-  color: var(--accent);
+.navLink[aria-current='page'] {
   background: var(--accent-light);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 2px 0 var(--accent);
 }
 .activeArrow {
   margin-left: auto;
 }
-.footer:global(.sidebar-bottom) {
+.navTooltip {
+  max-width: 240px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 14px;
+  box-shadow: var(--shadow);
+  z-index: 120;
+}
+.footer {
+  display: flex;
   align-items: flex-start;
   flex-direction: column;
-  gap: 7px;
-  padding: 20px 10px 24px;
+  gap: 4px;
+  margin-top: auto;
+  padding: var(--space-6) 10px;
+  border-top: 1px solid var(--border);
   color: var(--muted);
-}
-.footer:global(.sidebar-bottom) > span:first-child {
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 400;
-  letter-spacing: 0;
-  color: var(--text);
-}
-.footer:global(.sidebar-bottom) > span:last-child {
-  font-size: 10px;
-}
-.masthead:global(.topbar) {
-  height: 76px;
-  gap: 18px;
-  padding: 0 34px;
-  background: var(--panel);
-}
-.breadcrumb:global(.breadcrumb) {
-  font-size: 13px;
-  gap: 12px;
-}
-.breadcrumb .breadcrumbRoot {
-  color: var(--muted);
-}
-.topActions:global(.top-actions) {
-  gap: 14px;
-}
-.publish:global(.button) {
-  min-height: 35px;
-  border-radius: 3px;
-  padding: 7px 12px;
   font-size: 12px;
 }
-.avatar:global(.user-avatar) {
-  width: 34px;
-  height: 34px;
+.footer > span:first-child {
+  font:
+    400 15px/1.5 var(--font-display),
+    Georgia,
+    serif;
+  color: var(--text);
+}
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 64px;
+  padding: 10px var(--space-8);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 14px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.breadcrumbRoot {
+  color: var(--muted);
+}
+.breadcrumb :global(.mono) {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+.publish:global(.button) {
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 14px;
+}
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--accent);
   background: var(--accent-light);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
 }
 .contextBar {
   display: flex;
   flex-wrap: wrap;
-  min-height: 47px;
-  gap: 10px 24px;
   align-items: center;
-  padding: 10px 36px;
+  gap: 8px var(--space-6);
+  min-height: 42px;
+  padding: 8px var(--space-8);
   border-bottom: 1px solid var(--border);
   color: var(--muted);
   background: var(--sidebar);
@@ -210,6 +272,9 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+.contextIdentity {
+  max-width: min(40%, 400px);
 }
 .contextIdentity strong {
   overflow: hidden;
@@ -227,11 +292,11 @@
   text-transform: capitalize;
 }
 .contextEnvironment {
-  padding: 3px 7px;
+  padding: 2px 6px;
   border: 1px solid var(--border);
   border-radius: 2px;
   color: var(--text);
-  font-size: 10px;
+  overflow-wrap: anywhere;
 }
 .contextEnvironment[data-production='true'] {
   background: var(--accent-light);
@@ -240,104 +305,207 @@
 }
 .bridge {
   margin-left: auto;
-  font-size: 10px;
 }
-.shell :global(.editor-main) {
-  height: calc(100dvh - var(--shell-height));
-  min-height: 600px;
+.switchStatus {
+  color: var(--accent);
+}
+.compactContext {
+  display: none;
+  gap: 8px;
+  min-width: 0;
+  max-width: 45%;
+}
+.compactContext select {
+  max-width: 160px;
+  height: 40px;
+  padding: 5px 8px;
+  font-size: 14px;
+}
+.mobileToggle,
+.mobileContext,
+.drawerPublication {
+  display: none;
 }
 .shell:global(.sidebar-collapsed) {
   grid-template-columns: 76px minmax(0, 1fr);
 }
 .shell:global(.sidebar-collapsed) .sidebar {
-  padding: 28px 10px 0;
+  padding-inline: 10px;
 }
 .shell:global(.sidebar-collapsed) .brand {
   justify-content: center;
   padding: 0;
 }
+.shell:global(.sidebar-collapsed) .wordmark,
+.shell:global(.sidebar-collapsed) .edition,
+.shell:global(.sidebar-collapsed) .selectors,
+.shell:global(.sidebar-collapsed) .groupLabel,
+.shell:global(.sidebar-collapsed) .navLink > span,
+.shell:global(.sidebar-collapsed) .activeArrow,
+.shell:global(.sidebar-collapsed) .footer,
+.shell:global(.sidebar-collapsed) .breadcrumb {
+  display: none;
+}
 .shell:global(.sidebar-collapsed) .monogram {
   display: inline-flex;
 }
+.shell:global(.sidebar-collapsed) .sidebar nav {
+  margin-top: var(--space-6);
+}
 .shell:global(.sidebar-collapsed) .navLink {
-  padding: 11px;
+  justify-content: center;
+  padding: 10px;
 }
-.shell:global(.sidebar-collapsed) .groupLabel {
-  display: none;
-}
-.shell:global(.sidebar-collapsed) .activeArrow {
-  display: none;
-}
-.drawer:global(.navigation-drawer) {
-  width: min(320px, calc(100vw - 40px));
-  padding-top: 32px;
-}
-.drawer .brand {
-  margin-top: 10px;
-}
-.drawer .brand .monogram {
-  display: none;
-}
-.drawer .groupLabel:global(.nav-label) {
+.shell:global(.sidebar-collapsed) .compactContext {
   display: flex;
 }
-.drawer .navLink:global(.nav-link) {
-  justify-content: flex-start;
+.navigationOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgb(15 15 24 / 50%);
+}
+.drawer {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 71;
+  width: min(320px, calc(100vw - 24px));
+  padding: 32px 16px 0;
+  background: var(--sidebar);
+  color: var(--text);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+}
+.navigationClose {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 44px;
+  height: 44px;
+}
+.drawer .brand {
+  margin-top: 8px;
+  padding-right: 36px;
+}
+.drawer .monogram {
+  display: none;
+}
+.drawer .navLink {
   min-height: 44px;
-  font-size: 14px;
+}
+.drawer .organization select,
+.drawer .environment select {
+  min-height: 28px;
+  font-size: 16px;
+}
+.drawer .drawerPublication {
+  display: inline-flex;
+  margin: 0 0 16px;
+  min-height: 44px;
+  flex-shrink: 0;
 }
 .drawer .footer {
   margin-top: 24px;
 }
+/* Header rows size themselves; the editor receives the actual remaining height. */
+.editorShell {
+  height: 100dvh;
+  overflow: hidden;
+}
+.editorShell .main {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 0;
+}
+.editorShell .masthead,
+.editorShell .contextBar,
+.editorShell .main > :global(.error-box) {
+  flex-shrink: 0;
+}
+.editorShell :global(.editor-main) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
 @media (max-width: 1200px) {
-  .masthead:global(.topbar) {
-    padding: 0 24px;
-    gap: 12px;
-  }
-  .topActions:global(.top-actions) {
+  .masthead {
+    padding-inline: var(--space-6);
     gap: 10px;
   }
   .contextBar {
-    padding-inline: 26px;
-    gap: 10px 18px;
-  }
-  .contextIdentity {
-    max-width: 240px;
+    padding-inline: var(--space-6);
+    gap: 8px 16px;
   }
   .bridge {
     display: none;
   }
+  .breadcrumb :global(.mono) {
+    max-width: 90px;
+  }
 }
 @media (max-width: 900px) {
-  .shell:global(.app-shell),
+  .shell,
   .shell:global(.sidebar-collapsed) {
-    --shell-height: 113px;
     grid-template-columns: minmax(0, 1fr);
   }
-  .shell .sidebar {
+  .sidebar,
+  .desktopToggle,
+  .compactContext,
+  .shell:global(.sidebar-collapsed) .compactContext,
+  .breadcrumb {
     display: none;
   }
-  .shell :global(.editor-main) {
-    height: auto;
+  .masthead {
+    min-height: 64px;
+    padding: 8px 12px;
+    gap: 8px;
   }
-  .masthead:global(.topbar) {
-    height: 72px;
-    padding: 0 18px;
-    gap: 12px;
+  .mobileToggle {
+    display: inline-flex;
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
   }
-  .mobileContext:global(.mobile-workspace-context) strong {
-    font-family: var(--font-display);
-    font-size: 18px;
-    line-height: 1.15;
-    font-weight: 500;
+  .mobileContext {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
   }
-  .mobileContext:global(.mobile-workspace-context) > span {
-    font-size: 10px;
+  .mobileContext strong {
+    font:
+      500 18px/1.2 var(--font-display),
+      Georgia,
+      serif;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mobileContext > span {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .topActions {
+    gap: 4px;
+  }
+  .topActions > :global(.icon-button),
+  .avatar {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
   }
   .contextBar {
-    min-height: 41px;
-    padding: 9px 24px;
-    gap: 10px;
+    min-height: 40px;
+    padding: var(--space-2) var(--space-4);
+    gap: 8px;
   }
   .contextIdentity {
     max-width: 65%;
@@ -348,24 +516,57 @@
   }
   .contextRole {
     margin-left: auto;
-    font-size: 10px;
+  }
+  .editorShell {
+    height: auto;
+    overflow: visible;
+  }
+  .editorShell .main {
+    height: auto;
+  }
+  .editorShell :global(.editor-main) {
+    overflow: visible;
   }
 }
-@media (max-width: 500px) {
-  .masthead:global(.topbar) {
-    padding: 0 10px;
-    gap: 8px;
-  }
-  .topActions:global(.top-actions) {
-    gap: 4px;
-  }
-  .contextBar {
-    padding-inline: 18px;
+@media (max-width: 650px) {
+  .topActions > .publish {
+    display: none;
   }
   .contextIdentity .contextLabel {
     display: none;
   }
-  .mobileContext:global(.mobile-workspace-context) strong {
+}
+@media (max-width: 380px) {
+  .masthead {
+    padding-inline: 4px;
+    gap: 4px;
+  }
+  .topActions {
+    gap: 0;
+  }
+  .mobileContext strong {
     font-size: 16px;
+  }
+  .contextBar {
+    padding-inline: 16px;
+  }
+}
+@media (max-width: 900px), (pointer: coarse) {
+  .navLink,
+  .avatar,
+  .publish {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .organization,
+  .environment {
+    padding-block: 0;
+  }
+  .organization select,
+  .environment select,
+  .drawer .organization select,
+  .drawer .environment select,
+  .compactContext select {
+    min-height: 44px;
   }
 }

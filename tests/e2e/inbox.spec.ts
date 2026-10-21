@@ -19,6 +19,7 @@ async function inboxFixture(page: Page, viewer = true) {
     bootstraps: 0,
     reads: 0,
     mutations: 0,
+    readWrites: 0,
     opened: 0,
     closed: 0,
     accessRevision: 0,
@@ -105,6 +106,10 @@ async function inboxFixture(page: Page, viewer = true) {
       return route.fulfill({ status: 401, json: { message: 'Private fixture detail is hidden' } });
     if (request.method() !== 'GET') {
       state.mutations++;
+      if (url.pathname.endsWith('/read')) {
+        state.readWrites++;
+        notification.isRead = true;
+      }
       return route.fulfill({ json: { data: notification } });
     }
     state.reads++;
@@ -144,6 +149,56 @@ async function inboxFixture(page: Page, viewer = true) {
     );
   });
   return { state, sockets, path: `/subscribers/${id}` };
+}
+
+for (const viewport of [
+  { width: 1280, height: 720 },
+  { width: 390, height: 430 },
+]) {
+  test(`native Inbox fits the ${viewport.width}×${viewport.height} viewport and accepts notification clicks`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const fixture = await inboxFixture(page, false);
+    await login(page);
+    await page.goto(fixture.path);
+    await page.getByRole('button', { name: 'Open notifications', exact: true }).click();
+    const popup = page.locator('.nv-inbox__popoverContent');
+    await expect(popup).toBeVisible();
+    await expect
+      .poll(async () => {
+        const bounds = await popup.boundingBox();
+        return (
+          !!bounds &&
+          bounds.x >= 0 &&
+          bounds.y >= 0 &&
+          bounds.x + bounds.width <= viewport.width + 1 &&
+          bounds.y + bounds.height <= viewport.height + 1
+        );
+      })
+      .toBe(true);
+    const body = popup.getByText(/This stays text\./);
+    await expect(body).toBeInViewport();
+    await body.click();
+    await expect.poll(() => fixture.state.readWrites).toBe(1);
+    const resized = { width: viewport.width - 30, height: viewport.height + 80 };
+    await page.setViewportSize(resized);
+    await expect
+      .poll(async () => {
+        const bounds = await popup.boundingBox();
+        return (
+          !!bounds &&
+          bounds.x >= 0 &&
+          bounds.y >= 0 &&
+          bounds.x + bounds.width <= resized.width + 1 &&
+          bounds.y + bounds.height <= resized.height + 1
+        );
+      })
+      .toBe(true);
+    await expect(body).toBeVisible();
+    expect(fixture.state.bootstraps).toBe(1);
+    expect(fixture.state.failures).toEqual([]);
+  });
 }
 
 test('viewer reads escaped notifications without marking them seen or read', async ({ page }) => {

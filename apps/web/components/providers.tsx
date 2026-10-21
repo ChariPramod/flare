@@ -2,6 +2,8 @@
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { AUTHENTICATION_REQUIRED } from '../lib/api';
+import { ThemeProvider } from './theme-provider';
+import { DraftProvider } from './drafts';
 export function Providers({ children }: { children: React.ReactNode }) {
   const [notice, setNotice] = useState('');
   useEffect(() => {
@@ -12,7 +14,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [client] = useState(
     () =>
       new QueryClient({
-        mutationCache: new MutationCache({ onSuccess: () => setNotice('Changes saved') }),
+        mutationCache: new MutationCache({
+          onSuccess: (_data, _variables, _context, mutation) => {
+            const message = mutation.meta?.successMessage;
+            if (typeof message === 'string' && message) setNotice(message);
+          },
+        }),
         defaultOptions: { queries: { staleTime: 10000, refetchOnWindowFocus: false } },
       }),
   );
@@ -29,7 +36,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, [client]);
   return (
     <QueryClientProvider client={client}>
-      {children}
+      <ThemeProvider>
+        <DraftProvider>{children}</DraftProvider>
+      </ThemeProvider>
       {notice && (
         <div className="toast" role="status">
           ✓ {notice}

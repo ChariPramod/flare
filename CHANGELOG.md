@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Align shared page/section typography and panel spacing, restore saved themes before paint, simplify Overview, and keep navigation and editor actions reachable on narrow/short screens. Bound the native Inbox popup to the available viewport without restarting its session; preserve actual read-state persistence checks.
+
 - Redesign the frontend with locally served Source Serif 4 and DM Sans, an ivory/indigo palette, editorial page hierarchy and restrained panels. Apply the system to navigation, Overview, authentication, public preferences, shared module tables/forms, charts and workflow/automation editors; make Monaco follow live theme changes. Preserve API-backed behavior and add browser coverage for every sidebar route, font loading, narrow forms, responsive editors, contrast and reduced motion.
 
 - Refine the dashboard visual system, actionable Overview, grouped keyboard page search, responsive table search/pagination and expired-session recovery. Preserve honest delivery status, environment boundaries and remote pagination; add browser regressions for navigation, table history, overview recovery and confirmed session expiry. Verification is tracked in `PROGRESS.md`.

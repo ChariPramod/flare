@@ -122,10 +122,10 @@ test('login, invitations and public preferences fit narrow screens and keep form
   await expectNoPageOverflow(page);
 });
 
-test('every sidebar module renders its main heading without overflow on desktop and mobile', async ({
+test('every sidebar module renders in both themes without overflow on desktop and mobile', async ({
   page,
 }) => {
-  test.setTimeout(120000);
+  test.setTimeout(180000);
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await login(page);
@@ -135,15 +135,19 @@ test('every sidebar module renders its main heading without overflow on desktop 
     .evaluateAll((links) => links.map((link) => link.getAttribute('href')!));
   expect(pages).toHaveLength(25);
   expect(new Set(pages).size).toBe(pages.length);
-  for (const width of [1440, 390]) {
-    await page.setViewportSize({ width, height: 960 });
-    for (const url of pages) {
-      await test.step(`${url} at ${width}px`, async () => {
-        const response = await page.goto(url);
-        expect(response?.ok(), url).toBe(true);
-        await expect(page.locator('#main-content h1').first()).toBeVisible();
-        await expectNoPageOverflow(page);
-      });
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate((value) => localStorage.setItem('flare-theme', value), theme);
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 960 });
+      for (const url of pages) {
+        await test.step(`${url} at ${width}px in ${theme}`, async () => {
+          const response = await page.goto(url);
+          expect(response?.ok(), url).toBe(true);
+          await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+          await expect(page.locator('#main-content h1').first()).toBeVisible();
+          await expectNoPageOverflow(page);
+        });
+      }
     }
   }
   expect(errors).toEqual([]);

@@ -3,13 +3,13 @@
   align-items: center;
   justify-content: center;
   gap: 9px;
-  min-height: 35px;
+  min-height: 40px;
   padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: 3px;
   background: var(--panel);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 .searchTrigger:hover {
@@ -17,7 +17,7 @@
   color: var(--text);
 }
 .searchTrigger kbd {
-  font-size: 10px;
+  font-size: 12px;
   margin-left: 18px;
 }
 .inputRow {
@@ -43,7 +43,7 @@
   background: transparent;
   color: var(--text);
   outline: none;
-  font-size: 14px;
+  font-size: 16px;
 }
 .inputRow input::placeholder {
   color: var(--muted);
@@ -58,7 +58,7 @@
 }
 .groupLabel {
   padding: 14px 10px 7px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 650;
   letter-spacing: 1.5px;
   color: var(--muted);
@@ -111,7 +111,7 @@
 }
 .current {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .enterIcon {
   color: var(--muted);
@@ -145,7 +145,7 @@
   padding-top: 14px;
   border-top: 1px solid var(--border);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .keyHints {
   display: inline-flex;
@@ -162,7 +162,7 @@
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 2px;
-  font-size: 9px;
+  font-size: 12px;
 }
 .keyHints kbd:not(:first-child) {
   margin-left: 4px;
@@ -175,8 +175,8 @@
 }
 @media (max-width: 900px) {
   .searchTrigger {
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     flex-shrink: 0;
   }
@@ -191,5 +191,11 @@
   }
   .keyHints {
     gap: 4px;
+  }
+}
+@media (pointer: coarse) {
+  .searchTrigger {
+    min-height: 44px;
+    min-width: 44px;
   }
 }
