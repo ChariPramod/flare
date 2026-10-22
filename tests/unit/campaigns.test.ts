@@ -15,6 +15,7 @@ import {
   previewCampaignAudience,
   updateCampaign,
 } from '../../packages/platform/src/campaigns.js';
+import { previewTemplateContent } from '../../packages/platform/src/campaign-content.js';
 import { dispatchBroadcast, scheduleBroadcast } from '../../packages/platform/src/broadcasts.js';
 
 const org = randomUUID(),
@@ -73,7 +74,7 @@ beforeAll(async () => {
 }, 30000);
 
 beforeEach(async () => {
-  await sql`truncate broadcasts,email_templates,contacts,contact_lists,audience_topics,audience_segments,suppressions,event_outbox,audit_logs cascade`;
+  await sql`truncate broadcasts,email_templates,contacts,contact_properties,contact_lists,audience_topics,audience_segments,suppressions,event_outbox,audit_logs cascade`;
 });
 afterEach(() => vi.unstubAllEnvs());
 afterAll(async () => {
@@ -374,4 +375,47 @@ it('bounds preview samples while counting the whole selected audience', async ()
   const preview = await previewCampaignAudience(sql, principal, String(created.id));
   expect(preview).toMatchObject({ total: 8, eligible: 8 });
   expect(preview.sample).toHaveLength(5);
+});
+
+it('previews a contact with dispatch defaults without writes, sends or live preference links', async () => {
+  await sql`insert into contact_properties(org_id,environment_id,name,type,fallback) values(${org},${environmentId},'company','string','"Fallback Co"'),(${org},${environmentId},'score','number','9'),(${org},${environmentId},'enabled','boolean','true')`;
+  const row = await contact('preview@example.com', {
+    first_name: '<Alex & team>',
+    properties: { company: null, score: 0, enabled: false },
+  });
+  const previewContent = {
+    ...content,
+    subject: '{{first_name}} / {{company}} / {{score}} / {{enabled}}',
+    html: '<p>{{first_name}}</p><a href="{{{FLARE_UNSUBSCRIBE_URL}}}">Preferences</a>{{missing}}',
+    variables: { company: 'Template fallback' },
+  };
+  const [before] =
+    await sql`select (select count(*) from event_outbox)::int as events,(select count(*) from messages)::int as messages,(select count(*) from audit_logs)::int as audits`;
+  const result = await previewTemplateContent(sql, principal, {
+    content: previewContent,
+    contact_id: String(row.id),
+  });
+  expect(result.subject).toBe('<Alex & team> / Fallback Co / 0 / false');
+  expect(result.html).toContain('&lt;Alex &amp; team&gt;');
+  expect(result.html).toContain('https://example.test/preferences/preview');
+  expect(result.text).toContain('<Alex & team>');
+  expect(result.missing_variables).toEqual(['missing']);
+  const [after] =
+    await sql`select (select count(*) from event_outbox)::int as events,(select count(*) from messages)::int as messages,(select count(*) from audit_logs)::int as audits`;
+  expect(after).toEqual(before);
+});
+
+it('rejects foreign, other-environment and deleted preview contacts without falling back to sample data', async () => {
+  const other = await contact('other@example.com', {}, foreign);
+  const production = await contact(
+    'prod@example.com',
+    {},
+    { ...principal, environmentId: productionId },
+  );
+  const deleted = await contact('deleted@example.com');
+  await sql`update contacts set deleted_at=now() where id=${deleted.id}`;
+  for (const row of [other, production, deleted])
+    await expect(
+      previewTemplateContent(sql, principal, { content, contact_id: String(row.id) }),
+    ).rejects.toMatchObject({ status: 404 });
 });

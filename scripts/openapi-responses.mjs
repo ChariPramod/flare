@@ -399,6 +399,13 @@ const mappings = {
       unsubscribed: bool,
     }),
   ),
+  AudienceController_draftPreview: obj({
+    subject: str,
+    html: str,
+    text: { type: 'string', nullable: true },
+    missing_variables: arr(str),
+    missing_variable_count: int,
+  }),
   AudienceController_templates: arr(json),
   AudienceController_broadcasts: arr(json),
   AudienceController_properties: arr(json),

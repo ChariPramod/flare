@@ -5,6 +5,7 @@ export * from './audience.js';
 export * from './broadcasts.js';
 export * from './contact-import.js';
 export * from './campaigns.js';
+export * from './campaign-content.js';
 
 export * from './automations.js';
 

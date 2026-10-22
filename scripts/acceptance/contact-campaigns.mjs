@@ -98,6 +98,25 @@ try {
     },
     rate_per_second: 1,
   };
+  const previewContact = contacts.find((item) => item.email === email('eligible'));
+  const contentPreview = await api('/template-preview', 'POST', {
+    content: draft.content,
+    contact_id: previewContact.id,
+  });
+  assert.equal(contentPreview.text, 'Hello Updated');
+  assert.ok(contentPreview.html.includes('https://example.test/preferences/preview'));
+  assert.deepEqual(contentPreview.missing_variables, []);
+  const missingPreview = await request('/template-preview', {
+    content: draft.content,
+    contact_id: randomUUID(),
+  });
+  assert.equal(missingPreview.status, 404);
+  const mixedPreview = await request('/template-preview', {
+    content: draft.content,
+    contact_id: previewContact.id,
+    variables: { first_name: 'forged' },
+  });
+  assert.equal(mixedPreview.status, 422);
   const key = randomUUID();
   const created = await Promise.all(
     Array.from({ length: 3 }, () =>

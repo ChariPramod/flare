@@ -45,6 +45,8 @@ import {
   createCampaign,
   updateCampaign,
   previewCampaignAudience,
+  templatePreviewSchema,
+  previewTemplateContent,
 } from '@flare/platform';
 import { Public } from './auth.js';
 import { parse, sql, config } from './context.js';
@@ -162,21 +164,8 @@ export class AudienceController {
         tx`select l.*,count(c.id)::int as contact_count from contact_lists l left join contact_list_members m on m.list_id=l.id and m.org_id=l.org_id and m.environment_id=l.environment_id left join contacts c on c.id=m.contact_id and c.org_id=m.org_id and c.environment_id=m.environment_id and c.deleted_at is null group by l.id order by l.created_at desc,l.id desc`,
     );
   }
-  @Post('template-preview') async draftPreview(@Body() body: unknown) {
-    const input = parse(
-      z.object({ content: templateSchema, variables: z.record(z.unknown()).default({}) }).strict(),
-      body,
-    );
-    const content = templateInput(input.content),
-      values = { ...content.variables, ...input.variables };
-    try {
-      return {
-        subject: renderText(content.subject, values),
-        html: renderText(content.html, values, true),
-      };
-    } catch (e) {
-      throw new MailError(422, (e as Error).message);
-    }
+  @Post('template-preview') async draftPreview(@Req() req: AuthRequest, @Body() body: unknown) {
+    return previewTemplateContent(sql, req.principal, parse(templatePreviewSchema, body));
   }
   @Get('contacts/:id') async contact(@Req() req: AuthRequest, @Param('id') id: string) {
     return withTenant(sql, req.principal, async (tx) => {

@@ -20,6 +20,7 @@ import {
 } from '@flare/mail';
 import type { PipelineOptions, TransportAdapter } from '@flare/mail';
 import { campaignAudienceMatch, campaignAudienceSummary } from './campaigns.js';
+import { campaignRecipientValues } from './campaign-content.js';
 import { sendingPause } from './sending-pause.js';
 export const unsubscribeVariable = '{{{FLARE_UNSUBSCRIBE_URL}}}';
 function checkOrigins(transports?: TransportAdapter[]) {
@@ -176,17 +177,17 @@ export async function dispatchBroadcast(
               );
               const preferenceUrl = `${preferenceBase.replace(/\/$/, '')}/preferences/${token}`;
               const oneClick = `${(process.env.PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/$/, '')}/v1/preferences/${token}/unsubscribe`;
-              const values = {
-                ...template.variables,
-                ...fallback,
-                ...Object.fromEntries(
-                  Object.entries(contact.properties).filter(([, value]) => value !== null),
-                ),
-                email: contact.email,
-                first_name: contact.first_name,
-                last_name: contact.last_name,
-                FLARE_UNSUBSCRIBE_URL: preferenceUrl,
-              };
+              const values = campaignRecipientValues(
+                template.variables,
+                fallback,
+                {
+                  email: contact.email,
+                  first_name: contact.first_name,
+                  last_name: contact.last_name,
+                  properties: contact.properties,
+                },
+                preferenceUrl,
+              );
               const email = {
                 from: String(broadcast.sender),
                 to: [String(contact.email)],

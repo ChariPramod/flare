@@ -1790,6 +1790,10 @@
                   "variables": {
                     "type": "object",
                     "additionalProperties": {}
+                  },
+                  "contact_id": {
+                    "type": "string",
+                    "format": "uuid"
                   }
                 },
                 "required": [
@@ -1807,6 +1811,34 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "properties": {
+                    "subject": {
+                      "type": "string"
+                    },
+                    "html": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "missing_variables": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "missing_variable_count": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "subject",
+                    "html",
+                    "text",
+                    "missing_variables",
+                    "missing_variable_count"
+                  ],
                   "additionalProperties": true
                 }
               }

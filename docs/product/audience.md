@@ -28,6 +28,20 @@ The renderer supports scalar `{{variable}}` and nested `{{payload.name}}` lookup
 
 Workflow email control values may reference `templateId` and optional `templateVersion`. Flare copies that version's subject and HTML into the saved workflow; Novu performs subscriber/payload interpolation at execution. Template fallback variables are for Flare email rendering, not injected into Novu. Re-save a workflow to select changed content. Publication copies pinned template dependencies with workflows and automations; see [publication](publication.md). Templates are not a separate selection category in the dashboard publication dialog.
 
+## Campaign workbench
+
+In the Development campaign composer, choose an **Email starter** (product update, event invitation or personal announcement) and confirm **Use starter** to replace the subject, HTML and plain text. Customize the example wording; sender and audience selections stay unchanged. These are editable starting examples, not a drag-and-drop editor.
+
+Click into the subject, HTML or plain-text field, choose a **Personalization field**, then **Insert field**. Flare inserts the merge tag at your last cursor position. Configured custom properties appear alongside `first_name`, `last_name` and `email`. Custom properties are referenced by their name, such as `{{company}}`, rather than `{{properties.company}}`.
+
+**Preview email** defaults to sample recipient Alex Morgan. Use **Search preview contacts → Find contacts** to preview a real contact from the selected list/segment, or return to the sample. Searching does not change the campaign audience, and a preview contact may still be ineligible to receive mail. Actual dispatch continues to enforce preferences and suppression. The server uses the same contact-property fallback precedence as dispatch and reports empty/missing fields for this preview only. Zero and false are valid values. A preview never sends mail, writes a campaign, or creates a live preference link.
+
+Switch between **Desktop**, **Mobile** and **Plain text** views. Previews disable scripts, navigation and automatic remote assets, and may shorten very large content. They are browser approximations, not proof of Gmail/Outlook compatibility or deliverability. Review more than one contact when checking personalization.
+
+From a campaign detail page, **Duplicate as draft** opens a new editor with the pinned email version, sender, audience selector, topic and rate. Opening it creates nothing. Explicitly saving creates one new draft, with a fresh idempotency key retained across failed-response retries. Schedule, recipient snapshot, counters and delivery history are not copied. The current audience is recalculated when the copy is scheduled, so review its membership again. Production copies use published content and retain all sending-policy controls.
+
+`POST /v1/template-preview` retains `{content, variables}` requests and adds an optional `contact_id` instead of sample variables. Contact lookup is isolated to the current organization/environment and excludes deleted contacts. The response includes rendered `subject`, `html`, nullable `text`, `missing_variables` (up to 50 names) and `missing_variable_count`. It does not validate every recipient or certify sending readiness. Preview content remains redacted from request logs.
+
 ## Broadcast delivery
 
 In **Broadcasts → Create campaign**, name the campaign, choose all contacts, a named list or a segment, and optionally select an audience topic. After an import, **Create campaign** preselects the imported cohort. Enter a verified sender and either compose subject/HTML/plain text in Development or choose an immutable saved-template version. Include `{{{FLARE_UNSUBSCRIBE_URL}}}` in HTML; the composer starts with an unsubscribe link. Production uses published templates. Saving a draft does not send anything.

@@ -16,6 +16,10 @@ Browse the [documentation index](README.md).
 
 [Open this section](product/audience.md#versioned-templates).
 
+## Campaign workbench
+
+[Open this section](product/audience.md#campaign-workbench).
+
 ## Broadcast delivery
 
 [Open this section](product/audience.md#broadcast-delivery).
