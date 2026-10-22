@@ -134,6 +134,9 @@
   display: grid;
   gap: 16px;
 }
+.content :global(.field) {
+  margin: 0;
+}
 .content textarea {
   min-height: 180px;
   font-family: var(--font-mono, monospace);
@@ -159,15 +162,88 @@
     grid-template-columns: minmax(0, 1fr);
   }
   .footer {
-    bottom: -16px;
-    margin: 0 -16px -16px;
-    padding: 16px;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    margin: 0;
+    padding-inline: 0;
   }
   .footer button {
     flex: 1;
   }
   .content textarea {
     font-size: 16px;
+  }
+}
+
+.studioTools {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.studioTools > :first-child {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.studioTools > button {
+  align-self: center;
+}
+.previewRecipient {
+  padding: 16px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.contactChoices {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.contactChoices button {
+  justify-content: flex-start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.previewHeader {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16px;
+}
+.previewHeader > div {
+  min-width: 0;
+  max-width: 100%;
+}
+.previewHeader p {
+  margin: 4px 0 12px;
+}
+.previewHeader button[aria-pressed='true'],
+.contactChoices button[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.previewCanvas {
+  padding: 16px 0;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+.previewCanvas iframe {
+  height: 360px;
+}
+.textPreview {
+  padding: 16px;
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 14px/1.6 var(--font-mono, monospace);
+}
+@media (max-width: 640px) {
+  .studioTools > button {
+    flex: 1 1 auto;
+  }
+  .previewHeader :global(.section-tabs) {
+    flex-wrap: wrap;
   }
 }

@@ -66,8 +66,12 @@ function outcome<T>(promise: Promise<T>) {
 async function entered(signal: ReturnType<typeof gate>, work: Promise<unknown>) {
   await Promise.race([
     signal.promise,
-    work.then(() => {
-      throw new Error('Broadcast ended before the controlled storage call');
+    work.then((result) => {
+      if (result && typeof result === 'object' && 'error' in result && result.error)
+        throw result.error;
+      throw new Error(
+        `Broadcast ended before the controlled storage call: ${JSON.stringify(result)}`,
+      );
     }),
   ]);
 }

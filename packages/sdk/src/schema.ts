@@ -3583,6 +3583,8 @@ export interface operations {
                     variables?: {
                         [key: string]: unknown;
                     };
+                    /** Format: uuid */
+                    contact_id?: string;
                 };
             };
         };
@@ -3599,6 +3601,12 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        subject: string;
+                        html: string;
+                        text: string | null;
+                        missing_variables: string[];
+                        missing_variable_count: number;
+                    } & {
                         [key: string]: unknown;
                     };
                 };

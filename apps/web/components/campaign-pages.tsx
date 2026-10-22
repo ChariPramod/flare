@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Plus, Send, Pencil, Eye, Users } from 'lucide-react';
+import { Plus, Send, Pencil, Eye, Users, Copy } from 'lucide-react';
 import { api, useApi, date, type Session } from '../lib/api';
 import { DraftNotice, useEditorDraft, useDrafts } from './drafts';
 import {
@@ -20,6 +20,13 @@ import {
 } from './ui';
 import type { ContactList } from './contact-import';
 import styles from './campaign-import.module.css';
+import {
+  CampaignStarters,
+  PreviewRecipient,
+  CampaignPreviewPanel,
+  type CampaignPreview,
+  type PreviewContact,
+} from './campaign-studio';
 
 type Named = { id: string; name: string };
 type Template = Named & { current_version: number };
@@ -93,17 +100,6 @@ function initialDraft(production: boolean, broadcast?: Broadcast, list = ''): Ca
     text: '',
     variables: {},
   };
-}
-function EmailPreview({ html }: { html: string }) {
-  return (
-    <iframe
-      title="Campaign email preview"
-      className={styles.preview}
-      sandbox=""
-      referrerPolicy="no-referrer"
-      srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">${html}`}
-    />
-  );
 }
 
 export function BroadcastsPage({ id, writable }: { id?: string; writable: boolean }) {
@@ -185,11 +181,13 @@ export function BroadcastsPage({ id, writable }: { id?: string; writable: boolea
 
 function CampaignComposer({
   broadcast,
+  copyFrom,
   listId = '',
   close,
   complete,
 }: {
   broadcast?: Broadcast;
+  copyFrom?: Broadcast;
   listId?: string;
   close: () => void;
   complete: (id: string) => void;
@@ -210,6 +208,7 @@ function CampaignComposer({
     <CampaignForm
       production={session.data.principal.production}
       broadcast={broadcast}
+      copyFrom={copyFrom}
       listId={listId}
       close={close}
       complete={complete}
@@ -219,12 +218,14 @@ function CampaignComposer({
 function CampaignForm({
   production,
   broadcast,
+  copyFrom,
   listId,
   close,
   complete,
 }: {
   production: boolean;
   broadcast?: Broadcast;
+  copyFrom?: Broadcast;
   listId: string;
   close: () => void;
   complete: (id: string) => void;
@@ -235,27 +236,60 @@ function CampaignForm({
   const lists = useApi<ContactList[]>('contact-lists');
   const segments = useApi<Named[]>('audience-segments');
   const topics = useApi<Named[]>('audience-topics');
+  const properties = useApi<{ name: string }[]>('contact-properties');
+  const initial = initialDraft(production, broadcast ?? copyFrom, listId);
+  if (copyFrom) initial.name = `${copyFrom.name.slice(0, 111)} — copy`;
   const draft = useEditorDraft<CampaignDraft>(
-    `campaign:${broadcast?.id ?? `new:${listId || 'all'}`}`,
-    initialDraft(production, broadcast, listId),
+    `campaign:${broadcast?.id ?? (copyFrom ? `copy:${copyFrom.id}` : `new:${listId || 'all'}`)}`,
+    initial,
   );
   const value = draft.value!;
   const [error, setError] = useState<unknown>();
-  const [preview, setPreview] = useState<{ subject: string; html: string }>();
+  const [preview, setPreview] = useState<CampaignPreview>();
+  const [previewContact, setPreviewContact] = useState<PreviewContact>();
+  const [mergeField, setMergeField] = useState('first_name');
+  const [fieldTarget, setFieldTarget] = useState<'subject' | 'html' | 'text'>('html');
+  const fields = useRef<
+    Record<'subject' | 'html' | 'text', HTMLInputElement | HTMLTextAreaElement | null>
+  >({ subject: null, html: null, text: null });
+  const selection = useRef({
+    field: 'html' as 'subject' | 'html' | 'text',
+    start: value.html.length,
+    end: value.html.length,
+  });
+  const rememberSelection = (
+    field: 'subject' | 'html' | 'text',
+    element: HTMLInputElement | HTMLTextAreaElement,
+  ) => {
+    selection.current = {
+      field,
+      start: element.selectionStart ?? value[field].length,
+      end: element.selectionEnd ?? value[field].length,
+    };
+    setFieldTarget(field);
+  };
   const [previewBusy, setPreviewBusy] = useState(false);
   const [copyBusy, setCopyBusy] = useState(false);
   const pending = useRef(false);
   const previewGeneration = useRef(0);
+  useEffect(
+    () => () => {
+      previewGeneration.current++;
+    },
+    [],
+  );
   const busy = draft.pending || previewBusy || copyBusy;
   const update = (change: Partial<CampaignDraft>) => {
     previewGeneration.current++;
     setPreview(undefined);
+    if ('audience' in change || 'list_id' in change || 'segment_id' in change)
+      setPreviewContact(undefined);
     draft.setValue({ ...value, ...change });
   };
   const optionsError = templates.error || lists.error || segments.error || topics.error;
   async function compose() {
     if (production || busy || value.mode === 'compose') return;
-    if (value.composed || !broadcast || !value.template_id) {
+    if (value.composed || (!broadcast && !copyFrom) || !value.template_id) {
       update({ mode: 'compose', composed: true });
       return;
     }
@@ -265,6 +299,8 @@ function CampaignForm({
       const content = await api<Content>(
         `templates/${value.template_id}?version=${value.template_version}`,
       );
+      selection.current = { field: 'html', start: content.html.length, end: content.html.length };
+      setFieldTarget('html');
       update({
         mode: 'compose',
         composed: true,
@@ -282,56 +318,73 @@ function CampaignForm({
   async function showPreview() {
     if (busy || pending.current) return;
     const generation = ++previewGeneration.current;
+    const scope = drafts.generation();
+    const current = () => generation === previewGeneration.current && scope === drafts.generation();
+    setPreview(undefined);
     setPreviewBusy(true);
     setError(undefined);
     try {
-      const variables = {
-        first_name: 'Alex',
-        last_name: 'Morgan',
-        email: 'alex@example.test',
-        FLARE_UNSUBSCRIBE_URL: 'https://example.test/preferences/preview',
-      };
-      const result =
+      const template =
         value.mode === 'compose'
-          ? await api<{ subject: string; html: string }>('template-preview', 'POST', {
-              content: {
-                subject: value.subject,
-                html: value.html,
-                text: value.text,
-                variables: value.variables,
+          ? undefined
+          : await api<Content>(`templates/${value.template_id}?version=${value.template_version}`);
+      if (!current()) return;
+      const content = template
+        ? {
+            subject: template.subject,
+            html: template.html,
+            ...(template.text_body != null ? { text: template.text_body } : {}),
+            variables: template.variables ?? {},
+          }
+        : {
+            subject: value.subject,
+            html: value.html,
+            text: value.text,
+            variables: value.variables,
+          };
+      const result = await api<CampaignPreview>('template-preview', 'POST', {
+        content,
+        ...(previewContact
+          ? { contact_id: previewContact.id }
+          : {
+              variables: {
+                first_name: 'Alex',
+                last_name: 'Morgan',
+                email: 'alex@example.test',
+                FLARE_UNSUBSCRIBE_URL: 'https://example.test/preferences/preview',
               },
-              variables,
-            })
-          : await (async () => {
-              const content = await api<Content>(
-                `templates/${value.template_id}?version=${value.template_version}`,
-              );
-              return api<{ subject: string; html: string }>('template-preview', 'POST', {
-                content: {
-                  subject: content.subject,
-                  html: content.html,
-                  ...(content.text_body ? { text: content.text_body } : {}),
-                  variables: content.variables ?? {},
-                },
-                variables,
-              });
-            })();
-      if (generation === previewGeneration.current) setPreview(result);
+            }),
+      });
+      if (current()) setPreview(result);
     } catch (error) {
-      setError(error);
+      if (current()) setError(error);
     } finally {
-      setPreviewBusy(false);
+      if (current()) setPreviewBusy(false);
     }
   }
+  const audienceQuery =
+    value.audience === 'list' && value.list_id
+      ? `&list_id=${encodeURIComponent(value.list_id)}`
+      : value.audience === 'segment' && value.segment_id
+        ? `&segment_id=${encodeURIComponent(value.segment_id)}`
+        : '';
   return (
     <Modal
       open
       onOpenChange={(open) => !open && close()}
       pending={busy}
-      title={broadcast ? 'Edit campaign draft' : 'Create campaign'}
+      title={
+        broadcast ? 'Edit campaign draft' : copyFrom ? 'Duplicate campaign' : 'Create campaign'
+      }
       description="Choose your audience and email content. Saving a draft never sends email."
       wide
     >
+      {copyFrom && (
+        <p className={styles.note}>
+          A new draft using the original content and audience selection. Schedule, progress and
+          delivery history are not copied. Review current audience membership before sending.
+        </p>
+      )}
       <form
         className={styles.flow}
         onSubmit={(event) => {
@@ -374,10 +427,7 @@ function CampaignForm({
           )
             .then((saved) => {
               if (drafts.generation() !== generation) return;
-              draft.saved(
-                submitted,
-                broadcast ? submitted : initialDraft(production, undefined, listId),
-              );
+              draft.saved(submitted, broadcast ? submitted : initial);
               void client.invalidateQueries({ queryKey: ['api'] });
               complete(saved.id);
             }, setError)
@@ -392,6 +442,8 @@ function CampaignForm({
           pending={busy}
           onDiscard={() => {
             draft.discard();
+            previewGeneration.current++;
+            setPreviewContact(undefined);
             setPreview(undefined);
           }}
         />
@@ -534,10 +586,87 @@ function CampaignForm({
             )}
             {value.mode === 'compose' ? (
               <>
+                <CampaignStarters
+                  apply={(content) => {
+                    selection.current = {
+                      field: 'html',
+                      start: content.html.length,
+                      end: content.html.length,
+                    };
+                    setFieldTarget('html');
+                    update(content);
+                  }}
+                />
+                <div className={styles.studioTools}>
+                  <Field
+                    label="Personalization field"
+                    hint={`Insert at your last cursor position in ${fieldTarget === 'subject' ? 'the subject' : fieldTarget === 'html' ? 'the HTML' : 'plain text'}. Custom fields use their configured defaults when available.`}
+                  >
+                    <select
+                      value={mergeField}
+                      onChange={(event) => setMergeField(event.target.value)}
+                    >
+                      {[
+                        ...new Set([
+                          'first_name',
+                          'last_name',
+                          'email',
+                          ...(properties.data ?? []).map((item) => item.name),
+                        ]),
+                      ].map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      const { field, start, end } = selection.current;
+                      const token = `{{${mergeField}}}`;
+                      const content = value[field];
+                      const position = Math.min(start, content.length);
+                      update({
+                        [field]:
+                          content.slice(0, position) +
+                          token +
+                          content.slice(Math.min(end, content.length)),
+                      });
+                      selection.current = {
+                        field,
+                        start: position + token.length,
+                        end: position + token.length,
+                      };
+                      requestAnimationFrame(() => {
+                        const element = fields.current[field];
+                        element?.focus();
+                        element?.setSelectionRange(
+                          position + token.length,
+                          position + token.length,
+                        );
+                      });
+                    }}
+                  >
+                    Insert field
+                  </Button>
+                </div>
+                {properties.error && (
+                  <div>
+                    <ErrorBox error={properties.error} />
+                    <Button type="button" onClick={() => void properties.refetch()}>
+                      Retry personalization fields
+                    </Button>
+                  </div>
+                )}
                 <Field label="Email subject">
                   <input
                     required
                     maxLength={998}
+                    ref={(element) => {
+                      fields.current.subject = element;
+                    }}
+                    onSelect={(event) => rememberSelection('subject', event.currentTarget)}
                     value={value.subject}
                     onChange={(event) => update({ subject: event.target.value })}
                   />
@@ -548,6 +677,10 @@ function CampaignForm({
                 >
                   <textarea
                     required
+                    ref={(element) => {
+                      fields.current.html = element;
+                    }}
+                    onSelect={(event) => rememberSelection('html', event.currentTarget)}
                     value={value.html}
                     onChange={(event) => update({ html: event.target.value })}
                     spellCheck={false}
@@ -559,6 +692,10 @@ function CampaignForm({
                 >
                   <textarea
                     className={styles.plainText}
+                    ref={(element) => {
+                      fields.current.text = element;
+                    }}
+                    onSelect={(event) => rememberSelection('text', event.currentTarget)}
                     value={value.text}
                     onChange={(event) => update({ text: event.target.value })}
                   />
@@ -592,6 +729,16 @@ function CampaignForm({
                 </select>
               </Field>
             )}
+            <PreviewRecipient
+              key={`${value.audience}/${value.list_id}/${value.segment_id}`}
+              selected={previewContact}
+              onSelect={(contact) => {
+                previewGeneration.current++;
+                setPreviewContact(contact);
+                setPreview(undefined);
+              }}
+              audienceQuery={audienceQuery}
+            />
             <div>
               <Button
                 type="button"
@@ -605,17 +752,7 @@ function CampaignForm({
                 {previewBusy ? 'Loading preview…' : 'Preview email'}
               </Button>
             </div>
-            {preview && (
-              <div className={styles.review}>
-                <p>
-                  <strong>{preview.subject}</strong>
-                </p>
-                <p className="small muted">
-                  Preview uses sample recipient Alex Morgan. No email is sent.
-                </p>
-                <EmailPreview html={preview.html} />
-              </div>
-            )}
+            {preview && <CampaignPreviewPanel preview={preview} recipient={previewContact} />}
           </section>
         </fieldset>
         <ErrorBox error={error || optionsError} />
@@ -647,6 +784,8 @@ function BroadcastDetail({ id, writable }: { id: string; writable: boolean }) {
   const query = useApi<Broadcast>(`broadcasts/${id}`, 3000);
   const audience = useApi<AudiencePreview>(`broadcasts/${id}/audience-preview`, 10000);
   const [editing, setEditing] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const router = useRouter();
   const [error, setError] = useState<unknown>();
   const [scheduled, setScheduled] = useState('');
   const [mode, setMode] = useState<'now' | 'later'>('now');
@@ -673,10 +812,17 @@ function BroadcastDetail({ id, writable }: { id: string; writable: boolean }) {
             : 'Campaign unavailable'
         }
         actions={
-          b?.status === 'draft' && writable ? (
-            <Button onClick={() => setEditing(true)}>
-              <Pencil size={15} /> Edit draft
-            </Button>
+          b && writable ? (
+            <>
+              <Button onClick={() => setCopying(true)}>
+                <Copy size={15} /> Duplicate as draft
+              </Button>
+              {b.status === 'draft' && (
+                <Button onClick={() => setEditing(true)}>
+                  <Pencil size={15} /> Edit draft
+                </Button>
+              )}
+            </>
           ) : undefined
         }
       />
@@ -895,6 +1041,16 @@ function BroadcastDetail({ id, writable }: { id: string; writable: boolean }) {
             </div>
           )}
         </div>
+      )}
+      {copying && b && (
+        <CampaignComposer
+          copyFrom={b}
+          close={() => setCopying(false)}
+          complete={(newId) => {
+            setCopying(false);
+            router.push(`/broadcasts/${newId}`);
+          }}
+        />
       )}
       {editing && b && (
         <CampaignComposer

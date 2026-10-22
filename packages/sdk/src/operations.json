@@ -383,6 +383,10 @@
             "variables": {
               "type": "object",
               "additionalProperties": {}
+            },
+            "contact_id": {
+              "type": "string",
+              "format": "uuid"
             }
           },
           "required": [

@@ -2,7 +2,11 @@
 import { createServer } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
 import { webhookSecret } from '../../packages/shared/src/webhooks.js';
-import { contactSchema, renderText, templateSchema } from '../../packages/shared/src/audience.js';
+import { contactSchema, templateSchema } from '../../packages/shared/src/audience.js';
+import {
+  campaignRecipientValues,
+  renderContentPreview,
+} from '../../packages/platform/src/campaign-content.js';
 import { parseContactFile } from '../../packages/platform/src/contact-import.js';
 import { automationSchema } from '../../packages/shared/src/automations.js';
 import { workflowSchema } from '../../packages/shared/src/workflows.js';
@@ -1245,7 +1249,7 @@ const server = createServer(async (req, res) => {
       const row = {
         id: randomUUID(),
         ...body,
-        properties: {},
+        properties: body.properties ?? {},
         unsubscribed: body.unsubscribed ?? false,
         created_at: new Date().toISOString(),
         topics: [],
@@ -1301,11 +1305,26 @@ const server = createServer(async (req, res) => {
       return reply(row);
     }
     if (path === 'templates') return reply([...templates.values()]);
-    if (path === 'template-preview')
-      return reply({
-        subject: renderText(body.content.subject, body.variables),
-        html: renderText(body.content.html, body.variables, true),
-      });
+    if (path === 'template-preview') {
+      const content = templateSchema.parse(body.content);
+      const contact = body.contact_id ? contacts.get(body.contact_id) : undefined;
+      if (body.contact_id && (!contact || contact.deleted_at))
+        return reply({ message: 'Preview contact not found in this environment' }, 404);
+      const values = contact
+        ? campaignRecipientValues(
+            content.variables,
+            {},
+            {
+              email: contact.email,
+              first_name: contact.first_name,
+              last_name: contact.last_name,
+              properties: (contact.properties ?? {}) as Record<string, unknown>,
+            },
+            'https://example.test/preferences/preview',
+          )
+        : { ...content.variables, ...(body.variables ?? {}) };
+      return reply(renderContentPreview(content, values));
+    }
     if (path.startsWith('templates/')) {
       const [, id, action] = path.split('/'),
         row = templates.get(id!);
@@ -1348,6 +1367,7 @@ const server = createServer(async (req, res) => {
       }
       const row = {
         id: campaignId,
+        scheduled_at: null,
         ...body,
         template_id: templateId,
         template_version: body.template_version ?? 1,
