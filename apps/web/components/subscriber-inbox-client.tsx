@@ -60,9 +60,9 @@ function Lifecycle({ onFailure }: { onFailure: () => void }) {
       active = false;
       clearInterval(timer);
       document.removeEventListener('visibilitychange', visible);
-      // The pinned provider does not close its socket on unmount. disconnect()
-      // queues behind initialization; retain guards while that queue settles so
-      // a late bootstrap/connect cannot leave a retired client connected.
+      // Retain Flare's access-generation guards alongside provider cleanup.
+      // disconnect() queues behind initialization; fence late work while that
+      // queue settles so a retired client cannot keep its connection alive.
       const remove = () => cleanups.forEach((cleanup) => cleanup());
       // StrictMode immediately replays this effect on the same SDK instance.
       // Only a replay on the same instance may keep its connection alive.

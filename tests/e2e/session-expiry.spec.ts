@@ -118,7 +118,12 @@ test('a failed login shows its own error without an expiry notice or session pro
   await page.getByLabel('Work email').fill('tester@example.test');
   await page.getByLabel('Password', { exact: true }).fill('incorrect-password');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(
+    page
+      .getByRole('main')
+      .getByRole('alert')
+      .filter({ hasText: /^Invalid credentials$/ }),
+  ).toBeVisible();
   await expect(page.getByText('Your session has ended', { exact: false })).toHaveCount(0);
   await expect(page).toHaveURL(/\/login$/);
   expect(probes).toBe(0);

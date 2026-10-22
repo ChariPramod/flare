@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- Wait for dependency readiness before signed-forwarding acceptance probes, retaining strict single-use proof assertions and adding credential-safe failure classification.
+- Wait for dependency readiness before signed-forwarding acceptance probes, retaining strict single-use proof assertions and adding credential-safe failure classification. Scope the failed-login browser assertion to its actual error so Next.js's accessibility route announcer cannot make it ambiguous.
+
+- Prevent abandoned Inbox renders from starting duplicate native sessions with a pinned React provider lifecycle patch. Initialize after commit, retain configuration boundaries, and clean up pending or retired clients without changing authentication or reconnect permissions.
 
 - Add CSV, TSV, JSON and Excel contact imports with bounded parsing, field mapping, validation, atomic writes and named lists. Preserve opt-outs and deleted-contact restrictions. Add campaign composition, pinned templates, list/segment targeting, recipient eligibility previews, draft editing, send-now/scheduling controls and idempotent draft creation. Keep campaign/import content out of logs and retain the shared sending-policy pipeline. Exercise maximum-size import boundaries and accept valid 100,000-cell workbooks without weakening raw/expanded/cell limits. Verification is tracked in `PROGRESS.md`.
 

@@ -30,7 +30,7 @@ Workflow email control values may reference `templateId` and optional `templateV
 
 ## Broadcast delivery
 
-In **Broadcasts → Create campaign**, name the campaign, choose all contacts, a named list or a segment, and optionally select an audience topic. After an import, **Create campaign for this list** preselects the imported cohort. Enter a verified sender and either compose subject/HTML/plain text in Development or choose an immutable saved-template version. Include `{{{FLARE_UNSUBSCRIBE_URL}}}` in HTML; the composer starts with an unsubscribe link. Production uses published templates. Saving a draft does not send anything.
+In **Broadcasts → Create campaign**, name the campaign, choose all contacts, a named list or a segment, and optionally select an audience topic. After an import, **Create campaign** preselects the imported cohort. Enter a verified sender and either compose subject/HTML/plain text in Development or choose an immutable saved-template version. Include `{{{FLARE_UNSUBSCRIBE_URL}}}` in HTML; the composer starts with an unsubscribe link. Production uses published templates. Saving a draft does not send anything.
 
 On the campaign page, review total and eligible recipients, a small eligible-recipient sample, and exclusions for global opt-out, suppression, topic preferences or deletion. Edit a draft, preview its email, then **Send now** or **Schedule for later** and confirm. Local schedule input uses your browser's timezone, displayed before confirmation, and is converted to an ISO instant. Cancel a scheduled/running campaign to stop remaining work. Counts are a current preview; eligibility is checked again before delivery.
 

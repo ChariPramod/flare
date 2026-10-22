@@ -250,6 +250,7 @@ test('lost binding removes stale content and explicit reconnect repeats bootstra
   await page.goto(fixture.path);
   await expect(page.getByText('Read-only fixture notification', { exact: true })).toBeVisible();
   await expect.poll(() => fixture.state.opened).toBe(1);
+  expect(fixture.state.bootstraps).toBe(1);
   fixture.state.binding = false;
   // The same visibility-resume path revalidates without advancing browser clocks.
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
@@ -292,8 +293,8 @@ test('late bootstrap cannot leave a socket connected after leaving the subscribe
   await login(page);
   await page.goto(fixture.path);
   await expect.poll(() => fixture.state.bootstraps).toBe(1);
-  // The SDK constructor can start before React commits its consumers. Wait for
-  // the mounted reader so this exercises cleanup of a committed, pending SDK.
+  // The patched provider creates its SDK after commit. Wait for its consumers
+  // so this exercises cleanup of a committed reader with a pending bootstrap.
   await expect(page.getByLabel('Read-only notifications')).toBeVisible();
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();

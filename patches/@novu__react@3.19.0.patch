@@ -1,0 +1,197 @@
+--- a/dist/esm/hooks/NovuProvider.js
++++ b/dist/esm/hooks/NovuProvider.js
+@@ -1,7 +1,7 @@
+ // src/hooks/NovuProvider.tsx
+ import { Novu } from "@novu/js";
+ import { buildSubscriber } from "@novu/js/internal";
+-import { createContext, useContext, useMemo } from "react";
++import { createContext, useContext, useEffect, useMemo, useState } from "react";
+ import { jsx } from "react/jsx-runtime";
+ var NovuContext = createContext({ novu: void 0, realtime: true });
+ var NovuProvider = (props) => {
+@@ -38,9 +38,10 @@
+     context,
+     realtime = true
+   } = props;
+-  const value = useMemo(
++  // Keep SDK construction out of render: concurrent renders may be abandoned.
++  const configuration = useMemo(
+     () => ({
+-      novu: new Novu({
++      options: {
+         applicationIdentifier,
+         subscriberHash,
+         contextHash,
+@@ -52,7 +53,7 @@
+         subscriber: subscriberObj,
+         defaultSchedule,
+         context
+-      }),
++      },
+       realtime
+     }),
+     [
+@@ -66,10 +67,68 @@
+       socketUrl,
+       socketOptions,
+       useCache,
++      defaultSchedule,
+       realtime
+     ]
+   );
+-  return /* @__PURE__ */ jsx(NovuContext.Provider, { value, children });
++  const [state, setState] = useState();
++  useEffect(() => {
++    let active = true;
++    let instance;
++    const cleanups = [];
++    const disconnect = () => {
++      void Promise.resolve().then(() => instance.socket.disconnect()).catch(() => void 0);
++    };
++    // A StrictMode setup/cleanup replay must not create an abandoned session.
++    queueMicrotask(() => {
++      if (!active) return;
++      try {
++        instance = new Novu(configuration.options);
++        cleanups.push(
++          instance.on("session.initialize.resolved", () => {
++            if (!active) queueMicrotask(disconnect);
++          }),
++          instance.on("socket.connect.pending", () => {
++            if (!active) queueMicrotask(disconnect);
++          }),
++          instance.on("socket.connect.resolved", () => {
++            if (!active) disconnect();
++          })
++        );
++        setState({ configuration, value: { novu: instance, realtime: configuration.realtime } });
++      } catch (error) {
++        // Re-enter render so the nearest error boundary handles constructor errors.
++        if (active) setState({ configuration, error });
++      }
++    });
++    return () => {
++      active = false;
++      if (!instance) return;
++      const remove = () => {
++        for (const cleanup of cleanups.splice(0)) cleanup();
++        clearTimeout(deadline);
++      };
++      // disconnect() queues behind pending initialization. Bound retained guards
++      // while that queue settles, then disconnect again after pending connects.
++      const deadline = setTimeout(remove, 20000);
++      void Promise.resolve()
++        .then(() => instance.socket.disconnect())
++        .catch(() => void 0)
++        .finally(() => {
++          disconnect();
++          try {
++            instance.notifications.clearCache();
++          } finally {
++            remove();
++          }
++        })
++        .catch(() => void 0);
++    };
++  }, [configuration]);
++  // Never expose an old subscriber's client while replacement access is pending.
++  if (!state || state.configuration !== configuration) return null;
++  if ("error" in state) throw state.error;
++  return /* @__PURE__ */ jsx(NovuContext.Provider, { value: state.value, children });
+ };
+ var useNovu = () => {
+   const context = useContext(NovuContext);
+--- a/dist/cjs/hooks/NovuProvider.cjs
++++ b/dist/cjs/hooks/NovuProvider.cjs
+@@ -66,9 +66,10 @@
+     context,
+     realtime = true
+   } = props;
+-  const value = (0, import_react.useMemo)(
++  // Keep SDK construction out of render: concurrent renders may be abandoned.
++  const configuration = (0, import_react.useMemo)(
+     () => ({
+-      novu: new import_js.Novu({
++      options: {
+         applicationIdentifier,
+         subscriberHash,
+         contextHash,
+@@ -80,7 +81,7 @@
+         subscriber: subscriberObj,
+         defaultSchedule,
+         context
+-      }),
++      },
+       realtime
+     }),
+     [
+@@ -94,10 +95,68 @@
+       socketUrl,
+       socketOptions,
+       useCache,
++      defaultSchedule,
+       realtime
+     ]
+   );
+-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NovuContext.Provider, { value, children });
++  const [state, setState] = (0, import_react.useState)();
++  (0, import_react.useEffect)(() => {
++    let active = true;
++    let instance;
++    const cleanups = [];
++    const disconnect = () => {
++      void Promise.resolve().then(() => instance.socket.disconnect()).catch(() => void 0);
++    };
++    // A StrictMode setup/cleanup replay must not create an abandoned session.
++    queueMicrotask(() => {
++      if (!active) return;
++      try {
++        instance = new import_js.Novu(configuration.options);
++        cleanups.push(
++          instance.on("session.initialize.resolved", () => {
++            if (!active) queueMicrotask(disconnect);
++          }),
++          instance.on("socket.connect.pending", () => {
++            if (!active) queueMicrotask(disconnect);
++          }),
++          instance.on("socket.connect.resolved", () => {
++            if (!active) disconnect();
++          })
++        );
++        setState({ configuration, value: { novu: instance, realtime: configuration.realtime } });
++      } catch (error) {
++        // Re-enter render so the nearest error boundary handles constructor errors.
++        if (active) setState({ configuration, error });
++      }
++    });
++    return () => {
++      active = false;
++      if (!instance) return;
++      const remove = () => {
++        for (const cleanup of cleanups.splice(0)) cleanup();
++        clearTimeout(deadline);
++      };
++      // disconnect() queues behind pending initialization. Bound retained guards
++      // while that queue settles, then disconnect again after pending connects.
++      const deadline = setTimeout(remove, 20000);
++      void Promise.resolve()
++        .then(() => instance.socket.disconnect())
++        .catch(() => void 0)
++        .finally(() => {
++          disconnect();
++          try {
++            instance.notifications.clearCache();
++          } finally {
++            remove();
++          }
++        })
++        .catch(() => void 0);
++    };
++  }, [configuration]);
++  // Never expose an old subscriber's client while replacement access is pending.
++  if (!state || state.configuration !== configuration) return null;
++  if ("error" in state) throw state.error;
++  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NovuContext.Provider, { value: state.value, children });
+ };
+ var useNovu = () => {
+   const context = (0, import_react.useContext)(NovuContext);

@@ -5,6 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
+  '@novu/react@3.19.0':
+    hash: da51f0715292d16dde246f540e7cb2e4b054e59a9ace03571523e9be4cec7c2a
+    path: patches/@novu__react@3.19.0.patch
   postgres@3.4.9:
     hash: dd8d879f04ce65e73930a947aa42c3dcaf69d46000a2e88e5087b714d237c1ac
     path: patches/postgres@3.4.9.patch
@@ -209,7 +212,7 @@ importers:
         version: 4.7.0(monaco-editor@0.55.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@novu/react':
         specifier: 3.19.0
-        version: 3.19.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        version: 3.19.0(patch_hash=da51f0715292d16dde246f540e7cb2e4b054e59a9ace03571523e9be4cec7c2a)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@radix-ui/react-dialog':
         specifier: ^1.3.1
         version: 1.3.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -5953,7 +5956,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@novu/react@3.19.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+  '@novu/react@3.19.0(patch_hash=da51f0715292d16dde246f540e7cb2e4b054e59a9ace03571523e9be4cec7c2a)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
       '@novu/js': 3.19.0(react@19.3.0)
       react: 19.3.0
