@@ -116,7 +116,10 @@ try {
     contact_id: previewContact.id,
     variables: { first_name: 'forged' },
   });
-  assert.equal(mixedPreview.status, 422);
+  assert.equal(mixedPreview.status, 400);
+  assert.deepEqual((await mixedPreview.json()).errors.formErrors, [
+    'Choose a contact or sample variables, not both',
+  ]);
   const key = randomUUID();
   const created = await Promise.all(
     Array.from({ length: 3 }, () =>
