@@ -146,6 +146,58 @@ try {
     409,
   );
   const campaign = created[0];
+  const checklist = await api(`/broadcasts/${campaign.id}/preflight`);
+  assert.equal(checklist.sandbox, true);
+  assert.equal(checklist.can_test, true);
+  const testKey = randomUUID();
+  const testInput = {
+    revision: checklist.revision,
+    sandbox: true,
+    recipients: [email('test-only')],
+  };
+  const tests = await Promise.all(
+    Array.from({ length: 2 }, () =>
+      json(`http://localhost:4000/v1/broadcasts/${campaign.id}/test`, {
+        method: 'POST',
+        headers: { ...headers, 'Idempotency-Key': testKey },
+        body: testInput,
+      }),
+    ),
+  );
+  assert.deepEqual(tests[0], tests[1]);
+  // common.json unwraps data envelopes; retain the accepted message ID.
+  const testId = tests[0][0].id;
+  await until(async () => {
+    const [message] =
+      await sql`select status,broadcast_id,request from messages where id=${testId}`;
+    if (message.status !== 'sent') return false;
+    assert.equal(message.broadcast_id, null);
+    assert.equal(message.request.subject, `[TEST] ${subject}`);
+    assert.ok(message.request.html.includes('https://example.test/preferences/test-email'));
+    assert.ok(!message.request.html.includes('Hello Updated'));
+    return true;
+  }, 'Controlled test transport acceptance');
+  await until(
+    async () =>
+      (await json('http://mailpit:8025/api/v1/messages')).messages.some(
+        (item) => item.Subject === `[TEST] ${subject}`,
+      ),
+    'Controlled test Mailpit receipt',
+  );
+  const rawMessage = await api(`/emails/${testId}`);
+  assert.equal(rawMessage.request.to[0], email('test-only'));
+  assert.equal((await api(`/broadcasts/${campaign.id}`)).status, 'draft');
+  assert.equal((await request(`/broadcasts/${campaign.id}/test`, testInput)).status, 400);
+  assert.equal(
+    (
+      await request(
+        `/broadcasts/${campaign.id}/test`,
+        { ...testInput, sandbox: false },
+        { 'Idempotency-Key': randomUUID() },
+      )
+    ).status,
+    409,
+  );
   const audience = await api(`/broadcasts/${campaign.id}/audience-preview`);
   assert.equal(audience.total, 3);
   assert.equal(audience.eligible, 1);

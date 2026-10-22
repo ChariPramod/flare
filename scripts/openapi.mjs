@@ -271,6 +271,15 @@ for (const file of readdirSync('apps/api/src').filter(
             description:
               'Optional campaign creation key, retained with the campaign in this environment. Identical retries return the existing draft; different content returns 409.',
           });
+        if (id === 'AudienceController_testEmail')
+          parameters.push({
+            in: 'header',
+            name: 'Idempotency-Key',
+            required: true,
+            schema: { type: 'string', minLength: 1, maxLength: 200, pattern: '^[\\x21-\\x7e]+$' },
+            description:
+              'Required test intent. Identical retries return the same IDs for 24 hours; different content returns 409. Tests use normal sending policy and never fan out to the audience.',
+          });
         if (id === 'OperationsController_engineEvent')
           bodySchema = schema(
             z

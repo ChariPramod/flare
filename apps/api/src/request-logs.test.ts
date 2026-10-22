@@ -136,6 +136,8 @@ it.each([
   '/v1/activity/run',
   '/v1/templates/template/versions',
   '/v1/template-preview',
+  '/v1/broadcasts/fixture/test',
+  '/v1/broadcasts/fixture/preflight',
   '/v1/layouts/layout',
   '/v1/translations/workflow/en_US',
   '/v1/content/preview',

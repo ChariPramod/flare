@@ -47,11 +47,16 @@ import {
   previewCampaignAudience,
   templatePreviewSchema,
   previewTemplateContent,
+  campaignPreflight,
+  sendCampaignTest,
+  campaignTestSchema,
+  campaignTestKeySchema,
 } from '@flare/platform';
 import { Public } from './auth.js';
 import { parse, sql, config } from './context.js';
 import type { AuthRequest } from './context.js';
 import { audit } from './identity.js';
+import { mailOptions } from './mail.js';
 const uuid = z.string().uuid(),
   name = z.string().trim().min(1).max(120);
 const pages = z.object({
@@ -452,6 +457,26 @@ export class AudienceController {
     @Param('id') id: string,
   ) {
     return previewCampaignAudience(sql, req.principal, parse(uuid, id));
+  }
+  @Get('broadcasts/:id/preflight') async preflight(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+  ) {
+    return campaignPreflight(mailOptions(), req.principal, parse(uuid, id));
+  }
+  @Post('broadcasts/:id/test') async testEmail(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Headers('idempotency-key') key: string,
+  ) {
+    return sendCampaignTest(
+      mailOptions(),
+      req.principal,
+      parse(uuid, id),
+      parse(campaignTestSchema, body),
+      parse(campaignTestKeySchema, key),
+    );
   }
   @Post('broadcasts/:id/schedule') async schedule(
     @Req() req: AuthRequest,

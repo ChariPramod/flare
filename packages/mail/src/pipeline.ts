@@ -115,50 +115,13 @@ export async function submitEmails(
       }
       const accept = async (db: Transaction) => {
         const input = await resolveEmailTemplate(db, value.data);
-        const domain = await sender(db, p, input, options.transports);
-        const sandbox =
-          options.transports.length > 0 &&
-          options.transports.every((transport) => transport.sandbox === true);
-        const admission = sandbox
-          ? null
-          : await sendingAdmission(
-              db,
-              p,
-              input.traffic_class,
-              Boolean(settings.campaign?.broadcastId),
-            );
-        const route = admission
-          ? await resolveMailRoute(
-              db,
-              {
-                trust_tier: admission.policy.trust_tier,
-                route_bindings: admission.policy.route_bindings,
-              },
-              admission.trafficClass,
-              admission.critical,
-              options.transports,
-            )
-          : null;
-        if (route) {
-          let ready = false;
-          let tlsReady = !domain.enforce_tls;
-          for (const instance of route.instances) {
-            const transport = options.transports.find(
-              (candidate) => candidate.instance?.id === instance.id,
-            )!;
-            if (domain.enforce_tls && !(await requiredTls([transport]))) continue;
-            tlsReady = true;
-            if ((await sendingReadiness(db, p, domain, transport)).ready) ready = true;
-          }
-          if (!ready)
-            throw new SendingPolicyError(
-              403,
-              tlsReady ? 'sender_not_ready' : 'required_tls_unavailable',
-              tlsReady
-                ? 'No approved route has fresh sender authentication evidence'
-                : 'No approved route can currently honor this domain’s delivery requirements',
-            );
-        }
+        const { domain, sandbox, admission, route } = await authorizeMailSender(
+          db,
+          p,
+          input,
+          options.transports,
+          Boolean(settings.campaign?.broadcastId),
+        );
         const at = schedule(input.scheduled_at, now);
         const id = randomUUID();
         const envelope = recipients(input);
@@ -277,10 +240,57 @@ export async function submitEmails(
   return await (settings.transaction ? run(settings.transaction) : withTenant(options.sql, p, run));
 }
 
+/** Shared admission checks for delivery and read-only campaign preflight. */
+export async function authorizeMailSender(
+  db: Transaction,
+  p: Principal,
+  input: Pick<EmailInput, 'from' | 'traffic_class'>,
+  transports: TransportAdapter[],
+  marketingSource = false,
+) {
+  const domain = await sender(db, p, input, transports);
+  const sandbox =
+    transports.length > 0 && transports.every((transport) => transport.sandbox === true);
+  const admission = sandbox
+    ? null
+    : await sendingAdmission(db, p, input.traffic_class, marketingSource);
+  const route = admission
+    ? await resolveMailRoute(
+        db,
+        {
+          trust_tier: admission.policy.trust_tier,
+          route_bindings: admission.policy.route_bindings,
+        },
+        admission.trafficClass,
+        admission.critical,
+        transports,
+      )
+    : null;
+  if (route) {
+    let ready = false;
+    let tlsReady = !domain.enforce_tls;
+    for (const instance of route.instances) {
+      const transport = transports.find((candidate) => candidate.instance?.id === instance.id)!;
+      if (domain.enforce_tls && !(await requiredTls([transport]))) continue;
+      tlsReady = true;
+      if ((await sendingReadiness(db, p, domain, transport)).ready) ready = true;
+    }
+    if (!ready)
+      throw new SendingPolicyError(
+        403,
+        tlsReady ? 'sender_not_ready' : 'required_tls_unavailable',
+        tlsReady
+          ? 'No approved route has fresh sender authentication evidence'
+          : 'No approved route can currently honor this domain’s delivery requirements',
+      );
+  }
+  return { domain, sandbox, admission, route };
+}
+
 async function sender(
   tx: Transaction,
   p: Principal,
-  input: EmailInput,
+  input: Pick<EmailInput, 'from'>,
   transports: TransportAdapter[],
 ) {
   const name = address(input.from).split('@')[1]!;

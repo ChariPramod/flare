@@ -28,6 +28,11 @@ try {
 const client = new FlareClient({baseUrl:'https://flare.test',apiKey:'fl_test',environmentId:'00000000-0000-4000-8000-000000000001'});
 void client.sendEmail({from:'a@b.test',to:'c@d.test',subject:'Hello',text:'Welcome'});
 void client.publish({automations:['welcome-sequence']});
+const checklist = await client.request('get','/v1/broadcasts/{id}/preflight',{path:{id:'fixture'}});
+const test = await client.request('post','/v1/broadcasts/{id}/test',{path:{id:'fixture'},idempotencyKey:'intent',body:{revision:checklist.revision,sandbox:checklist.sandbox,recipients:['me@example.test']}});
+const accepted: string = test.data[0]!.id; void accepted;
+// @ts-expect-error Expected delivery mode must be explicit.
+void client.request('post','/v1/broadcasts/{id}/test',{path:{id:'fixture'},body:{revision:'revision',recipients:['me@example.test']}});
 const binary: Uint8Array = await client.request('get','/v1/inbound/{id}/raw',{path:{id:'fixture'},query:{format:'binary'}});
 const encoded = await client.request('get','/v1/inbound/{id}/raw',{path:{id:'fixture'}});
 const base64: string = encoded.content;

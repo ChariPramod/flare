@@ -1,0 +1,65 @@
+.checklist {
+  list-style: none;
+  padding: 0;
+  margin: 24px 0;
+}
+.checklist li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+.checklist p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+.checklist svg {
+  margin-top: 3px;
+}
+.checklist strong {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.testCallout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 24px 0;
+}
+.testCallout h3,
+.testCallout p {
+  margin: 0 0 8px;
+}
+.testCallout > div {
+  flex: 1 1 250px;
+}
+.testForm {
+  display: grid;
+  gap: 16px;
+}
+.example {
+  margin-top: 16px;
+}
+.example summary {
+  cursor: pointer;
+  padding: 12px 0;
+}
+.example pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  padding: 16px;
+}
+@media (max-width: 480px) {
+  .checklist li {
+    grid-template-columns: 20px minmax(0, 1fr);
+  }
+  .checklist li > a {
+    grid-column: 2;
+  }
+}
