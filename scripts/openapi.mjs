@@ -263,6 +263,14 @@ for (const file of readdirSync('apps/api/src').filter(
             description:
               '24-hour validated-request deduplication. Reusing a key with different content returns 409.',
           });
+        if (id === 'AudienceController_createBroadcast')
+          parameters.push({
+            in: 'header',
+            name: 'Idempotency-Key',
+            schema: { type: 'string', minLength: 1, maxLength: 200, pattern: '^[\\x21-\\x7e]+$' },
+            description:
+              'Optional campaign creation key, retained with the campaign in this environment. Identical retries return the existing draft; different content returns 409.',
+          });
         if (id === 'OperationsController_engineEvent')
           bodySchema = schema(
             z
@@ -399,7 +407,10 @@ for (const file of readdirSync('apps/api/src').filter(
           toolProperties.body = bodySchema;
           toolRequired.push('body');
         }
-        toolProperties.idempotencyKey = { type: 'string', maxLength: 256 };
+        toolProperties.idempotencyKey = {
+          type: 'string',
+          maxLength: id === 'AudienceController_createBroadcast' ? 200 : 256,
+        };
         manifest.push({
           id: operationId,
           method: http.toUpperCase(),

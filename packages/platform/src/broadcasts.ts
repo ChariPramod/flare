@@ -7,7 +7,7 @@ import {
   templateSchema,
   validateTemplate,
 } from '@flare/shared';
-import type { Tenant, Principal, Segment } from '@flare/shared';
+import type { Tenant, Principal } from '@flare/shared';
 import {
   MailError,
   submitEmails,
@@ -16,17 +16,43 @@ import {
   address,
   lockSendingPolicy,
   releaseUnusedQuota,
+  configuredTransports,
 } from '@flare/mail';
-import type { PipelineOptions } from '@flare/mail';
-import { segmentWhere } from './audience.js';
+import type { PipelineOptions, TransportAdapter } from '@flare/mail';
+import { campaignAudienceMatch, campaignAudienceSummary } from './campaigns.js';
 import { sendingPause } from './sending-pause.js';
 export const unsubscribeVariable = '{{{FLARE_UNSUBSCRIBE_URL}}}';
-function checkOrigins() {
-  if (
-    process.env.NODE_ENV === 'production' &&
-    ![process.env.PUBLIC_API_URL, process.env.WEB_ORIGIN].every((v) => v?.startsWith('https://'))
-  )
-    throw new MailError(503, 'Production broadcasts require HTTPS PUBLIC_API_URL and WEB_ORIGIN');
+function checkOrigins(transports?: TransportAdapter[]) {
+  if (process.env.NODE_ENV !== 'production') return;
+  const origins = [process.env.PUBLIC_API_URL, process.env.WEB_ORIGIN];
+  if (origins.every((value) => value?.startsWith('https://'))) return;
+  // Production-built local demos use HTTP, but only the validated Mailpit route
+  // may use local preference links. A flag alone must never enable this bypass.
+  if (process.env.MAIL_SANDBOX === 'true') {
+    try {
+      const configured = configuredTransports();
+      if (
+        configured.length > 0 &&
+        configured.every((transport) => transport.sandbox) &&
+        (!transports ||
+          (transports.length > 0 && transports.every((transport) => transport.sandbox))) &&
+        origins.every((value) => {
+          const origin = new URL(value ?? '');
+          return (
+            !origin.username &&
+            !origin.password &&
+            (origin.protocol === 'https:' ||
+              (origin.protocol === 'http:' &&
+                ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)))
+          );
+        })
+      )
+        return;
+    } catch {
+      // Invalid sandbox configuration fails closed with the same public error.
+    }
+  }
+  throw new MailError(503, 'Production broadcasts require HTTPS PUBLIC_API_URL and WEB_ORIGIN');
 }
 export async function scheduleBroadcast(sql: Sql, p: Principal, id: string, at?: string) {
   checkOrigins();
@@ -45,17 +71,17 @@ export async function scheduleBroadcast(sql: Sql, p: Principal, id: string, at?:
     if (!domain) throw new MailError(403, `Sender domain ${domainName} is not verified`);
     if (!canSend(p, String(domain.id)))
       throw new MailError(403, 'API key cannot send from this domain');
-    let match = tx`true`;
-    if (row.segment_id) {
-      const [segment] =
-        await tx`select definition from audience_segments where id=${row.segment_id}`;
-      if (!segment) throw new MailError(422, 'Segment not found');
-      match = segmentWhere(tx, segment.definition as Segment);
-    }
+    const { match } = await campaignAudienceMatch(tx, row);
     const due = schedule(at);
     // Freeze audience membership atomically when scheduled; preferences are checked again before every delivery.
     await tx`delete from broadcast_recipients where broadcast_id=${id}`;
     await tx`insert into broadcast_recipients(org_id,environment_id,broadcast_id,contact_id) select c.org_id,c.environment_id,${id},c.id from contacts c where c.deleted_at is null and ${match}`;
+    const audience = await campaignAudienceSummary(tx, row, id);
+    if (!audience.eligible)
+      throw new MailError(
+        422,
+        'This campaign has no eligible contacts. Review its list, preferences and suppressions.',
+      );
     await tx`update broadcasts set status='scheduled',scheduled_at=${due},next_dispatch_at=${due},error=null,updated_at=now() where id=${id}`;
     await outbox(tx, p, 'broadcast.scheduled', { id, scheduled_at: due.toISOString() });
     return { id, status: 'scheduled', scheduled_at: due };
@@ -98,7 +124,7 @@ export async function dispatchBroadcast(
       // The batch may roll back, but these original policy and broadcast locks
       // must survive until its failure and retry deadline are committed.
       const value = await tx.savepoint(async (tx) => {
-        checkOrigins();
+        checkOrigins(options.transports);
         const [version] =
           await tx`select * from template_versions where template_id=${broadcast.template_id} and version=${broadcast.template_version}`;
         if (!version) throw new MailError(422, 'Pinned template missing');

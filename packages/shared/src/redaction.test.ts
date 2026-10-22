@@ -1,6 +1,39 @@
 import { describe, expect, it } from 'vitest';
 import { redact, redactText, redactRequestLogBodies } from './redaction.js';
 
+it.each(['/v1/contacts/import', '/V1/CONTACTS/IMPORT/PREVIEW'])(
+  'omits contact files and validation previews from %s logs',
+  (path) => {
+    const result = redactRequestLogBodies(
+      path,
+      { body: { csv: 'email\nperson@example.test', source: { data: 'private workbook' } } },
+      JSON.stringify({ sample: [['person@example.test']], message: 'private column' }),
+    );
+    expect(result).toEqual({
+      request_body: {
+        body: '[CONTACT IMPORT CONTENT REDACTED]',
+        query: '[CONTACT IMPORT CONTENT REDACTED]',
+      },
+      response_body: '[CONTACT IMPORT CONTENT REDACTED]',
+    });
+  },
+);
+
+it.each(['/v1/broadcasts', '/V1/BROADCASTS/fixture/audience-preview'])(
+  'omits campaign composition and recipient samples from %s logs',
+  (path) => {
+    expect(
+      JSON.stringify(
+        redactRequestLogBodies(
+          path,
+          { body: { content: { html: 'Private campaign content' } } },
+          { sample: [{ email: 'person@example.test' }] },
+        ),
+      ),
+    ).not.toMatch(/Private campaign content|person@example/);
+  },
+);
+
 describe('browser transfer credential text redaction', () => {
   const jwt = [{ alg: 'HS256' }, { sub: 'fixture' }, 'synthetic signature']
     .map((part) => Buffer.from(JSON.stringify(part)).toString('base64url'))

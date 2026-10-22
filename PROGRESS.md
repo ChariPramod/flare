@@ -2,7 +2,18 @@
 
 Updated: 2026-10-21, America/Los_Angeles.
 
-## Current work — frontend refinement
+## Current work — contact imports and campaigns
+
+- Branch: **`codex/contact-campaigns`**, based on frontend checkpoint `60bf814`; preserve unrelated local documentation. Scope is saved in [the implementation plan](docs/planning/contact-import-campaigns.md).
+- Add bounded CSV, TSV, JSON and Excel `.xlsx` parsing, worksheet selection, column mapping, validation preview and atomic contact/list imports. Preserve opt-outs, skip deleted contacts, reject unsafe spreadsheet structures and keep source content out of logs.
+- Add named tenant-isolated lists and list filtering, campaign draft composition/editing with pinned template versions, recipient eligibility previews, guarded scheduling/cancellation and idempotent campaign creation. Existing delivery approval, suppression, quota and retry protections remain in the shared pipeline.
+- **Local verification passed:** full checkpoint with **940 unit/database tests, 25 evals**, documentation, lint, typecheck, generated API checks, builds and gitleaks; installable SDK/CLI/MCP smoke checks; **85 Docker integration tests**, including six new independent-connection campaign concurrency/isolation cases. Changed handwritten files pass formatting. Whole-repository Prettier still reports existing configuration/generated-file differences and preserved local documentation; those unrelated files were not reformatted.
+- **Browser evidence:** all five focused import/campaign flows passed. The broad Chrome run passed 115 scenarios with two Linux-only visual cases skipped and one existing collapsed-navigation tooltip timing failure. Instrumentation reproduced a queued collapse scroll dismissing the freshly focused tooltip; synchronize that test with settled layout. Twelve instrumented repetitions and ten complete tooltip/keyboard assertions then passed. Final Linux/full-stack CI is still pending.
+- **Local demo refreshed:** rebuilt API, worker, relay and dashboard, applied additive migration `0019`, and retained all existing demo volumes. All services are healthy. Authenticated live API checks passed contact-list/contact reads and CSV/TSV/JSON/XLSX previews without importing or sending. The local Mailpit route now permits loopback HTTP preference links only when both configured and actual transports are validated sandbox adapters; real sending retains HTTPS requirements. Evidence is under ignored `.tools/contact-campaign/`.
+- **Delivery pending:** push the feature checkpoint and require its full CI run, including the new disposable API-to-Mailpit campaign acceptance, before reporting final acceptance.
+- Updated [the audience guide](docs/product/audience.md) and [the website/backend tour](docs/product/website-and-backend-guide.md). Real provider delivery remains a separate staging gate.
+
+## Previous checkpoint — frontend refinement
 
 - **Implementation complete:** [the approved refinement plan](docs/planning/ui-refinement.md) now covers shared typography/spacing, pre-paint light/dark themes, responsive navigation and a policy-first Overview. Workflows, layouts, translations and templates retain raw drafts in memory through navigation and failed saves. Tables distinguish loading, empty results and failed refreshes; Contacts uses one server-backed search. Forms, dialogs, authentication and preferences expose linked feedback and guarded pending actions. HTTP APIs and database schemas remain unchanged.
 - **Checkpoints:** foundations were pushed as `ec3279b`; interaction safety as `8375ba8`. The final checkpoint adds ten reviewed Linux x64 visual references, themed canvas controls, longer Inbox-feed regression coverage and a save/read race fix found during independent review. The latter was reproduced against the prior code: an accepted save incorrectly displayed an intervening older server version after a failed refresh.

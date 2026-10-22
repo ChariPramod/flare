@@ -63,6 +63,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/contact-lists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * contactLists (read)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        get: operations["AudienceController_contactLists"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/template-preview": {
         parameters: {
             query?: never;
@@ -393,6 +413,26 @@ export interface paths {
          * @description Validated inputs may have additional semantic constraints documented in the resource guide.
          */
         patch: operations["AudienceController_editBroadcast"];
+        trace?: never;
+    };
+    "/v1/broadcasts/{id}/audience-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * campaignAudience (read)
+         * @description Validated inputs may have additional semantic constraints documented in the resource guide.
+         */
+        get: operations["AudienceController_campaignAudience"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/broadcasts/{id}/schedule": {
@@ -2751,6 +2791,7 @@ export interface operations {
                 limit?: number;
                 q?: string;
                 segment_id?: string;
+                list_id?: string;
             };
             header?: {
                 /** @description Required for user sessions. API keys are bound to one environment; supplying this header verifies that selection. */
@@ -3063,6 +3104,19 @@ export interface operations {
                     mapping: {
                         [key: string]: string;
                     };
+                } | {
+                    source: {
+                        /** @enum {string} */
+                        format: "csv" | "tsv" | "json" | "xlsx";
+                        data: string;
+                        sheet?: string;
+                    };
+                    mapping: {
+                        [key: string]: string;
+                    };
+                    /** Format: uuid */
+                    list_id?: string;
+                    list_name?: string;
                 };
             };
         };
@@ -3079,6 +3133,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        imported: number;
+                        duplicates: number;
+                        created?: number;
+                        updated?: number;
+                        skipped_deleted?: number;
+                        /** Format: uuid */
+                        list_id?: string | null;
+                        list_name?: string | null;
+                    } & {
                         [key: string]: unknown;
                     };
                 };
@@ -3201,6 +3264,16 @@ export interface operations {
             content: {
                 "application/json": {
                     csv: string;
+                } | {
+                    source: {
+                        /** @enum {string} */
+                        format: "csv" | "tsv" | "json" | "xlsx";
+                        data: string;
+                        sheet?: string;
+                    };
+                    mapping?: {
+                        [key: string]: string;
+                    };
                 };
             };
         };
@@ -3217,8 +3290,169 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        headers: string[];
+                        sample: string[][];
+                        rows: number;
+                        sheets?: string[];
+                        sheet?: string;
+                        validation?: {
+                            valid: number;
+                            duplicates: number;
+                            errors: ({
+                                row: number;
+                                message: string;
+                            } & {
+                                [key: string]: unknown;
+                            })[];
+                            error_count: number;
+                            existing: number;
+                            skipped_deleted: number;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    } & {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    AudienceController_contactLists: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required for user sessions. API keys are bound to one environment; supplying this header verifies that selection. */
+                "x-environment-id"?: string;
+                /** @description Required for user sessions; optional tenant assertion for API keys. */
+                "x-org-id"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": ({
+                        id: string;
+                        org_id?: string;
+                        environment_id?: string;
+                        created_at: string;
+                        name: string;
+                        updated_at: string;
+                        contact_count: number;
+                    } & {
+                        [key: string]: unknown;
+                    })[];
                 };
             };
             /** @description Request failed */
@@ -6117,6 +6351,8 @@ export interface operations {
                 "x-environment-id"?: string;
                 /** @description Required for user sessions; optional tenant assertion for API keys. */
                 "x-org-id"?: string;
+                /** @description Optional campaign creation key, retained with the campaign in this environment. Identical retries return the existing draft; different content returns 409. */
+                "Idempotency-Key"?: string;
             };
             path?: never;
             cookie?: never;
@@ -6127,8 +6363,18 @@ export interface operations {
                     name: string;
                     sender: string;
                     /** Format: uuid */
-                    template_id: string;
-                    template_version: number;
+                    template_id?: string;
+                    template_version?: number;
+                    content?: {
+                        subject: string;
+                        html: string;
+                        text?: string;
+                        variables?: {
+                            [key: string]: string | number | boolean | ("null" | null);
+                        };
+                    };
+                    /** Format: uuid */
+                    list_id?: string | null;
                     /** Format: uuid */
                     segment_id?: string | null;
                     /** Format: uuid */
@@ -6410,8 +6656,18 @@ export interface operations {
                     name: string;
                     sender: string;
                     /** Format: uuid */
-                    template_id: string;
-                    template_version: number;
+                    template_id?: string;
+                    template_version?: number;
+                    content?: {
+                        subject: string;
+                        html: string;
+                        text?: string;
+                        variables?: {
+                            [key: string]: string | number | boolean | ("null" | null);
+                        };
+                    };
+                    /** Format: uuid */
+                    list_id?: string | null;
                     /** Format: uuid */
                     segment_id?: string | null;
                     /** Format: uuid */
@@ -6433,6 +6689,160 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Request failed */
+            400: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            401: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            403: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            404: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            409: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            413: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            422: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request failed */
+            502: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Dependency unavailable */
+            503: {
+                headers: {
+                    "Retry-After"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    AudienceController_campaignAudience: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Required for user sessions. API keys are bound to one environment; supplying this header verifies that selection. */
+                "x-environment-id"?: string;
+                /** @description Required for user sessions; optional tenant assertion for API keys. */
+                "x-org-id"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            200: {
+                headers: {
+                    "x-request-id"?: string;
+                    "RateLimit-Limit"?: number;
+                    "RateLimit-Remaining"?: number;
+                    /** @description Seconds until bucket refills */
+                    "RateLimit-Reset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        total: number;
+                        eligible: number;
+                        excluded: {
+                            unsubscribed: number;
+                            suppressed: number;
+                            topic_opt_out: number;
+                            deleted: number;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                        sample: ({
+                            id: string;
+                            email: string;
+                            first_name: string;
+                            last_name: string;
+                        } & {
+                            [key: string]: unknown;
+                        })[];
+                        snapshot: boolean;
+                    } & {
                         [key: string]: unknown;
                     };
                 };

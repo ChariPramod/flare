@@ -68,20 +68,20 @@ Routes below are appended to the dashboard origin. Detail pages open by selectin
 
 ### Email
 
-| Page           | Route           | What you do there                                                                                               |
-| -------------- | --------------- | --------------------------------------------------------------------------------------------------------------- |
-| Emails         | `/emails`       | Compose or schedule mail; inspect recipients, attempts, events, content and eligible cancellation/rescheduling. |
-| Domains        | `/domains`      | Add sender/receiving domains, obtain DNS records and inspect ownership, tracking and sending readiness.         |
-| Audience       | `/audience`     | Manage marketing contacts, typed properties, segments and audience topics; import CSV and manage preferences.   |
-| Broadcasts     | `/broadcasts`   | Send a pinned template to a selected audience, schedule it and inspect progress.                                |
-| Automations    | `/automations`  | Build durable contact sequences with email, waits, events and conditions; inspect runs.                         |
-| Templates      | `/templates`    | Create versioned subject/HTML/text content and preview sample variables.                                        |
-| Received email | `/inbound`      | Read mail received by a domain, inspect source/attachments and manage forwarding rules.                         |
-| Suppressions   | `/suppressions` | Inspect organization-wide restrictions and manage permitted manual suppressions.                                |
-| Webhooks       | `/webhooks`     | Configure event destinations and inspect signed deliveries, attempts and eligible replay.                       |
-| Logs           | `/logs`         | Search redacted request logs and open request/response details.                                                 |
-| Metrics        | `/metrics`      | Filter delivery/engagement aggregates by time and supported dimensions.                                         |
-| Dead letters   | `/dead-letters` | Inspect failed work and redrive eligible operations after addressing the cause.                                 |
+| Page           | Route           | What you do there                                                                                                |
+| -------------- | --------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Emails         | `/emails`       | Compose or schedule mail; inspect recipients, attempts, events, content and eligible cancellation/rescheduling.  |
+| Domains        | `/domains`      | Add sender/receiving domains, obtain DNS records and inspect ownership, tracking and sending readiness.          |
+| Audience       | `/audience`     | Import CSV, TSV, JSON or Excel contacts into named lists; manage properties, segments, topics and preferences.   |
+| Broadcasts     | `/broadcasts`   | Compose or select a pinned template, target a list/segment, review eligibility, send now or schedule a campaign. |
+| Automations    | `/automations`  | Build durable contact sequences with email, waits, events and conditions; inspect runs.                          |
+| Templates      | `/templates`    | Create versioned subject/HTML/text content and preview sample variables.                                         |
+| Received email | `/inbound`      | Read mail received by a domain, inspect source/attachments and manage forwarding rules.                          |
+| Suppressions   | `/suppressions` | Inspect organization-wide restrictions and manage permitted manual suppressions.                                 |
+| Webhooks       | `/webhooks`     | Configure event destinations and inspect signed deliveries, attempts and eligible replay.                        |
+| Logs           | `/logs`         | Search redacted request logs and open request/response details.                                                  |
+| Metrics        | `/metrics`      | Filter delivery/engagement aggregates by time and supported dimensions.                                          |
+| Dead letters   | `/dead-letters` | Inspect failed work and redrive eligible operations after addressing the cause.                                  |
 
 ### Developer
 
@@ -144,9 +144,9 @@ Templates travel as required pinned dependencies; there is no separate Templates
 
 ### 5. Use audiences, broadcasts and automations
 
-**Audience contacts are distinct from workflow subscribers.** Audience has Contacts, Properties, Segments and Topics tabs; its topics are also distinct from sidebar Topics. Add contacts or import CSV with preview/header mapping, define typed properties and use JSON rules for segments. Contact detail exposes opt-out/topic preferences and a recipient preference link.
+**Audience contacts are distinct from workflow subscribers.** Audience has Contacts, Properties, Segments and Topics tabs; its topics are also distinct from sidebar Topics. Choose **Import contacts** for CSV, TSV, JSON or Excel `.xlsx`, select the worksheet when needed, map columns, review errors and save the cohort as a named list. Filter contacts by list or segment. Existing opt-outs remain opted out and deleted contacts are skipped. Define typed properties before importing them. Contact detail exposes opt-out/topic preferences and a recipient preference link.
 
-For a broadcast, create a versioned template, then choose **Broadcasts → Create broadcast**. Set sender, template, audience and throttling, review scheduling, and monitor the audience/email outcomes. Broadcasts are marketing traffic and require approval for that route; the requested rate does not override organization limits.
+For a broadcast, choose **Create campaign for this list** after import, or **Broadcasts → Create campaign**. Select all contacts, a named list or a segment, then a sender and either compose content in Development or select a saved template version. Save the draft, inspect eligible and excluded recipients, preview the message, then confirm **Send now** or **Schedule for later**. Edit drafts or cancel pending work from the campaign detail. Broadcasts are marketing traffic and require approval for that route; the requested rate does not override organization limits. See [audience and campaigns](audience.md) for formats, limits, consent and delivery semantics.
 
 For an automation, choose **Automations → Create automation**, define its trigger and connect `send_email`, `wait`, `wait_for_event` and `condition` steps. Configure template pins, sender, delays or JSON Logic, then **Save sequence**. Existing runs retain their original definition. Run details show step history, contact, outgoing emails and eligible cancellation.
 

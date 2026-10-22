@@ -2,7 +2,8 @@
 import { createServer } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
 import { webhookSecret } from '../../packages/shared/src/webhooks.js';
-import { renderText, templateSchema } from '../../packages/shared/src/audience.js';
+import { contactSchema, renderText, templateSchema } from '../../packages/shared/src/audience.js';
+import { parseContactFile } from '../../packages/platform/src/contact-import.js';
 import { automationSchema } from '../../packages/shared/src/automations.js';
 import { workflowSchema } from '../../packages/shared/src/workflows.js';
 const org = '00000000-0000-4000-8000-000000000001',
@@ -87,6 +88,8 @@ const endpoints = new Map<string, Record<string, unknown>>(),
 const contacts = new Map<string, Record<string, unknown>>(),
   templates = new Map<string, Record<string, unknown>>(),
   broadcasts = new Map<string, Record<string, unknown>>();
+const contactLists = new Map<string, { id: string; name: string; members: Set<string> }>();
+const campaignRequests = new Map<string, { body: string; id: string }>();
 const automations = new Map<string, Record<string, unknown>>(),
   automationRuns = new Map<string, Record<string, unknown>>();
 let deadLetterRedriven = false;
@@ -169,6 +172,8 @@ const server = createServer(async (req, res) => {
       endpoints.clear();
       deliveries.clear();
       contacts.clear();
+      contactLists.clear();
+      campaignRequests.clear();
       templates.clear();
       broadcasts.clear();
       automations.clear();
@@ -1127,12 +1132,121 @@ const server = createServer(async (req, res) => {
     }
     if (['audience-segments', 'audience-topics', 'contact-properties'].includes(path))
       return reply([]);
+    if (path === 'contact-lists')
+      return reply(
+        [...contactLists.values()].map(({ id, name, members }) => ({
+          id,
+          name,
+          contact_count: [...members].filter((id) => !contacts.get(id)?.deleted_at).length,
+        })),
+      );
+    if (path === 'contacts/import' || path === 'contacts/import/preview') {
+      const parsed = await parseContactFile(body.source ?? { format: 'csv', data: body.csv });
+      const preview = {
+        headers: parsed.headers,
+        sample: parsed.rows.slice(0, 5),
+        rows: parsed.rows.length,
+        ...(parsed.sheets ? { sheets: parsed.sheets, sheet: parsed.sheet } : {}),
+      };
+      if (!body.mapping && path.endsWith('/preview')) return reply(preview);
+      const mapping = body.mapping as Record<string, string>;
+      if (
+        !mapping ||
+        !Object.values(mapping).includes('email') ||
+        new Set(Object.values(mapping)).size !== Object.values(mapping).length ||
+        Object.keys(mapping).some((header) => !parsed.headers.includes(header))
+      )
+        return reply({ message: 'Map one email column and distinct contact fields' }, 422);
+      const errors: { row: number; message: string }[] = [];
+      const mapped = new Map<string, ReturnType<typeof contactSchema.parse>>();
+      let valid = 0,
+        duplicates = 0;
+      for (const [i, cells] of parsed.rows.entries()) {
+        const value: Record<string, unknown> = {};
+        for (const [header, target] of Object.entries(mapping)) {
+          const cell = cells[parsed.headers.indexOf(header)]!.trim();
+          if (target === 'unsubscribed') {
+            if (cell.toLowerCase() === 'true') value.unsubscribed = true;
+          } else value[target] = cell;
+        }
+        const result = contactSchema.safeParse(value);
+        if (!result.success) {
+          errors.push({
+            row: parsed.rowNumbers[i]!,
+            message: result.error.issues.map((issue) => issue.message).join('; '),
+          });
+          continue;
+        }
+        valid++;
+        const previous = mapped.get(result.data.email);
+        if (previous) {
+          duplicates++;
+          if (previous.unsubscribed) result.data.unsubscribed = true;
+        }
+        mapped.set(result.data.email, result.data);
+      }
+      const old = [...contacts.values()].filter((contact) => mapped.has(String(contact.email)));
+      const validation = {
+        valid,
+        duplicates,
+        errors: errors.slice(0, 50),
+        error_count: errors.length,
+        existing: old.filter((contact) => !contact.deleted_at).length,
+        skipped_deleted: old.filter((contact) => contact.deleted_at).length,
+      };
+      if (path.endsWith('/preview')) return reply({ ...preview, validation });
+      if (errors.length)
+        return reply(
+          { message: `Row ${errors[0]!.row}: ${errors[0]!.message}; no contacts imported` },
+          422,
+        );
+      let list = body.list_id ? contactLists.get(body.list_id) : undefined;
+      if (body.list_id && !list) return reply({ message: 'Contact list not found' }, 404);
+      if (body.list_name) {
+        list = [...contactLists.values()].find((entry) => entry.name === body.list_name);
+        if (!list) {
+          list = { id: randomUUID(), name: body.list_name, members: new Set() };
+          contactLists.set(list.id, list);
+        }
+      }
+      let created = 0,
+        updated = 0,
+        skipped_deleted = 0;
+      for (const value of mapped.values()) {
+        const existing = [...contacts.values()].find((contact) => contact.email === value.email);
+        if (existing?.deleted_at) {
+          skipped_deleted++;
+          continue;
+        }
+        const row = {
+          ...existing,
+          ...value,
+          id: String(existing?.id ?? randomUUID()),
+          unsubscribed: Boolean(existing?.unsubscribed || value.unsubscribed),
+          created_at: existing?.created_at ?? new Date().toISOString(),
+          topics: [],
+        };
+        if (existing) updated++;
+        else created++;
+        contacts.set(row.id, row);
+        list?.members.add(row.id);
+      }
+      return reply({
+        imported: created + updated,
+        duplicates,
+        created,
+        updated,
+        skipped_deleted,
+        list_id: list?.id ?? null,
+        list_name: list?.name ?? null,
+      });
+    }
     if (path === 'contacts' && method === 'POST') {
       const row = {
         id: randomUUID(),
         ...body,
         properties: {},
-        unsubscribed: false,
+        unsubscribed: body.unsubscribed ?? false,
         created_at: new Date().toISOString(),
         topics: [],
       };
@@ -1144,6 +1258,12 @@ const server = createServer(async (req, res) => {
       const page = Math.max(1, Number(url.searchParams.get('page') ?? 1));
       const limit = Math.max(1, Math.min(100, Number(url.searchParams.get('limit') ?? 25)));
       const matching = [...contacts.values()]
+        .filter(
+          (contact) =>
+            !contact.deleted_at &&
+            (!url.searchParams.get('list_id') ||
+              contactLists.get(url.searchParams.get('list_id')!)?.members.has(String(contact.id))),
+        )
         .filter(
           (contact) =>
             String(contact.email).toLowerCase().includes(search) ||
@@ -1161,6 +1281,10 @@ const server = createServer(async (req, res) => {
       if (action === 'preference-link')
         return reply({ url: 'http://localhost:4310/preferences/browser-fixture-link' });
       if (method === 'PATCH') Object.assign(row, body);
+      if (method === 'DELETE') {
+        row.deleted_at = new Date().toISOString();
+        row.unsubscribed = true;
+      }
       return reply(row);
     }
     if (path === 'templates' && method === 'POST') {
@@ -1198,14 +1322,44 @@ const server = createServer(async (req, res) => {
       return reply(row);
     }
     if (path === 'broadcasts' && method === 'POST') {
+      const key = String(req.headers['idempotency-key'] ?? '');
+      const previous = key ? campaignRequests.get(key) : undefined;
+      if (previous)
+        return previous.body === text
+          ? reply(broadcasts.get(previous.id))
+          : reply({ message: 'Idempotency key conflicts with another campaign' }, 409);
+      const campaignId = randomUUID();
+      let templateId = body.template_id;
+      if (body.content) {
+        if (req.headers['x-environment-id'] === prod)
+          return reply({ message: 'Compose campaign content in Development' }, 403);
+        const template = {
+          id: randomUUID(),
+          name: body.name,
+          identifier: `campaign-${campaignId}`,
+          current_version: 1,
+          version: 1,
+          ...templateSchema.parse(body.content),
+          text_body: body.content.text ?? null,
+          versions: [{ version: 1, created_at: new Date().toISOString() }],
+        };
+        templates.set(template.id, template);
+        templateId = template.id;
+      }
       const row = {
-        id: randomUUID(),
+        id: campaignId,
         ...body,
+        template_id: templateId,
+        template_version: body.template_version ?? 1,
+        list_id: body.list_id ?? null,
+        segment_id: body.segment_id ?? null,
+        topic_id: body.topic_id ?? null,
         status: 'draft',
         error: null,
         stats: { recipients: [], messages: [], events: [] },
       };
       broadcasts.set(row.id, row);
+      if (key) campaignRequests.set(key, { body: text, id: row.id });
       return reply(row);
     }
     if (path === 'broadcasts') return reply([...broadcasts.values()]);
@@ -1213,9 +1367,47 @@ const server = createServer(async (req, res) => {
       const [, id, action] = path.split('/'),
         row = broadcasts.get(id!);
       if (!row) return reply({ message: 'Not found' }, 404);
+      const matching = [...contacts.values()].filter(
+        (contact) =>
+          !row.list_id || contactLists.get(String(row.list_id))?.members.has(String(contact.id)),
+      );
+      const eligible = matching.filter((contact) => !contact.deleted_at && !contact.unsubscribed);
+      if (action === 'audience-preview')
+        return reply({
+          total: matching.length,
+          eligible: eligible.length,
+          excluded: {
+            unsubscribed: matching.filter((contact) => contact.unsubscribed && !contact.deleted_at)
+              .length,
+            suppressed: 0,
+            topic_opt_out: 0,
+            deleted: matching.filter((contact) => contact.deleted_at).length,
+          },
+          sample: eligible.slice(0, 5).map((contact) => ({
+            id: contact.id,
+            email: contact.email,
+            first_name: contact.first_name ?? '',
+            last_name: contact.last_name ?? '',
+          })),
+          snapshot: row.status !== 'draft',
+        });
+      if (method === 'PATCH') {
+        if (row.status !== 'draft') return reply({ message: 'Only drafts can be edited' }, 409);
+        if (body.content) {
+          const template = templates.get(String(row.template_id))!;
+          Object.assign(template, templateSchema.parse(body.content), {
+            text_body: body.content.text ?? null,
+            version: Number(template.current_version) + 1,
+            current_version: Number(template.current_version) + 1,
+          });
+          Object.assign(row, body, { template_version: template.current_version });
+        } else Object.assign(row, body);
+      }
       if (action === 'schedule') {
+        if (!eligible.length)
+          return reply({ message: 'No eligible contacts in this audience' }, 422);
         row.status = 'scheduled';
-        row.scheduled_at = new Date(Date.now() + 7200000).toISOString();
+        row.scheduled_at = body.scheduled_at ?? new Date().toISOString();
       }
       if (action === 'cancel') row.status = 'canceled';
       if (row.cancellation) (row.cancellation as { eligible: boolean }).eligible = false;

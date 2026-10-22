@@ -3,9 +3,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Plus, Upload, Copy, Send, Code2 } from 'lucide-react';
+import { Plus, Upload, Copy, Code2 } from 'lucide-react';
 import { api, useApi, date, pretty } from '../lib/api';
 import { DraftNotice, useDrafts, useEditorDraft } from './drafts';
+import { ContactImport, type ContactList } from './contact-import';
+import campaignStyles from './campaign-import.module.css';
+export { BroadcastsPage } from './campaign-pages';
 import {
   PageHeader,
   Button,
@@ -73,17 +76,19 @@ function Contacts({ writable }: { writable: boolean }) {
   const [page, setPage] = useState(1),
     [search, setSearch] = useState(''),
     [segment, setSegment] = useState(''),
+    [list, setList] = useState(''),
     [editing, setEditing] = useState(false),
     [importing, setImporting] = useState(false),
     [error, setError] = useState<unknown>(),
     [busy, setBusy] = useState(false);
   const query = useApi<{ data: Contact[] }>(
-      `contacts?limit=25&page=${page}&q=${encodeURIComponent(search)}${segment ? `&segment_id=${segment}` : ''}`,
+      `contacts?limit=25&page=${page}&q=${encodeURIComponent(search)}${segment ? `&segment_id=${segment}` : ''}${list ? `&list_id=${list}` : ''}`,
     ),
-    segments = useApi<Definition[]>('audience-segments');
+    segments = useApi<Definition[]>('audience-segments'),
+    lists = useApi<ContactList[]>('contact-lists');
   return (
     <>
-      <div className="panel-heading">
+      <div className={`panel-heading ${campaignStyles.contactToolbar}`}>
         <div className="actions">
           <select
             aria-label="Contact segment"
@@ -100,11 +105,34 @@ function Contacts({ writable }: { writable: boolean }) {
               </option>
             ))}
           </select>
+          <select
+            aria-label="Contact list filter"
+            value={list}
+            onChange={(event) => {
+              setList(event.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">All lists</option>
+            {lists.data?.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name} · {item.contact_count}
+              </option>
+            ))}
+          </select>
+          {list && writable && (
+            <Link
+              className="button"
+              href={`/broadcasts?create=1&list_id=${encodeURIComponent(list)}`}
+            >
+              Create campaign for list
+            </Link>
+          )}
         </div>
         <div className="actions">
           <Button disabled={!writable} onClick={() => setImporting(true)}>
             <Upload size={15} />
-            Import CSV
+            Import contacts
           </Button>
           <Button className="primary" disabled={!writable} onClick={() => setEditing(true)}>
             <Plus size={15} />
@@ -196,114 +224,20 @@ function Contacts({ writable }: { writable: boolean }) {
           </Button>
         </form>
       </Modal>
-      <CsvImport
-        open={importing}
-        close={() => setImporting(false)}
-        complete={() => void query.refetch()}
-      />
-    </>
-  );
-}
-function CsvImport({
-  open,
-  close,
-  complete,
-}: {
-  open: boolean;
-  close: () => void;
-  complete: () => void;
-}) {
-  const [csv, setCsv] = useState(''),
-    [preview, setPreview] = useState<{ headers: string[]; sample: string[][]; rows: number }>(),
-    [error, setError] = useState<unknown>(),
-    [busy, setBusy] = useState(false),
-    [result, setResult] = useState('');
-  const properties = useApi<Definition[]>('contact-properties');
-  return (
-    <Modal
-      pending={busy}
-      open={open}
-      onOpenChange={(v) => !v && close()}
-      title="Import contacts"
-      description="Up to 5,000 contacts and 2 MiB per CSV. Imports preserve existing opt-outs."
-      wide
-    >
-      <Field label="CSV file">
-        <input
-          type="file"
-          accept=".csv,text/csv"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            if (file.size > 2 * 1024 * 1024) {
-              setError(new Error('CSV exceeds 2 MiB'));
-              return;
+      {importing && (
+        <ContactImport
+          close={() => setImporting(false)}
+          complete={(listId) => {
+            if (listId) {
+              setList(listId);
+              setPage(1);
             }
-            setResult('');
-            void file
-              .text()
-              .then(async (text) => {
-                setCsv(text);
-                setPreview(await api('contacts/import/preview', 'POST', { csv: text }));
-              })
-              .catch(setError);
+            void query.refetch();
+            void lists.refetch();
           }}
         />
-      </Field>
-      {preview && (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            setBusy(true);
-            setError(undefined);
-            const mapping = Object.fromEntries(
-              [...new FormData(e.currentTarget)].filter(([, value]) => value !== ''),
-            );
-            void api<{ imported: number; duplicates: number }>('contacts/import', 'POST', {
-              csv,
-              mapping,
-            })
-              .then((r) => {
-                setResult(`${r.imported} contacts imported; ${r.duplicates} duplicates merged.`);
-                complete();
-              }, setError)
-              .finally(() => setBusy(false));
-          }}
-        >
-          <p>{preview.rows} rows. Choose the field for each column.</p>
-          <div className="mapping-grid">
-            {preview.headers.map((header, index) => (
-              <Field
-                key={header}
-                label={header}
-                hint={`Sample: ${preview.sample[0]?.[index] ?? '—'}`}
-              >
-                <select
-                  name={header}
-                  defaultValue={header.toLowerCase() === 'email' ? 'email' : ''}
-                >
-                  <option value="">Skip column</option>
-                  {[
-                    'email',
-                    'first_name',
-                    'last_name',
-                    'unsubscribed',
-                    ...(properties.data ?? []).map((p) => `properties.${p.name}`),
-                  ].map((field) => (
-                    <option key={field}>{field}</option>
-                  ))}
-                </select>
-              </Field>
-            ))}
-          </div>
-          <Button disabled={busy} className="primary">
-            Import mapped contacts
-          </Button>
-        </form>
       )}
-      <ErrorBox error={error} />
-      {result && <p role="status">{result}</p>}
-    </Modal>
+    </>
   );
 }
 function ContactDetail({ id, writable }: { id: string; writable: boolean }) {
@@ -944,291 +878,5 @@ export function SafeEmailPreview({ html }: { html: string }) {
       referrerPolicy="no-referrer"
       srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">${html}`}
     />
-  );
-}
-type Broadcast = {
-  id: string;
-  name: string;
-  sender: string;
-  template_id: string;
-  template_version: number;
-  segment_id: string | null;
-  topic_id: string | null;
-  rate_per_second: number;
-  status: string;
-  scheduled_at: string;
-  error: string | null;
-  stats: {
-    recipients: { status: string; count: number }[];
-    messages: { status: string; count: number }[];
-    events: { type: string; count: number }[];
-  };
-};
-export function BroadcastsPage({ id, writable }: { id?: string; writable: boolean }) {
-  const query = useApi<Broadcast[]>('broadcasts', 5000),
-    templates = useApi<Template[]>('templates'),
-    segments = useApi<Definition[]>('audience-segments'),
-    topics = useApi<Definition[]>('audience-topics');
-  const [creating, setCreating] = useState(false),
-    [error, setError] = useState<unknown>(),
-    [busy, setBusy] = useState(false);
-  const router = useRouter();
-  if (id) return <BroadcastDetail id={id} writable={writable} />;
-  return (
-    <>
-      <PageHeader
-        title="Broadcasts"
-        description="Send a versioned email to an audience, with preferences checked at delivery."
-        actions={
-          <Button className="primary" disabled={!writable} onClick={() => setCreating(true)}>
-            <Plus size={15} />
-            Create broadcast
-          </Button>
-        }
-      />
-      <ErrorBox error={error} />
-      <DataTable
-        searchMode="local"
-        loading={query.isPending}
-        refreshing={query.isFetching && !query.isPending}
-        error={query.error}
-        onRetry={() => void query.refetch()}
-        onRefresh={() => void query.refetch()}
-        data={query.data ?? []}
-        columns={[
-          {
-            accessorKey: 'name',
-            header: 'Broadcast',
-            cell: ({ row }) => (
-              <Link className="strong" href={`/broadcasts/${row.original.id}`}>
-                {row.original.name}
-              </Link>
-            ),
-          },
-          {
-            accessorKey: 'status',
-            header: 'Status',
-            cell: ({ getValue }) => <Badge>{String(getValue())}</Badge>,
-          },
-          { accessorKey: 'sender', header: 'From' },
-          {
-            accessorKey: 'scheduled_at',
-            header: 'Scheduled',
-            cell: ({ getValue }) => date(getValue()),
-          },
-        ]}
-      />
-      <Modal
-        pending={busy}
-        open={creating}
-        onOpenChange={setCreating}
-        title="Create broadcast"
-        description="The current template version is pinned to this draft."
-      >
-        <ErrorBox error={templates.error || segments.error || topics.error} />
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            setBusy(true);
-            const form = Object.fromEntries(new FormData(e.currentTarget)),
-              template = templates.data?.find((t) => t.id === form.template_id);
-            void api<{ id: string }>('broadcasts', 'POST', {
-              ...form,
-              template_version: template?.current_version,
-              segment_id: form.segment_id || null,
-              topic_id: form.topic_id || null,
-              rate_per_second: Number(form.rate_per_second),
-            })
-              .then((r) => router.push(`/broadcasts/${r.id}`), setError)
-              .finally(() => setBusy(false));
-          }}
-        >
-          <Field label="Broadcast name">
-            <input name="name" required />
-          </Field>
-          <Field label="From address">
-            <input name="sender" type="email" required placeholder="news@yourdomain.com" />
-          </Field>
-          <Field label="Email template">
-            <select name="template_id" required>
-              <option value="">Select a template</option>
-              {templates.data?.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} · v{t.current_version}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Target segment">
-            <select name="segment_id">
-              <option value="">All contacts</option>
-              {segments.data?.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Audience topic">
-            <select name="topic_id">
-              <option value="">No topic</option>
-              {topics.data?.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Messages per second">
-            <input name="rate_per_second" type="number" min={1} max={50} defaultValue={10} />
-          </Field>
-          <ErrorBox error={error} />
-          <Button className="primary" disabled={busy}>
-            Save draft
-          </Button>
-        </form>
-      </Modal>
-    </>
-  );
-}
-function BroadcastDetail({ id, writable }: { id: string; writable: boolean }) {
-  const query = useApi<Broadcast>(`broadcasts/${id}`, 3000),
-    [error, setError] = useState<unknown>(),
-    [scheduled, setScheduled] = useState('');
-  const b = query.data;
-  return (
-    <>
-      <Link className="back-link" href="/broadcasts">
-        ← Broadcasts
-      </Link>
-      <PageHeader
-        title={b?.name ?? 'Broadcast'}
-        description={
-          b
-            ? `${b.sender} · template v${b.template_version} · up to ${b.rate_per_second} messages/second`
-            : 'Loading campaign…'
-        }
-      />
-      <ErrorBox error={error || query.error || b?.error} />
-      {b && (
-        <>
-          <div className="inline-tags">
-            <Badge>{b.status}</Badge>
-            <span className="muted small">
-              {b.scheduled_at ? date(b.scheduled_at) : 'Not scheduled'}
-            </span>
-            <Link href={`/templates/${b.template_id}?version=${b.template_version}`}>
-              View template
-            </Link>
-          </div>
-          {['draft', 'scheduled'].includes(b.status) && (
-            <section className="panel">
-              <h2>Schedule delivery</h2>
-              <Field
-                label="Send time"
-                hint="Leave empty to start now, or enter an ISO timestamp with timezone / in 2 hours."
-              >
-                <input
-                  value={scheduled}
-                  onChange={(e) => setScheduled(e.target.value)}
-                  placeholder="in 2 hours"
-                />
-              </Field>
-              <ConfirmButton
-                disabled={!writable}
-                title="Schedule this broadcast?"
-                description="The audience will be frozen now. Unsubscribed contacts and suppressed addresses will be skipped."
-                onConfirm={async () => {
-                  await api(
-                    `broadcasts/${id}/schedule`,
-                    'POST',
-                    scheduled ? { scheduled_at: scheduled } : {},
-                  );
-                  await query.refetch();
-                }}
-              >
-                <Send size={15} />
-                {b.status === 'scheduled' ? 'Reschedule' : 'Schedule broadcast'}
-              </ConfirmButton>
-            </section>
-          )}
-          <div className="detail-grid">
-            <section className="panel">
-              <h2>Audience progress</h2>
-              <DataTable
-                searchMode="none"
-                loading={query.isPending}
-                refreshing={query.isFetching && !query.isPending}
-                error={query.error}
-                onRetry={() => void query.refetch()}
-                onRefresh={() => void query.refetch()}
-                paginate={false}
-                data={b.stats.recipients}
-                columns={[
-                  { accessorKey: 'status', header: 'State' },
-                  { accessorKey: 'count', header: 'Contacts' },
-                ]}
-              />
-            </section>
-            <section className="panel">
-              <h2>Email outcomes</h2>
-              <DataTable
-                searchMode="none"
-                loading={query.isPending}
-                refreshing={query.isFetching && !query.isPending}
-                error={query.error}
-                onRetry={() => void query.refetch()}
-                onRefresh={() => void query.refetch()}
-                paginate={false}
-                data={b.stats.messages}
-                columns={[
-                  { accessorKey: 'status', header: 'State' },
-                  { accessorKey: 'count', header: 'Messages' },
-                ]}
-              />
-              <p className="small muted">
-                A sent broadcast has finished submitting its audience. Provider acceptance and
-                delivery appear here as messages progress.
-              </p>
-            </section>
-          </div>
-          <section className="panel">
-            <h2>Engagement events</h2>
-            <DataTable
-              searchMode="none"
-              loading={query.isPending}
-              refreshing={query.isFetching && !query.isPending}
-              error={query.error}
-              onRetry={() => void query.refetch()}
-              onRefresh={() => void query.refetch()}
-              paginate={false}
-              data={b.stats.events}
-              columns={[
-                { accessorKey: 'type', header: 'Event' },
-                { accessorKey: 'count', header: 'Unique messages' },
-              ]}
-            />
-          </section>
-          {!['sent', 'canceled'].includes(b.status) && (
-            <ConfirmButton
-              disabled={!writable}
-              title="Cancel broadcast?"
-              description="Pending audience work and emails that have not started delivery will be canceled. An active provider request may finish."
-              onConfirm={async () => {
-                try {
-                  await api(`broadcasts/${id}/cancel`, 'POST', {});
-                  await query.refetch();
-                } catch (e) {
-                  setError(e);
-                  throw e;
-                }
-              }}
-            >
-              Cancel broadcast
-            </ConfirmButton>
-          )}
-        </>
-      )}
-    </>
   );
 }

@@ -60,7 +60,8 @@ export function redact(value: unknown, budget = 32768): unknown {
 // need full suppression even when a response was captured as serialized JSON.
 const inboundContent = /^\/v1\/inbound(?:\/|$)/i;
 const outgoingContent =
-  /^\/v1\/(?:emails|events\/(?:postal|sns|novu|trigger)|workflows|activity|templates|template-preview|layouts|translations|content|publish|publications|automations|automation-events|automation-runs)(?:\/|$)/i;
+  /^\/v1\/(?:emails|events\/(?:postal|sns|novu|trigger)|workflows|activity|templates|template-preview|layouts|translations|content|publish|publications|automations|automation-events|automation-runs|broadcasts)(?:\/|$)/i;
+const contactImportContent = /^\/v1\/contacts\/import(?:\/|$)/i;
 const inboxCredential = /^\/v1\/subscribers\/[^/]+\/inbox-token\/?$/i;
 const logContent = /^\/v1\/logs(?:\/|$)/i;
 const dashboardContent = /^(?:\/v1\/(?:browser-transfers|dashboard\/inbox)|\/socket\.io)(?:\/|$)/i;
@@ -74,9 +75,11 @@ export function redactRequestLogBodies(path: string, requestBody: unknown, respo
         ? '[INBOX CREDENTIAL REDACTED]'
         : inboundContent.test(path)
           ? '[INBOUND CONTENT REDACTED]'
-          : outgoingContent.test(path)
-            ? '[EMAIL CONTENT REDACTED]'
-            : undefined;
+          : contactImportContent.test(path)
+            ? '[CONTACT IMPORT CONTENT REDACTED]'
+            : outgoingContent.test(path)
+              ? '[EMAIL CONTENT REDACTED]'
+              : undefined;
   return {
     request_body: marker ? { body: marker, query: marker } : redact(requestBody),
     response_body: marker ?? redact(responseBody),

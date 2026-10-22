@@ -48,6 +48,32 @@ test('deep links reveal the current navigation item and collapsed labels work fr
   const toggle = page.getByRole('button', { name: 'Toggle sidebar', exact: true });
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  // Collapse repositions the navigation scroll area. Let that layout and its
+  // queued scroll event settle before checking Radix's keyboard-focus tooltip.
+  await navigation.evaluate(
+    (element) =>
+      new Promise<void>((resolve) => {
+        let previous = '',
+          stableFrames = 0;
+        const frame = () => {
+          const active = element.querySelector('[aria-current="page"]')!.getBoundingClientRect();
+          const current = [
+            element.scrollTop,
+            element.clientWidth,
+            element.clientHeight,
+            active.x,
+            active.y,
+            active.width,
+            active.height,
+          ].join(',');
+          stableFrames = current === previous ? stableFrames + 1 : 0;
+          previous = current;
+          if (stableFrames >= 2) resolve();
+          else requestAnimationFrame(frame);
+        };
+        requestAnimationFrame(frame);
+      }),
+  );
   await page.keyboard.press('Shift+Tab');
   await expect(current).toBeFocused();
   await expect(page.getByRole('tooltip', { name: 'Settings', exact: true })).toBeVisible();

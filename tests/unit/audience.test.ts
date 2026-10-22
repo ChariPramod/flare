@@ -295,6 +295,7 @@ it('isolates audience data and rejects cross-tenant preferences and campaign lin
 });
 
 it('enforces API-key sender scope before scheduling a broadcast', async () => {
+  await contact('scope@example.net');
   const id = await broadcast();
   await expect(
     scheduleBroadcast(sql, { ...principal, domainId: randomUUID() }, id),
