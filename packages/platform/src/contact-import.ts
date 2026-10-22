@@ -243,7 +243,9 @@ async function checkWorkbookArchive(buffer: Buffer) {
       if (/<(?:[A-Za-z_][\w.-]*:)?definedName(?:\s|\/?>)/.test(xml))
         invalid('Excel named ranges are not supported; copy contact values to a plain sheet');
       nodes += (xml.match(/<[A-Za-z_][\w:.-]*(?:\s|\/?>)/g) ?? []).length;
-      if (nodes > 300000) invalid('Excel workbook XML contains too many elements');
+      // A plain unique shared-string cell uses c/v plus si/t: the 100,000
+      // supported cells need about 400,000 nodes before rows and metadata.
+      if (nodes > 500000) invalid('Excel workbook XML contains too many elements');
       if (name.toLowerCase() === 'xl/workbook.xml') {
         if ((xml.match(/<(?:[A-Za-z_][\w.-]*:)?sheet(?:\s|\/?>)/g) ?? []).length > 20)
           invalid('Excel workbook supports at most 20 sheets');

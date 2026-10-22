@@ -176,6 +176,18 @@ describe('contact file parsing', () => {
       'Selected Excel sheet',
     );
   });
+  it('accepts 100,000 plain Excel cells with distinct shared strings', async () => {
+    const rows = [
+      Array.from({ length: 100 }, (_, column) => `field${column}`),
+      ...Array.from({ length: 999 }, (_, row) =>
+        Array.from({ length: 100 }, (_, column) => `value-${row}-${column}`),
+      ),
+    ];
+    const parsed = await parseContactFile({ format: 'xlsx', data: await xlsx({ Contacts: rows }) });
+    expect(parsed.headers).toHaveLength(100);
+    expect(parsed.rows).toHaveLength(999);
+    expect(parsed.rows[998]![99]).toBe('value-998-99');
+  });
   it('rejects formulas, merged cells and invalid base64', async () => {
     const formula = await xlsx({
       Contacts: [['email'], [{ formula: '"a@example.com"', result: 'a@example.com' }]],
