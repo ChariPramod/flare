@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Wait for dependency readiness before signed-forwarding acceptance probes, retaining strict single-use proof assertions and adding credential-safe failure classification.
+
 - Add CSV, TSV, JSON and Excel contact imports with bounded parsing, field mapping, validation, atomic writes and named lists. Preserve opt-outs and deleted-contact restrictions. Add campaign composition, pinned templates, list/segment targeting, recipient eligibility previews, draft editing, send-now/scheduling controls and idempotent draft creation. Keep campaign/import content out of logs and retain the shared sending-policy pipeline. Exercise maximum-size import boundaries and accept valid 100,000-cell workbooks without weakening raw/expanded/cell limits. Verification is tracked in `PROGRESS.md`.
 
 - Complete the editorial UI review with Linux x64 visual references for both themes, responsive and interaction regressions, themed canvas controls and clearer insertion labels. Preserve accepted editor saves when a later refresh fails after an intervening server read. Keep native Inbox read-persistence checks usable with longer notification feeds, and retain bounded, credential-free failure diagnostics in CI. Update the navigation and testing guides.

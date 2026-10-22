@@ -39,9 +39,20 @@ async function request(input, expected) {
     redirect: 'error',
     signal: globalThis.AbortSignal.timeout(Math.min(10_000, remaining)),
   });
-  // Assertions print only the route/status, never the request headers or body.
+  // Only this fixed response classification is diagnostic; never print proofs,
+  // request/response bodies, credentials, or arbitrary upstream header values.
+  const proxyError = response.headers.get('x-flare-proxy-error');
+  const classification = ['invalid-proof', 'unavailable'].includes(proxyError)
+    ? proxyError
+    : proxyError === null
+      ? 'none'
+      : 'unrecognized';
   await response.body?.cancel();
-  assert.equal(response.status, expected, `Signed forwarding ${input.target.split('?')[0]} status`);
+  assert.equal(
+    response.status,
+    expected,
+    `Signed forwarding ${input.target.split('?')[0]} status (proxy: ${classification})`,
+  );
   return response;
 }
 
@@ -69,13 +80,17 @@ try {
   child.once('error', () => {
     spawnFailed = true;
   });
+  // /health only proves the child is listening. Its Redis client intentionally
+  // fails closed before connecting; wait for /ready to verify dependencies
+  // before generating any single-use proof. Signed requests are never retried.
   await until(
     async () => {
       assert.equal(spawnFailed, false, 'Isolated signed forwarding API starts');
       assert.equal(child.exitCode, null, 'Isolated signed forwarding API remains running');
       assert.equal(child.signalCode, null, 'Isolated signed forwarding API remains running');
       try {
-        const response = await fetch(`${base}/health`, {
+        const response = await fetch(`${base}/ready`, {
+          redirect: 'error',
           signal: globalThis.AbortSignal.timeout(2000),
         });
         await response.body?.cancel();
@@ -84,7 +99,7 @@ try {
         return false;
       }
     },
-    'isolated signed forwarding API startup',
+    'isolated signed forwarding API dependency readiness',
     60_000,
   );
 
