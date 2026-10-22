@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a campaign pre-send checklist and controlled tests to up to three explicit recipients. Share sender admission with delivery, preserve marketing policy/quota/suppression, keep tests outside campaign results, and reject stale content or sandbox-mode changes. Retain 24-hour exact retry identity, safe sample personalization and inactive preference links; expose generated API/SDK contracts and redacted diagnostics.
+
 - Add original campaign starters, caret-aware personalization, real-contact previews with dispatch-matched defaults and missing-field warnings, responsive/text preview modes, and safe duplication into a new unscheduled draft. Save the source-backed email-product roadmap. Update Next.js to the 16.4.1 security patch discovered during verification.
 
 - Wait for dependency readiness before signed-forwarding acceptance probes, retaining strict single-use proof assertions and adding credential-safe failure classification. Scope the failed-login browser assertion to its actual error so Next.js's accessibility route announcer cannot make it ambiguous.

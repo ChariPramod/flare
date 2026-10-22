@@ -45,7 +45,7 @@ Code inspected: `campaign-pages.tsx`, `campaigns.ts`, `broadcasts.ts`, the audie
 
 ### Checkpoint A — campaign workbench
 
-Implemented in this checkpoint. See [the current verification record](../../PROGRESS.md) for local checks and the separate CI/deployment status. Checkpoints B–E below remain planned.
+Implemented in this checkpoint. See [the current verification record](../../PROGRESS.md) for local checks and the separate CI/deployment status. Checkpoint B is now in implementation and verification; C–E remain planned.
 
 1. Three original starter emails: product update, event invitation and personal announcement. Applying one requires confirmation before replacing content; audience/sender remain intact. No competitor copy or branding.
 2. A merge-field picker for recipient name/email and configured contact properties. Insert into the focused subject, HTML or text field without discarding existing content.
@@ -57,6 +57,16 @@ Implemented in this checkpoint. See [the current verification record](../../PROG
 Acceptance: empty and false/zero personalization values; escaped hostile values; cross-tenant/deleted contact denial; fallback parity; no preview writes/sends or live unsubscribe capabilities; late preview responses cannot replace newer content; starter confirmation; correct caret insertion; duplicate remains a draft and retries create one copy; keyboard/mobile views and retained edits. Run full checkpoint checks and browser tests, update docs/progress, push a distinct reviewable checkpoint and refresh the local demo without deleting data.
 
 ### Checkpoint B — preflight and controlled test sends
+
+Implementation branch: `codex/campaign-preflight`, based on the corrected workbench checkpoint `e06d043`. The primary agent implements and reviews this directly. Preserve unrelated documentation and demo volumes.
+
+Execution decisions:
+
+1. Add read-only `GET /v1/broadcasts/:id/preflight`, using the same sender-admission helper as email acceptance. Report pass/note/blocker, current quota, sample-content warnings and audience exclusions. A check is not a reservation or delivery guarantee.
+2. Add `POST /v1/broadcasts/:id/test` for 1–3 explicit, distinct addresses. Require the saved-content revision, expected sandbox mode and a 24-hour idempotency key. Keep the entire admission batch atomic; cached acceptance survives later edits/suspension without creating new mail.
+3. Render sample names and property fallbacks, use inactive preference links, prefix the subject with `[TEST]`, and tag messages. Preserve known-contact opt-outs at admission and dispatch. No audience fan-out, contact creation or campaign-progress mutation.
+4. Add a checklist and explicit test-review dialog to campaign detail. Keep uncertain requests and their exact retry identity in the existing scoped memory registry. Show Mailpit versus real transport clearly, and require deliberate reset for a separate test. Include placeholder-only API examples.
+5. Verify database and independent-connection concurrency, browser recovery/mobile flows, log redaction, real API → worker → Mailpit in disposable acceptance, package contracts and full checkpoint checks. Refresh the persistent local demo without destructive acceptance scripts. Push as a separate stacked PR, then check its own CI.
 
 - Consolidate sender ownership, transport readiness, organization approval, marketing route, quota, content and audience exclusions into a readable checklist with links to fixes. Distinguish blockers from warnings; recheck on the server at dispatch.
 - Send a deliberately requested test to a small explicit recipient set through the shared pipeline. Keep it outside the campaign audience snapshot, tag it as a test, preserve idempotency/quotas/suppressions, and prevent test preference links from modifying another contact. Preview never sends automatically.

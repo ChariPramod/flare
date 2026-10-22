@@ -2,7 +2,20 @@
 
 Updated: 2026-10-22, America/Los_Angeles.
 
-## Current checkpoint — research-driven campaign workbench
+## Current checkpoint — pre-send checklist and controlled tests
+
+- Branch **`codex/campaign-preflight`**, based on `e06d043`; implemented directly without agents. Preserve unrelated documentation and demo data.
+- Add a read-only campaign checklist sharing authoritative sender admission, plus explicit 1–3-recipient tests through the shared durable pipeline. Tests retain normal marketing approval, route, quotas, suppression and known-contact preferences; they do not mutate campaign progress or fan out to the audience.
+- Require pinned-content revision, expected sandbox mode and 24-hour idempotency. Tests use sample personalization, inactive preference links, `[TEST]` subjects and tags. The UI retains uncertain request identity across dialog reopening, distinguishes Mailpit from real delivery and exposes placeholder-only API examples.
+- **Local verification:** complete checkpoint passes with **959 unit/database tests and 25 evals**, docs, lint, typecheck, generated OpenAPI, builds and gitleaks. Installable SDK/CLI/MCP smoke checks pass, including typed preflight/test requests. All **88 Docker integration tests** pass, including independent-connection duplicate admission, shared quota and post-acceptance opt-out. All **132 local Chrome browser scenarios** pass, with two Linux-only visual comparisons reserved for CI. A final four-scenario browser run also verifies the corrected Audience action link. A staged documentation snapshot passes independently of unrelated local files.
+- **Demo:** rebuilt API, worker and web with existing data retained. Real browser → API → worker → SMTP/Mailpit test passes, including inactive preference links and unchanged draft/campaign statistics. The walkthrough is saved as “Pre-send checklist walkthrough” in Broadcasts. Reviewed desktop/mobile screenshots, corrected the Audience fix-link destination and passed final live navigation checks after refreshing the demo. No real provider or external mailbox is used.
+- **Local resources:** after the completed build, reduced Docker Desktop from a 12 GiB allocation to 6 GiB on this 16 GiB Mac; restored the previously running services without deleting volumes. The disposable Mailpit inbox was memory-only and cleared on restart; the local demo now has a separate persistent Mailpit volume and a fresh sandbox receipt. The database-backed campaign and message history remained intact. Avoid concurrent full-stack builds on this host.
+- **Delivery:** this distinct stacked checkpoint targets `codex/campaign-studio`; its own CI remains a separate gate.
+- Baseline correction: `e06d043` fixes the preview acceptance assertion from 422 to the actual schema-validation 400 and asserts the precise error. Parent [CI run `39849274441`](https://github.com/ChariPramod/flare/actions/runs/39849274441) passed all five jobs at `e06d043`, including Linux browser and full-stack acceptance; the preceding failed run remains failed.
+
+<a id="current-checkpoint--research-driven-campaign-workbench"></a>
+
+## Previous checkpoint — research-driven campaign workbench
 
 - Branch: **`codex/campaign-studio`**, from `45cb4a9`. Work is performed directly without sub-agents. Preserve unrelated local documentation and demo data.
 - Research and staged roadmap: [email product research](docs/planning/email-product-research.md), comparing MailSuite, Resend, MailerLite and Postmark official capabilities with mixed public review evidence. Retention explanations are hypotheses, not measured results.

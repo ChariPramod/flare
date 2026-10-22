@@ -19,20 +19,27 @@ it.each(['/v1/contacts/import', '/V1/CONTACTS/IMPORT/PREVIEW'])(
   },
 );
 
-it.each(['/v1/broadcasts', '/V1/BROADCASTS/fixture/audience-preview'])(
-  'omits campaign composition and recipient samples from %s logs',
-  (path) => {
-    expect(
-      JSON.stringify(
-        redactRequestLogBodies(
-          path,
-          { body: { content: { html: 'Private campaign content' } } },
-          { sample: [{ email: 'person@example.test' }] },
-        ),
+it.each([
+  '/v1/broadcasts',
+  '/V1/BROADCASTS/fixture/audience-preview',
+  '/v1/broadcasts/fixture/preflight',
+  '/v1/broadcasts/fixture/test',
+])('omits campaign composition and recipient samples from %s logs', (path) => {
+  expect(
+    JSON.stringify(
+      redactRequestLogBodies(
+        path,
+        {
+          body: {
+            content: { html: 'Private campaign content' },
+            recipients: ['person@example.test'],
+          },
+        },
+        { sample: [{ email: 'person@example.test' }] },
       ),
-    ).not.toMatch(/Private campaign content|person@example/);
-  },
-);
+    ),
+  ).not.toMatch(/Private campaign content|person@example/);
+});
 
 describe('browser transfer credential text redaction', () => {
   const jwt = [{ alg: 'HS256' }, { sub: 'fixture' }, 'synthetic signature']

@@ -31,3 +31,7 @@ Browse the [documentation index](README.md).
 ## Broadcast recovery boundary
 
 [Open this section](product/audience.md#broadcast-recovery-boundary).
+
+## Pre-send checklist and controlled tests
+
+[Open this section](product/audience.md#pre-send-checklist-and-controlled-tests).

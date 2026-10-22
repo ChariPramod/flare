@@ -1392,6 +1392,34 @@ const server = createServer(async (req, res) => {
           !row.list_id || contactLists.get(String(row.list_id))?.members.has(String(contact.id)),
       );
       const eligible = matching.filter((contact) => !contact.deleted_at && !contact.unsubscribed);
+      if (action === 'preflight')
+        return reply({
+          revision: 'a'.repeat(64),
+          sandbox: true,
+          checked_at: new Date().toISOString(),
+          ready: eligible.length > 0,
+          can_test: true,
+          checks: [
+            {
+              id: 'sender',
+              status: 'pass',
+              message: 'Sender ownership and sandbox transport requirements pass.',
+              href: '/domains',
+            },
+            {
+              id: 'approval',
+              status: 'warning',
+              message: 'Mailpit sandbox: messages stay local.',
+              href: '/emails',
+            },
+            {
+              id: 'audience',
+              status: eligible.length ? 'pass' : 'blocked',
+              message: `${eligible.length} eligible contacts`,
+              href: '/audience',
+            },
+          ],
+        });
       if (action === 'audience-preview')
         return reply({
           total: matching.length,

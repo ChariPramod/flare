@@ -1674,6 +1674,103 @@
     }
   },
   {
+    "id": "AudienceController_preflight",
+    "method": "GET",
+    "path": "/v1/broadcasts/{id}/preflight",
+    "access": "read",
+    "public": false,
+    "sessionOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "AudienceController_testEmail",
+    "method": "POST",
+    "path": "/v1/broadcasts/{id}/test",
+    "access": "write",
+    "public": false,
+    "sessionOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "body": {
+          "type": "object",
+          "properties": {
+            "sandbox": {
+              "type": "boolean"
+            },
+            "revision": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "recipients": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "email",
+                "maxLength": 254
+              },
+              "minItems": 1,
+              "maxItems": 3
+            }
+          },
+          "required": [
+            "sandbox",
+            "revision",
+            "recipients"
+          ],
+          "additionalProperties": false
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "path",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "id": "AudienceController_schedule",
     "method": "POST",
     "path": "/v1/broadcasts/{id}/schedule",

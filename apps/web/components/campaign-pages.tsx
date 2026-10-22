@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Plus, Send, Pencil, Eye, Users, Copy } from 'lucide-react';
 import { api, useApi, date, type Session } from '../lib/api';
+import { CampaignPreflight } from './campaign-preflight';
 import { DraftNotice, useEditorDraft, useDrafts } from './drafts';
 import {
   PageHeader,
@@ -845,6 +846,11 @@ function BroadcastDetail({ id, writable }: { id: string; writable: boolean }) {
             </Link>
             {b.list_id && <span className="small muted">Audience: contact list</span>}
           </div>
+          <CampaignPreflight
+            key={`${id}:${b.template_version}:${b.sender}:${b.topic_id}:${b.list_id}:${b.segment_id}`}
+            id={id}
+            writable={writable}
+          />
           <section className="panel" aria-label="Campaign audience">
             <div className="panel-heading">
               <h2>

@@ -2,13 +2,17 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 import { connectDatabase } from '@flare/db';
-import { generateDomain } from '@flare/mail';
+import { generateDomain, deliverEmail } from '@flare/mail';
+import type { PipelineOptions, TransportAdapter } from '@flare/mail';
+import { configureMarketingFixture } from '../../../tests/unit/helpers/sending-policy.js';
 import {
   campaignDraftSchema,
   createCampaign,
   previewCampaignAudience,
   scheduleBroadcast,
   updateCampaign,
+  campaignPreflight,
+  sendCampaignTest,
 } from '@flare/platform';
 import type { Principal } from '@flare/shared';
 import { integrationTargets } from './targets.mjs';
@@ -31,6 +35,31 @@ const principal: Principal = {
   production: false,
 };
 const foreign = { ...principal, orgId: otherOrg, environmentId: otherEnv };
+const encryptionKey = randomBytes(32).toString('base64');
+const objects = new Map<string, Buffer>();
+const testTransport: TransportAdapter = {
+  name: 'test',
+  sandbox: true,
+  supportsRequiredTls: async () => true,
+  send: async () => {
+    throw new Error('An opted-out test must not dispatch');
+  },
+};
+const testOptions: PipelineOptions = {
+  sql: first,
+  encryptionKey,
+  trackingKey: encryptionKey,
+  transports: [testTransport],
+  store: {
+    put: async (k, b) => {
+      objects.set(k, b);
+    },
+    get: async (k) => objects.get(k)!,
+    remove: async (k) => {
+      objects.delete(k);
+    },
+  },
+};
 const content = {
   subject: 'Campaign update',
   html: '<p>Latest news.</p><a href="{{{FLARE_UNSUBSCRIBE_URL}}}">Unsubscribe</a>',
@@ -102,11 +131,15 @@ beforeAll(async () => {
     await first.unsafe(readFileSync(`packages/db/migrations/${file}`, 'utf8'));
   await first`insert into organizations(id,name,slug) values(${org},'Campaign concurrency','campaign-concurrency'),(${otherOrg},'Other campaign tenant','other-campaign-tenant')`;
   await first`insert into environments(id,org_id,name) values(${env},${org},'Development'),(${otherEnv},${otherOrg},'Development')`;
-  const keys = generateDomain('example.com', `${org}/${env}`, randomBytes(32).toString('base64'));
+  const keys = generateDomain('example.com', `${org}/${env}`, encryptionKey);
   await first`insert into domains(org_id,environment_id,name,status,dkim_selector,dkim_public,dkim_private_cipher) values(${org},${env},'example.com','verified',${keys.selector},${keys.publicKey},${keys.cipher})`;
 });
 beforeEach(async () => {
-  await first`truncate contacts,contact_lists,email_templates,broadcasts,suppressions,event_outbox,audit_logs cascade`;
+  await first`truncate contacts,contact_lists,email_templates,broadcasts,suppressions,event_outbox,audit_logs,messages,idempotency,mail_routes cascade`;
+  await first`delete from sending_policies`;
+  await first`insert into sending_policies(org_id) select id from organizations`;
+  testOptions.transports = [testTransport];
+  objects.clear();
 });
 afterAll(async () => {
   await Promise.all([first, second, blocker, observer].map((sql) => sql.end({ timeout: 5 })));
@@ -258,4 +291,85 @@ it('rolls back scheduling an empty or fully suppressed list', async () => {
   expect(await observer`select * from event_outbox where type='broadcast.scheduled'`).toHaveLength(
     0,
   );
+});
+
+async function simultaneousTests(sameKey: boolean) {
+  const campaign = await createCampaign(first, principal, draft());
+  const id = String(campaign.id);
+  const preflight = await campaignPreflight(testOptions, principal, id);
+  const input = {
+    revision: preflight.revision,
+    sandbox: preflight.sandbox,
+    recipients: ['reviewer@example.net'],
+  };
+  const [one] = await first`select pg_backend_pid() as pid`;
+  const [two] = await second`select pg_backend_pid() as pid`;
+  const locked = gate(),
+    release = gate();
+  const lock = blocker.begin(async (tx) => {
+    await tx`select pg_advisory_xact_lock(hashtextextended(${`${org}/sending-policy`},0))`;
+    locked.release();
+    await release.promise;
+  });
+  await Promise.race([locked.promise, lock]);
+  const oneSend = outcome(sendCampaignTest(testOptions, principal, id, input, 'test-one'));
+  const twoSend = outcome(
+    sendCampaignTest(
+      { ...testOptions, sql: second },
+      principal,
+      id,
+      input,
+      sameKey ? 'test-one' : 'test-two',
+    ),
+  );
+  try {
+    await waiting(Number(one!.pid));
+    await waiting(Number(two!.pid));
+  } finally {
+    release.release();
+    await lock;
+    await Promise.all([oneSend, twoSend]);
+  }
+  return Promise.all([oneSend, twoSend]);
+}
+it('deduplicates actual concurrent campaign-test admissions across independent connections', async () => {
+  const results = await simultaneousTests(true);
+  expect(results.map((r) => r.error)).toEqual([undefined, undefined]);
+  expect(results[0]!.value).toEqual(results[1]!.value);
+  expect(await observer`select * from messages`).toHaveLength(1);
+  expect(await observer`select * from broadcast_recipients`).toHaveLength(0);
+  expect(
+    await observer`select * from audit_logs where action='broadcast.test_accepted'`,
+  ).toHaveLength(1);
+});
+it('serializes separate test intents against the shared real-mail quota', async () => {
+  await configureMarketingFixture(testOptions, principal);
+  const results = await simultaneousTests(false);
+  expect(results.filter((r) => r.value)).toHaveLength(1);
+  expect(results.find((r) => r.error)?.error).toMatchObject({
+    status: 429,
+    code: 'recipient_quota_exhausted',
+  });
+  expect(await observer`select * from messages`).toHaveLength(1);
+  expect(await observer`select * from sending_quota where state='reserved'`).toHaveLength(1);
+});
+it('rechecks a known test recipient opt-out at dispatch without attaching it to campaign execution', async () => {
+  const [contact] =
+    await first`insert into contacts(org_id,environment_id,email) values(${org},${env},'reviewer@example.net') returning id`;
+  const campaign = await createCampaign(first, principal, draft());
+  const id = String(campaign.id);
+  const preflight = await campaignPreflight(testOptions, principal, id);
+  const result = await sendCampaignTest(
+    testOptions,
+    principal,
+    id,
+    { revision: preflight.revision, sandbox: true, recipients: ['reviewer@example.net'] },
+    'later-optout',
+  );
+  await second`update contacts set unsubscribed=true where id=${contact!.id}`;
+  await deliverEmail(testOptions, result.data[0]!.id);
+  expect(
+    (await observer`select status,broadcast_id from messages where id=${result.data[0]!.id}`)[0],
+  ).toMatchObject({ status: 'suppressed', broadcast_id: null });
+  expect(await observer`select * from transport_attempts`).toHaveLength(0);
 });

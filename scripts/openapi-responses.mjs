@@ -399,6 +399,43 @@ const mappings = {
       unsubscribed: bool,
     }),
   ),
+  AudienceController_preflight: obj({
+    revision: str,
+    sandbox: bool,
+    checked_at: str,
+    ready: bool,
+    can_test: bool,
+    checks: arr(
+      obj(
+        {
+          id: str,
+          status: { type: 'string', enum: ['pass', 'warning', 'blocked'] },
+          message: str,
+          href: str,
+          code: str,
+        },
+        ['id', 'status', 'message', 'href'],
+      ),
+    ),
+    quota: obj({ remaining: int, daily_limit: int, per_minute_limit: int }),
+    audience: {
+      ...obj({
+        total: int,
+        eligible: int,
+        excluded: obj({ unsubscribed: int, suppressed: int, topic_opt_out: int, deleted: int }),
+        sample: arr(obj({ id: str, email: str, first_name: str, last_name: str })),
+        snapshot: bool,
+      }),
+      nullable: true,
+    },
+  }),
+  AudienceController_testEmail: obj({
+    data: arr(obj({ id: str, status: str })),
+    sandbox: bool,
+    template_version: int,
+    revision: str,
+    replay_until: str,
+  }),
   AudienceController_draftPreview: obj({
     subject: str,
     html: str,

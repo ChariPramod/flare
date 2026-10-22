@@ -23,7 +23,7 @@ import { campaignAudienceMatch, campaignAudienceSummary } from './campaigns.js';
 import { campaignRecipientValues } from './campaign-content.js';
 import { sendingPause } from './sending-pause.js';
 export const unsubscribeVariable = '{{{FLARE_UNSUBSCRIBE_URL}}}';
-function checkOrigins(transports?: TransportAdapter[]) {
+export function checkBroadcastOrigins(transports?: TransportAdapter[]) {
   if (process.env.NODE_ENV !== 'production') return;
   const origins = [process.env.PUBLIC_API_URL, process.env.WEB_ORIGIN];
   if (origins.every((value) => value?.startsWith('https://'))) return;
@@ -56,7 +56,7 @@ function checkOrigins(transports?: TransportAdapter[]) {
   throw new MailError(503, 'Production broadcasts require HTTPS PUBLIC_API_URL and WEB_ORIGIN');
 }
 export async function scheduleBroadcast(sql: Sql, p: Principal, id: string, at?: string) {
-  checkOrigins();
+  checkBroadcastOrigins();
   return withTenant(sql, p, async (tx) => {
     const [row] = await tx`select * from broadcasts where id=${id} for update`;
     if (!row) throw new MailError(404, 'Broadcast not found');
@@ -125,7 +125,7 @@ export async function dispatchBroadcast(
       // The batch may roll back, but these original policy and broadcast locks
       // must survive until its failure and retry deadline are committed.
       const value = await tx.savepoint(async (tx) => {
-        checkOrigins(options.transports);
+        checkBroadcastOrigins(options.transports);
         const [version] =
           await tx`select * from template_versions where template_id=${broadcast.template_id} and version=${broadcast.template_version}`;
         if (!version) throw new MailError(422, 'Pinned template missing');
