@@ -67,6 +67,15 @@
             }
           },
           {
+            "in": "query",
+            "name": "list_id",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
             "in": "header",
             "name": "x-environment-id",
             "schema": {
@@ -691,25 +700,85 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "csv": {
-                    "type": "string",
-                    "maxLength": 2097152
-                  },
-                  "mapping": {
+                "anyOf": [
+                  {
                     "type": "object",
-                    "additionalProperties": {
-                      "type": "string",
-                      "maxLength": 100
-                    }
+                    "properties": {
+                      "csv": {
+                        "type": "string",
+                        "maxLength": 2097152
+                      },
+                      "mapping": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string",
+                          "maxLength": 100
+                        }
+                      }
+                    },
+                    "required": [
+                      "csv",
+                      "mapping"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "source": {
+                        "type": "object",
+                        "properties": {
+                          "format": {
+                            "type": "string",
+                            "enum": [
+                              "csv",
+                              "tsv",
+                              "json",
+                              "xlsx"
+                            ]
+                          },
+                          "data": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2796204
+                          },
+                          "sheet": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120
+                          }
+                        },
+                        "required": [
+                          "format",
+                          "data"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "mapping": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        }
+                      },
+                      "list_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "list_name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120
+                      }
+                    },
+                    "required": [
+                      "source",
+                      "mapping"
+                    ],
+                    "additionalProperties": false
                   }
-                },
-                "required": [
-                  "csv",
-                  "mapping"
-                ],
-                "additionalProperties": false
+                ]
               }
             }
           }
@@ -721,6 +790,36 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "properties": {
+                    "imported": {
+                      "type": "integer"
+                    },
+                    "duplicates": {
+                      "type": "integer"
+                    },
+                    "created": {
+                      "type": "integer"
+                    },
+                    "updated": {
+                      "type": "integer"
+                    },
+                    "skipped_deleted": {
+                      "type": "integer"
+                    },
+                    "list_id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "nullable": true
+                    },
+                    "list_name": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "imported",
+                    "duplicates"
+                  ],
                   "additionalProperties": true
                 }
               }
@@ -964,17 +1063,67 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "csv": {
-                    "type": "string",
-                    "maxLength": 2097152
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "csv": {
+                        "type": "string",
+                        "maxLength": 2097152
+                      }
+                    },
+                    "required": [
+                      "csv"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "source": {
+                        "type": "object",
+                        "properties": {
+                          "format": {
+                            "type": "string",
+                            "enum": [
+                              "csv",
+                              "tsv",
+                              "json",
+                              "xlsx"
+                            ]
+                          },
+                          "data": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2796204
+                          },
+                          "sheet": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 120
+                          }
+                        },
+                        "required": [
+                          "format",
+                          "data"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "mapping": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        }
+                      }
+                    },
+                    "required": [
+                      "source"
+                    ],
+                    "additionalProperties": false
                   }
-                },
-                "required": [
-                  "csv"
-                ],
-                "additionalProperties": false
+                ]
               }
             }
           }
@@ -986,6 +1135,88 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "properties": {
+                    "headers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "sample": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "rows": {
+                      "type": "integer"
+                    },
+                    "sheets": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "sheet": {
+                      "type": "string"
+                    },
+                    "validation": {
+                      "type": "object",
+                      "properties": {
+                        "valid": {
+                          "type": "integer"
+                        },
+                        "duplicates": {
+                          "type": "integer"
+                        },
+                        "errors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "row": {
+                                "type": "integer"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "row",
+                              "message"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "error_count": {
+                          "type": "integer"
+                        },
+                        "existing": {
+                          "type": "integer"
+                        },
+                        "skipped_deleted": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "valid",
+                        "duplicates",
+                        "errors",
+                        "error_count",
+                        "existing",
+                        "skipped_deleted"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "headers",
+                    "sample",
+                    "rows"
+                  ],
                   "additionalProperties": true
                 }
               }
@@ -1186,6 +1417,284 @@
           }
         },
         "x-flare-access": "write"
+      }
+    },
+    "/v1/contact-lists": {
+      "get": {
+        "operationId": "AudienceController_contactLists",
+        "tags": [
+          "Audience"
+        ],
+        "summary": "contactLists (read)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "Session": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-environment-id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Required for user sessions. API keys are bound to one environment; supplying this header verifies that selection."
+          },
+          {
+            "in": "header",
+            "name": "x-org-id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Required for user sessions; optional tenant assertion for API keys."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "org_id": {
+                        "type": "string"
+                      },
+                      "environment_id": {
+                        "type": "string"
+                      },
+                      "created_at": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "updated_at": {
+                        "type": "string"
+                      },
+                      "contact_count": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "created_at",
+                      "name",
+                      "updated_at",
+                      "contact_count"
+                    ],
+                    "additionalProperties": true
+                  }
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "read"
       }
     },
     "/v1/template-preview": {
@@ -6767,6 +7276,17 @@
               "format": "uuid"
             },
             "description": "Required for user sessions; optional tenant assertion for API keys."
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[\\x21-\\x7e]+$"
+            },
+            "description": "Optional campaign creation key, retained with the campaign in this environment. Identical retries return the existing draft; different content returns 409."
           }
         ],
         "requestBody": {
@@ -6795,6 +7315,58 @@
                     "exclusiveMinimum": true,
                     "minimum": 0
                   },
+                  "content": {
+                    "type": "object",
+                    "properties": {
+                      "subject": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 998
+                      },
+                      "html": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500000
+                      },
+                      "text": {
+                        "type": "string",
+                        "maxLength": 500000
+                      },
+                      "variables": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 4000
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "enum": [
+                                "null"
+                              ],
+                              "nullable": true
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "subject",
+                      "html"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "list_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
                   "segment_id": {
                     "type": "string",
                     "format": "uuid",
@@ -6813,9 +7385,7 @@
                 },
                 "required": [
                   "name",
-                  "sender",
-                  "template_id",
-                  "template_version"
+                  "sender"
                 ],
                 "additionalProperties": false
               }
@@ -7354,6 +7924,58 @@
                     "exclusiveMinimum": true,
                     "minimum": 0
                   },
+                  "content": {
+                    "type": "object",
+                    "properties": {
+                      "subject": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 998
+                      },
+                      "html": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500000
+                      },
+                      "text": {
+                        "type": "string",
+                        "maxLength": 500000
+                      },
+                      "variables": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 4000
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "enum": [
+                                "null"
+                              ],
+                              "nullable": true
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "subject",
+                      "html"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "list_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true
+                  },
                   "segment_id": {
                     "type": "string",
                     "format": "uuid",
@@ -7372,9 +7994,7 @@
                 },
                 "required": [
                   "name",
-                  "sender",
-                  "template_id",
-                  "template_version"
+                  "sender"
                 ],
                 "additionalProperties": false
               }
@@ -7588,6 +8208,329 @@
           }
         },
         "x-flare-access": "write"
+      }
+    },
+    "/v1/broadcasts/{id}/audience-preview": {
+      "get": {
+        "operationId": "AudienceController_campaignAudience",
+        "tags": [
+          "Audience"
+        ],
+        "summary": "campaignAudience (read)",
+        "description": "Validated inputs may have additional semantic constraints documented in the resource guide.",
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {
+            "Session": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-environment-id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Required for user sessions. API keys are bound to one environment; supplying this header verifies that selection."
+          },
+          {
+            "in": "header",
+            "name": "x-org-id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Required for user sessions; optional tenant assertion for API keys."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total": {
+                      "type": "integer"
+                    },
+                    "eligible": {
+                      "type": "integer"
+                    },
+                    "excluded": {
+                      "type": "object",
+                      "properties": {
+                        "unsubscribed": {
+                          "type": "integer"
+                        },
+                        "suppressed": {
+                          "type": "integer"
+                        },
+                        "topic_opt_out": {
+                          "type": "integer"
+                        },
+                        "deleted": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "unsubscribed",
+                        "suppressed",
+                        "topic_opt_out",
+                        "deleted"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "sample": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          },
+                          "first_name": {
+                            "type": "string"
+                          },
+                          "last_name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "email",
+                          "first_name",
+                          "last_name"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "snapshot": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "total",
+                    "eligible",
+                    "excluded",
+                    "sample",
+                    "snapshot"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            },
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "RateLimit-Limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds until bucket refills"
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "x-flare-access": "read"
       }
     },
     "/v1/broadcasts/{id}/schedule": {

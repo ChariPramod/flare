@@ -340,18 +340,32 @@ test('audience preferences, template preview/version and scheduled broadcast can
   await page.getByRole('button', { name: 'Save new version', exact: true }).click();
   await expect(page.getByText('Version 2 · monthly-news', { exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/template-editor.png', fullPage: true });
+  expect(
+    (
+      await page.request.post('/api/contacts', {
+        headers: { Origin: 'http://localhost:4310' },
+        data: { email: 'campaign-reader@example.test', first_name: 'Reader' },
+      })
+    ).ok(),
+  ).toBe(true);
   await page.getByRole('link', { name: 'Broadcasts', exact: true }).click();
-  await page.getByRole('button', { name: 'Create broadcast', exact: true }).click();
-  await page.getByLabel('Broadcast name').fill('October news');
+  await page.getByRole('button', { name: 'Create campaign', exact: true }).click();
+  await page.getByLabel('Campaign name').fill('October news');
   await page.getByLabel('From address').fill('news@example.test');
+  await page.getByRole('button', { name: 'Use saved template', exact: true }).click();
   await page.getByLabel('Email template').selectOption({ label: 'Monthly news · v2' });
-  await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+  await page.getByRole('button', { name: 'Save campaign draft', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'October news' })).toBeVisible();
-  await page.getByLabel('Send time').fill('in 2 hours');
-  await page.getByRole('button', { name: 'Schedule broadcast', exact: true }).click();
+  await page.getByLabel('Delivery timing').selectOption('later');
+  const future = new Date(Date.now() + 7200000);
+  const local = new Date(future.getTime() - future.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
+  await page.getByLabel('Send date and time').fill(local);
+  await page.getByRole('button', { name: 'Review schedule', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click();
   await expect(page.locator('.inline-tags .badge').first()).toHaveText('scheduled');
-  await page.getByRole('button', { name: 'Cancel broadcast', exact: true }).click();
+  await page.getByRole('button', { name: 'Cancel campaign', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click();
   await expect(page.locator('.inline-tags .badge').first()).toHaveText('canceled');
   expect(errors).toEqual([]);

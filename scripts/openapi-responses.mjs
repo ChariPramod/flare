@@ -116,6 +116,51 @@ const publication = obj(
   ['id', 'status'],
 );
 const mappings = {
+  AudienceController_contactLists: arr(
+    obj({
+      ...entity.properties,
+      name: str,
+      updated_at: str,
+      contact_count: int,
+    }),
+  ),
+  AudienceController_csv: obj(
+    {
+      imported: int,
+      duplicates: int,
+      created: int,
+      updated: int,
+      skipped_deleted: int,
+      list_id: { type: 'string', format: 'uuid', nullable: true },
+      list_name: { type: 'string', nullable: true },
+    },
+    ['imported', 'duplicates'],
+  ),
+  AudienceController_importPreview: obj(
+    {
+      headers: arr(str),
+      sample: arr(arr(str)),
+      rows: int,
+      sheets: arr(str),
+      sheet: str,
+      validation: obj({
+        valid: int,
+        duplicates: int,
+        errors: arr(obj({ row: int, message: str })),
+        error_count: int,
+        existing: int,
+        skipped_deleted: int,
+      }),
+    },
+    ['headers', 'sample', 'rows'],
+  ),
+  AudienceController_campaignAudience: obj({
+    total: int,
+    eligible: int,
+    excluded: obj({ unsubscribed: int, suppressed: int, topic_opt_out: int, deleted: int }),
+    sample: arr(obj({ id: str, email: str, first_name: str, last_name: str })),
+    snapshot: bool,
+  }),
   WorkflowController_inbox: obj(
     {
       subscriberId: str,

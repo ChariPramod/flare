@@ -6,4 +6,5 @@ onlyBuiltDependencies:
   - esbuild
   - sharp
 patchedDependencies:
+  '@novu/react@3.19.0': patches/@novu__react@3.19.0.patch
   postgres@3.4.9: patches/postgres@3.4.9.patch

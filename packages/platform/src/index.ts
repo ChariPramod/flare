@@ -3,6 +3,8 @@ export * from './webhooks.js';
 export * from './metrics.js';
 export * from './audience.js';
 export * from './broadcasts.js';
+export * from './contact-import.js';
+export * from './campaigns.js';
 
 export * from './automations.js';
 

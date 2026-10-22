@@ -29,6 +29,10 @@
             "segment_id": {
               "type": "string",
               "format": "uuid"
+            },
+            "list_id": {
+              "type": "string",
+              "format": "uuid"
             }
           },
           "required": [],
@@ -122,25 +126,85 @@
       "type": "object",
       "properties": {
         "body": {
-          "type": "object",
-          "properties": {
-            "csv": {
-              "type": "string",
-              "maxLength": 2097152
-            },
-            "mapping": {
+          "anyOf": [
+            {
               "type": "object",
-              "additionalProperties": {
-                "type": "string",
-                "maxLength": 100
-              }
+              "properties": {
+                "csv": {
+                  "type": "string",
+                  "maxLength": 2097152
+                },
+                "mapping": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string",
+                    "maxLength": 100
+                  }
+                }
+              },
+              "required": [
+                "csv",
+                "mapping"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "format": {
+                      "type": "string",
+                      "enum": [
+                        "csv",
+                        "tsv",
+                        "json",
+                        "xlsx"
+                      ]
+                    },
+                    "data": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2796204
+                    },
+                    "sheet": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    }
+                  },
+                  "required": [
+                    "format",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                },
+                "mapping": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  }
+                },
+                "list_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "list_name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                }
+              },
+              "required": [
+                "source",
+                "mapping"
+              ],
+              "additionalProperties": false
             }
-          },
-          "required": [
-            "csv",
-            "mapping"
-          ],
-          "additionalProperties": false
+          ]
         },
         "idempotencyKey": {
           "type": "string",
@@ -164,17 +228,67 @@
       "type": "object",
       "properties": {
         "body": {
-          "type": "object",
-          "properties": {
-            "csv": {
-              "type": "string",
-              "maxLength": 2097152
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "csv": {
+                  "type": "string",
+                  "maxLength": 2097152
+                }
+              },
+              "required": [
+                "csv"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "format": {
+                      "type": "string",
+                      "enum": [
+                        "csv",
+                        "tsv",
+                        "json",
+                        "xlsx"
+                      ]
+                    },
+                    "data": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2796204
+                    },
+                    "sheet": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    }
+                  },
+                  "required": [
+                    "format",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                },
+                "mapping": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  }
+                }
+              },
+              "required": [
+                "source"
+              ],
+              "additionalProperties": false
             }
-          },
-          "required": [
-            "csv"
-          ],
-          "additionalProperties": false
+          ]
         },
         "idempotencyKey": {
           "type": "string",
@@ -184,6 +298,25 @@
       "required": [
         "body"
       ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "AudienceController_contactLists",
+    "method": "GET",
+    "path": "/v1/contact-lists",
+    "access": "read",
+    "public": false,
+    "sessionOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [],
       "additionalProperties": false
     }
   },
@@ -1241,6 +1374,60 @@
               "type": "integer",
               "exclusiveMinimum": 0
             },
+            "content": {
+              "type": "object",
+              "properties": {
+                "subject": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 998
+                },
+                "html": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500000
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 500000
+                },
+                "variables": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "null"
+                        ],
+                        "nullable": true
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "subject",
+                "html"
+              ],
+              "additionalProperties": false
+            },
+            "list_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            },
             "segment_id": {
               "type": [
                 "string",
@@ -1263,15 +1450,13 @@
           },
           "required": [
             "name",
-            "sender",
-            "template_id",
-            "template_version"
+            "sender"
           ],
           "additionalProperties": false
         },
         "idempotencyKey": {
           "type": "string",
-          "maxLength": 256
+          "maxLength": 200
         }
       },
       "required": [
@@ -1358,6 +1543,60 @@
               "type": "integer",
               "exclusiveMinimum": 0
             },
+            "content": {
+              "type": "object",
+              "properties": {
+                "subject": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 998
+                },
+                "html": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500000
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 500000
+                },
+                "variables": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "enum": [
+                          "null"
+                        ],
+                        "nullable": true
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "subject",
+                "html"
+              ],
+              "additionalProperties": false
+            },
+            "list_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            },
             "segment_id": {
               "type": [
                 "string",
@@ -1380,9 +1619,7 @@
           },
           "required": [
             "name",
-            "sender",
-            "template_id",
-            "template_version"
+            "sender"
           ],
           "additionalProperties": false
         },
@@ -1394,6 +1631,40 @@
       "required": [
         "path",
         "body"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "id": "AudienceController_campaignAudience",
+    "method": "GET",
+    "path": "/v1/broadcasts/{id}/audience-preview",
+    "access": "read",
+    "public": false,
+    "sessionOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "path"
       ],
       "additionalProperties": false
     }

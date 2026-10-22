@@ -14,6 +14,14 @@ Reference: [Novu releases](https://github.com/novuhq/novu/releases/tag/v3.19.0),
 
 Topics and subscription conditions are stored and expanded in Flare before trigger dispatch. This supplies exact context matching and actor exclusion independently of community topics availability. Flare promotes selected workflows, layouts and translations through durable publication operations with pinned dependencies and engine reconciliation. Novu transport acceptance is labeled `accepted`, not delivered. Native job execution is verified for the bounded action matrix below; production callback/timeline integration still needs provider evidence.
 
+## Inbox React lifecycle patch
+
+The lockfile applies [a pinned patch to `@novu/react@3.19.0`](../../patches/@novu__react@3.19.0.patch). Its upstream provider constructs the SDK during render, which immediately starts a native session request. An abandoned concurrent render reproduced two initial session requests from one access-token read, despite only one committed socket. Explicit reconnect added exactly one request; the extra request came from initial rendering.
+
+The patch creates the SDK only after a committed effect and a guarded microtask. A discarded render or immediate StrictMode effect replay starts no abandoned session. Children remain hidden while a new configuration is pending, constructor errors return through React's error boundary, and cleanup retains bounded guards for late session/socket completion. Flare's own session, tenant, subscriber and retired-client checks remain in place. Both ESM and CommonJS entrypoints are patched; pinned native Novu server image versions and public SDK props remain unchanged.
+
+An upstream replacement must pass [the provider lifecycle regressions](../../tests/e2e/inbox-provider.spec.ts), the exact-bootstrap/reconnect browser checks and native Inbox acceptance before this patch is removed. Passing fixture checks alone does not establish a deployed Vercel connection.
+
 ## Runtime evidence
 
 [CI run 38355107858](https://github.com/ChariPramod/flare/actions/runs/38355107858) started the pinned community images, created both engine environments, configured SMTP and the preinstalled Inbox, and ran the demo seed twice. Flare now adopts only the current environment’s Inbox singleton and uses the native email/SMS primary endpoint. A provider being configured is not evidence of notification delivery.

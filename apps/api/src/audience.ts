@@ -7,6 +7,7 @@ import {
   Delete,
   Param,
   Query,
+  Headers,
   Req,
   UnauthorizedException,
   UseInterceptors,
@@ -16,7 +17,6 @@ import { z } from 'zod';
 import { NoFilesInterceptor } from '@nestjs/platform-express';
 import { withTenant } from '@flare/db';
 import {
-  parseCsv,
   contactSchema,
   propertySchema,
   propertyValid,
@@ -31,11 +31,20 @@ import { MailError, outbox } from '@flare/mail';
 import {
   upsertContact,
   importContacts,
+  contactImportSchema,
+  contactImportPreviewSchema,
+  importContactFile,
+  previewContactFile,
+  parseContactFile,
   updatePreferences,
   segmentWhere,
   scheduleBroadcast,
   cancelBroadcast,
   broadcastStats,
+  campaignDraftSchema,
+  createCampaign,
+  updateCampaign,
+  previewCampaignAudience,
 } from '@flare/platform';
 import { Public } from './auth.js';
 import { parse, sql, config } from './context.js';
@@ -48,6 +57,7 @@ const pages = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(25),
   q: z.string().max(120).default(''),
   segment_id: uuid.optional(),
+  list_id: uuid.optional(),
 });
 const topicSchema = z
   .object({
@@ -56,15 +66,10 @@ const topicSchema = z
     default_opt_in: z.boolean().default(true),
   })
   .strict();
-const broadcastSchema = z
+const legacyImportSchema = z
   .object({
-    name,
-    sender: z.string().min(3).max(998),
-    template_id: uuid,
-    template_version: z.number().int().positive(),
-    segment_id: uuid.nullable().default(null),
-    topic_id: uuid.nullable().default(null),
-    rate_per_second: z.number().int().min(1).max(50).default(10),
+    csv: z.string().max(2 * 1024 * 1024),
+    mapping: z.record(z.string().max(120), z.string().max(100)),
   })
   .strict();
 const preferencesSchema = z
@@ -107,8 +112,13 @@ export class AudienceController {
         if (!segment) throw new MailError(404, 'Segment not found');
         match = segmentWhere(tx, parse(segmentSchema, segment.definition));
       }
+      if (q.list_id) {
+        const [list] = await tx`select id from contact_lists where id=${q.list_id}`;
+        if (!list) throw new MailError(404, 'Contact list not found');
+        match = tx`(${match} and exists (select 1 from contact_list_members m where m.list_id=${q.list_id} and m.contact_id=c.id and m.org_id=c.org_id and m.environment_id=c.environment_id))`;
+      }
       return {
-        data: await tx`select c.* from contacts c where c.deleted_at is null and (c.email ilike ${`%${q.q}%`} or c.first_name ilike ${`%${q.q}%`}) and ${match} order by c.created_at desc limit ${q.limit} offset ${(q.page - 1) * q.limit}`,
+        data: await tx`select c.* from contacts c where c.deleted_at is null and (c.email ilike ${`%${q.q}%`} or c.first_name ilike ${`%${q.q}%`} or c.last_name ilike ${`%${q.q}%`}) and ${match} order by c.created_at desc,c.id desc limit ${q.limit} offset ${(q.page - 1) * q.limit}`,
         page: q.page,
         limit: q.limit,
       };
@@ -120,25 +130,37 @@ export class AudienceController {
     );
   }
   @Post('contacts/import') async csv(@Req() req: AuthRequest, @Body() body: unknown) {
+    const input = parse(z.union([legacyImportSchema, contactImportSchema]), body);
+    return 'csv' in input
+      ? importContacts(sql, req.principal, input.csv, input.mapping)
+      : importContactFile(sql, req.principal, input);
+  }
+  @Post('contacts/import/preview') async importPreview(
+    @Req() req: AuthRequest,
+    @Body() body: unknown,
+  ) {
     const input = parse(
-      z
-        .object({
-          csv: z.string().max(2 * 1024 * 1024),
-          mapping: z.record(z.string().max(120), z.string().max(100)),
-        })
-        .strict(),
+      z.union([
+        z.object({ csv: z.string().max(2 * 1024 * 1024) }).strict(),
+        contactImportPreviewSchema,
+      ]),
       body,
     );
-    return importContacts(sql, req.principal, input.csv, input.mapping);
-  }
-  @Post('contacts/import/preview') async importPreview(@Body() body: unknown) {
-    const input = parse(z.object({ csv: z.string().max(2 * 1024 * 1024) }).strict(), body);
+    if (!('csv' in input)) return previewContactFile(sql, req.principal, input);
     try {
-      const parsed = parseCsv(input.csv);
+      const parsed = await parseContactFile({ format: 'csv', data: input.csv });
       return { headers: parsed.headers, sample: parsed.rows.slice(0, 3), rows: parsed.rows.length };
     } catch (e) {
       throw new MailError(422, (e as Error).message);
     }
+  }
+  @Get('contact-lists') async contactLists(@Req() req: AuthRequest) {
+    return withTenant(
+      sql,
+      req.principal,
+      (tx) =>
+        tx`select l.*,count(c.id)::int as contact_count from contact_lists l left join contact_list_members m on m.list_id=l.id and m.org_id=l.org_id and m.environment_id=l.environment_id left join contacts c on c.id=m.contact_id and c.org_id=m.org_id and c.environment_id=m.environment_id and c.deleted_at is null group by l.id order by l.created_at desc,l.id desc`,
+    );
   }
   @Post('template-preview') async draftPreview(@Body() body: unknown) {
     const input = parse(
@@ -402,14 +424,23 @@ export class AudienceController {
       (tx) => tx`select * from broadcasts order by created_at desc limit 100`,
     );
   }
-  @Post('broadcasts') async createBroadcast(@Req() req: AuthRequest, @Body() body: unknown) {
-    const input = parse(broadcastSchema, body);
-    return withTenant(sql, req.principal, async (tx) => {
-      const [row] =
-        await tx`insert into broadcasts(org_id,environment_id,name,sender,template_id,template_version,segment_id,topic_id,rate_per_second) values(${req.principal.orgId},${req.principal.environmentId},${input.name},${input.sender},${input.template_id},${input.template_version},${input.segment_id},${input.topic_id},${input.rate_per_second}) returning *`;
-      await outbox(tx, req.principal, 'broadcast.created', { id: row!.id });
-      return row;
-    });
+  @Post('broadcasts') async createBroadcast(
+    @Req() req: AuthRequest,
+    @Body() body: unknown,
+    @Headers('idempotency-key') key?: string,
+  ) {
+    const requestKey =
+      key === undefined
+        ? undefined
+        : parse(
+            z
+              .string()
+              .min(1)
+              .max(200)
+              .regex(/^[\x21-\x7e]+$/),
+            key,
+          );
+    return createCampaign(sql, req.principal, parse(campaignDraftSchema, body), requestKey);
   }
   @Get('broadcasts/:id') async broadcast(@Req() req: AuthRequest, @Param('id') id: string) {
     const [row] = await withTenant(
@@ -425,13 +456,13 @@ export class AudienceController {
     @Param('id') id: string,
     @Body() body: unknown,
   ) {
-    const input = parse(broadcastSchema, body);
-    return withTenant(sql, req.principal, async (tx) => {
-      const [row] =
-        await tx`update broadcasts set name=${input.name},sender=${input.sender},template_id=${input.template_id},template_version=${input.template_version},segment_id=${input.segment_id},topic_id=${input.topic_id},rate_per_second=${input.rate_per_second},updated_at=now() where id=${parse(uuid, id)} and status='draft' returning *`;
-      if (!row) throw new MailError(409, 'Only drafts can be edited');
-      return row;
-    });
+    return updateCampaign(sql, req.principal, parse(uuid, id), parse(campaignDraftSchema, body));
+  }
+  @Get('broadcasts/:id/audience-preview') async campaignAudience(
+    @Req() req: AuthRequest,
+    @Param('id') id: string,
+  ) {
+    return previewCampaignAudience(sql, req.principal, parse(uuid, id));
   }
   @Post('broadcasts/:id/schedule') async schedule(
     @Req() req: AuthRequest,

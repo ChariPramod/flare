@@ -1,7 +1,7 @@
 import { withTenant, toJson } from '@flare/db';
 import type { Sql, Transaction } from '@flare/db';
-import { contactSchema, propertyValid, parseCsv, segmentSchema } from '@flare/shared';
-import type { Tenant, Segment } from '@flare/shared';
+import { propertyValid, segmentSchema } from '@flare/shared';
+import type { Tenant, Segment, contactSchema } from '@flare/shared';
 import { MailError, outbox } from '@flare/mail';
 import type { z } from 'zod';
 export async function upsertContact(
@@ -32,59 +32,19 @@ export async function importContacts(
   csv: string,
   mapping: Record<string, string>,
 ) {
-  let parsed: ReturnType<typeof parseCsv>;
-  try {
-    parsed = parseCsv(csv);
-  } catch (e) {
-    throw new MailError(422, (e as Error).message);
+  const { importContactFile } = await import('./contact-import.js');
+  const normalizedMapping = Object.create(null) as Record<string, string>;
+  for (const [source, target] of Object.entries(mapping)) {
+    const header = source.replace(/^\uFEFF/, '').trim();
+    if (Object.hasOwn(normalizedMapping, header))
+      throw new MailError(422, 'Mapped column headers must be distinct after trimming');
+    normalizedMapping[header] = target;
   }
-  const { headers, rows } = parsed;
-  if (
-    !Object.values(mapping).includes('email') ||
-    new Set(Object.values(mapping)).size !== Object.values(mapping).length ||
-    Object.keys(mapping).some((k) => !headers.includes(k))
-  )
-    throw new MailError(422, 'Map one email column and distinct contact fields');
-  return withTenant(sql, tenant, async (tx) => {
-    const definitions = await tx`select name,type from contact_properties`;
-    const deduped = new Map<string, z.infer<typeof contactSchema>>();
-    for (const [index, row] of rows.entries()) {
-      const value: Record<string, unknown> = { properties: {} };
-      for (const [source, target] of Object.entries(mapping)) {
-        const cell = row[headers.indexOf(source)]!;
-        if (['email', 'first_name', 'last_name'].includes(target)) value[target] = cell.trim();
-        else if (target === 'unsubscribed') {
-          if (cell !== '' && !['true', 'false'].includes(cell.toLowerCase()))
-            throw new MailError(422, `Row ${index + 2}: unsubscribed must be true or false`);
-          // Imports may opt out but never silently re-subscribe an existing contact.
-          if (cell.toLowerCase() === 'true') value.unsubscribed = true;
-        } else if (target.startsWith('properties.')) {
-          const name = target.slice(11),
-            definition = definitions.find((d) => d.name === name);
-          if (!definition) throw new MailError(422, `Unknown property ${name}`);
-          let converted: unknown = cell || null;
-          if (cell && definition.type === 'number') converted = Number(cell);
-          if (cell && definition.type === 'boolean') {
-            if (!['true', 'false'].includes(cell.toLowerCase()))
-              throw new MailError(422, `Row ${index + 2}: ${name} must be true or false`);
-            converted = cell.toLowerCase() === 'true';
-          }
-          (value.properties as Record<string, unknown>)[name] = converted;
-        } else throw new MailError(422, `Unknown mapped field ${target}`);
-      }
-      const contact = contactSchema.safeParse(value);
-      if (!contact.success) throw new MailError(422, `Row ${index + 2}: ${contact.error.message}`);
-      const previous = deduped.get(contact.data.email);
-      if (previous?.unsubscribed) contact.data.unsubscribed = true;
-      deduped.set(contact.data.email, contact.data);
-    }
-    for (const input of deduped.values())
-      await upsertContact(tx, tenant, input, {
-        first: Object.values(mapping).includes('first_name'),
-        last: Object.values(mapping).includes('last_name'),
-      });
-    return { imported: deduped.size, duplicates: rows.length - deduped.size };
+  const result = await importContactFile(sql, tenant, {
+    source: { format: 'csv', data: csv },
+    mapping: normalizedMapping,
   });
+  return { imported: result.imported, duplicates: result.duplicates };
 }
 export function segmentWhere(tx: Transaction, source: Segment) {
   const definition = segmentSchema.parse(source);

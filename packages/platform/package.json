@@ -17,11 +17,14 @@
     "@flare/db": "workspace:*",
     "@flare/mail": "workspace:*",
     "@flare/shared": "workspace:*",
+    "exceljs": "4.4.0",
     "mailparser": "^3.9.38",
     "undici": "^7.16.0",
+    "yauzl": "3.4.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/mailparser": "^3.9.0"
+    "@types/mailparser": "^3.9.0",
+    "@types/yauzl": "3.4.0"
   }
 }

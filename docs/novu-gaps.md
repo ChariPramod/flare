@@ -12,6 +12,10 @@ Browse the [documentation index](README.md).
 
 [Open this section](architecture/novu-gaps.md#flare-implementations).
 
+## Inbox React lifecycle patch
+
+[Open this section](architecture/novu-gaps.md#inbox-react-lifecycle-patch).
+
 ## Runtime evidence
 
 [Open this section](architecture/novu-gaps.md#runtime-evidence).
