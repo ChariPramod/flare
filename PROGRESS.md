@@ -1,8 +1,17 @@
 # Flare progress
 
-Updated: 2026-10-22, America/Los_Angeles.
+Updated: 2026-10-23, America/Los_Angeles.
 
-## Current checkpoint — pre-send checklist and controlled tests
+## Current release — v0.1.0-rc.1 stabilization
+
+- Freeze product scope on `codex/release-0.1.0`, based on `f19ed88`. The parent [CI run 39854140673](https://github.com/ChariPramod/flare/actions/runs/39854140673) passed all five jobs, including Linux browser and full-stack acceptance. Unrelated local documentation and demo data remain preserved; no agents are used.
+- Prepare a pinned controlled-staging release with [deployment instructions](DEPLOY.md) and [dependency review](docs/operations/release-security.md). Keep existing API/database compatibility and the Vercel plus persistent-backend architecture. No hosting has been purchased or deployed.
+- Update mail composition/parsing, ORM, sanitizer and request-processing dependencies; backport early upper-bound rejection to Zod 3 without a major schema/API migration. The focused ESM/CommonJS validation, MIME/DKIM and SMTP suite passes 40 tests. The final local checkpoint passes **967 unit/database tests, 25 evals**, docs, lint, types, generated OpenAPI, builds and gitleaks. Production audit has one documented, locally backported Zod finding; the complete graph has three additional moderate development-tool findings and no critical findings. The release candidate must pass its own five CI jobs before promotion and tagging; the published GitHub release records the final revision and CI evidence.
+- Docker stays capped at 6 GiB. Keep local builds and container verification sequential; use CI for pinned full-stack acceptance. Real Postal/DNS, physical route isolation, external receiver authentication and off-host recovery remain deployment gates.
+
+<a id="current-checkpoint--pre-send-checklist-and-controlled-tests"></a>
+
+## Previous checkpoint — pre-send checklist and controlled tests
 
 - Branch **`codex/campaign-preflight`**, based on `e06d043`; implemented directly without agents. Preserve unrelated documentation and demo data.
 - Add a read-only campaign checklist sharing authoritative sender admission, plus explicit 1–3-recipient tests through the shared durable pipeline. Tests retain normal marketing approval, route, quotas, suppression and known-contact preferences; they do not mutate campaign progress or fan out to the audience.
@@ -10,7 +19,7 @@ Updated: 2026-10-22, America/Los_Angeles.
 - **Local verification:** complete checkpoint passes with **959 unit/database tests and 25 evals**, docs, lint, typecheck, generated OpenAPI, builds and gitleaks. Installable SDK/CLI/MCP smoke checks pass, including typed preflight/test requests. All **88 Docker integration tests** pass, including independent-connection duplicate admission, shared quota and post-acceptance opt-out. All **132 local Chrome browser scenarios** pass, with two Linux-only visual comparisons reserved for CI. A final four-scenario browser run also verifies the corrected Audience action link. A staged documentation snapshot passes independently of unrelated local files.
 - **Demo:** rebuilt API, worker and web with existing data retained. Real browser → API → worker → SMTP/Mailpit test passes, including inactive preference links and unchanged draft/campaign statistics. The walkthrough is saved as “Pre-send checklist walkthrough” in Broadcasts. Reviewed desktop/mobile screenshots, corrected the Audience fix-link destination and passed final live navigation checks after refreshing the demo. No real provider or external mailbox is used.
 - **Local resources:** after the completed build, reduced Docker Desktop from a 12 GiB allocation to 6 GiB on this 16 GiB Mac; restored the previously running services without deleting volumes. The disposable Mailpit inbox was memory-only and cleared on restart; the local demo now has a separate persistent Mailpit volume and a fresh sandbox receipt. The database-backed campaign and message history remained intact. Avoid concurrent full-stack builds on this host.
-- **Delivery:** this distinct stacked checkpoint targets `codex/campaign-studio`; its own CI remains a separate gate.
+- **Delivery:** `f19ed88` is pushed in [PR #5](https://github.com/ChariPramod/flare/pull/5). Its own [CI run 39854140673](https://github.com/ChariPramod/flare/actions/runs/39854140673) passed all five jobs.
 - Baseline correction: `e06d043` fixes the preview acceptance assertion from 422 to the actual schema-validation 400 and asserts the precise error. Parent [CI run `39849274441`](https://github.com/ChariPramod/flare/actions/runs/39849274441) passed all five jobs at `e06d043`, including Linux browser and full-stack acceptance; the preceding failed run remains failed.
 
 <a id="current-checkpoint--research-driven-campaign-workbench"></a>

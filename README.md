@@ -4,9 +4,11 @@ Pareto Labs' self-hosted notification control plane. TypeScript, NestJS, Next.js
 
 Use the [documentation index](docs/README.md) to choose a reading path. Start with the [website navigation and backend guide](docs/product/website-and-backend-guide.md) for a tour of every dashboard section, implemented features, backend services, source locations and tests.
 
+For deployment, start with [the pinned release guide](DEPLOY.md). It covers the frozen staging version, Vercel/backend split, required settings, bootstrap, verification and rollback.
+
 ## Development
 
-Use Node **22**, pnpm **10.32.1**, Docker Engine with Compose v2 or newer, OpenSSL and gitleaks **8.30.1**. Allocate at least 12 GB RAM to the full stack. The current implementation and verification status is recorded in [PROGRESS.md](PROGRESS.md); this repository is under active construction.
+Use Node **22**, pnpm **10.32.1**, Docker Engine with Compose v2 or newer, OpenSSL and gitleaks **8.30.1**. The prebuilt local Mailpit demo runs with Docker capped at **6 GiB**; run builds and container checks sequentially on a 16 GiB Mac. Full Postal hosting has separate capacity requirements in the staging guide. The current implementation and verification status is recorded in [PROGRESS.md](PROGRESS.md).
 
 ```sh
 corepack enable

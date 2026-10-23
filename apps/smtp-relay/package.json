@@ -17,7 +17,7 @@
     "mailparser": "^3.8.0"
   },
   "devDependencies": {
-    "nodemailer": "^7.0.10",
+    "nodemailer": "10.2.1",
     "@types/nodemailer": "^7.0.3",
     "@types/smtp-server": "^3.5.12",
     "@types/mailparser": "^3.4.6"

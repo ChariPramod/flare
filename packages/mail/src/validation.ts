@@ -31,7 +31,7 @@ export function address(value: string): string {
   if (
     mailboxes.length !== 1 ||
     !mailbox ||
-    !('address' in mailbox) ||
+    typeof mailbox.address !== 'string' ||
     mailbox.address.toLowerCase() !== parsed.data.toLowerCase()
   )
     throw new MailError(422, 'Supply exactly one email address per mailbox');
